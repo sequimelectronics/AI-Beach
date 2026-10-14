@@ -33,6 +33,7 @@ def players_in_radius(snap: Snapshot, names_by_entity: dict[int, str]) -> list[P
     seen_entities = set()
     for p in snap.named_players:
         pos = tuple(p["position"])
+        p = dict(p, name=display_name(p))
         ent = min((e for e in snap.entities if e.is_character and e is not mine),
                   key=lambda e: dist3(e.pos, pos), default=None)
         eid = None
@@ -52,6 +53,13 @@ def players_in_radius(snap: Snapshot, names_by_entity: dict[int, str]) -> list[P
                           in_view=False, entity_id=e.id))
     out.sort(key=lambda p: dist3(p.pos, snap.me))
     return out
+
+
+def display_name(player: dict) -> str | None:
+    """A player's name as their world shows it: a host-given name (a Beach's "BeachName",
+    current across renames) when present, else the name they joined with."""
+    named = (player.get("attributes") or {}).get("BeachName")
+    return named if isinstance(named, str) and named else player.get("name")
 
 
 # --- objects ----------------------------------------------------------------

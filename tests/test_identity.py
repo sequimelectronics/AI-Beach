@@ -262,12 +262,13 @@ class DoorTests(Case):
         b.set_watch_token("beachblox", "spec-tok")
         agent = str(uuid.uuid4())
         joined = []
-        r = b.play(self.coral.id, "beachblox", joiner=lambda url, name: joined.append((url, name)) or
+        r = b.play(self.coral.id, "beachblox", joiner=lambda url, name, key: joined.append((url, name, key)) or
                    {"session": "sess-1", "agent_id": agent})
-        self.assertEqual(joined, [("http://127.0.0.1:8100", "Coral")])        # under the Beach name
-        self.assertIn("session=sess-1", r["viewer"])
-        self.assertIn("player=Coral", r["viewer"])
-        self.assertIn("spectator_token=spec-tok", r["viewer"])
+        self.assertEqual(joined, [("http://127.0.0.1:8100", "Coral", None)])   # under the Beach name
+        address, _, fragment = r["viewer"].partition("#")
+        self.assertEqual(fragment, "session=sess-1&player=Coral")   # after '#': never sent to a server
+        self.assertNotIn("sess-1", address)
+        self.assertIn("spectator_token=spec-tok", address)
         self.assertEqual(b.door("beachblox")["grants"][0]["claims"][0]["joined_as"], "Coral")
 
 

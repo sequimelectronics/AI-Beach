@@ -37,3 +37,30 @@ def skeleton(name: str) -> str:
 
 def shape_ok(name: str) -> bool:
     return bool(NAME_RE.match(name or ""))
+
+
+# Words that, just before a lower-case name, show it's being used as an ordinary word:
+# "/me picks up a shell", "/me admires the coral", "/me finds some kelp".
+_ORDINARY_BEFORE = {"a", "an", "the", "some", "any", "my", "your", "our", "their", "its", "this", "that",
+                    "these", "those", "every", "each", "no", "another", "of", "more", "much", "little"}
+
+
+def names_in(text: str, people: list) -> list:
+    """Which of `people` (objects with .name) a free-form action names: as @Name, or by their
+    exact name as a whole word in any case. A name that is also an ordinary word ("Shell",
+    "Coral", "Kelp") still reads as the word when it's written in lower case right after an
+    article or other determiner ("a shell", "the coral"); capitalised, or anywhere else, it's
+    the person."""
+    found = []
+    for person in people:
+        name = person.name
+        pat = re.compile(r"(?<![A-Za-z0-9_])@?(" + re.escape(name) + r")(?![A-Za-z0-9_])", re.IGNORECASE)
+        for m in pat.finditer(text):
+            word = m.group(1)
+            if not m.group(0).startswith("@") and word[0].islower():
+                before = re.findall(r"[A-Za-z']+", text[:m.start()])
+                if before and before[-1].lower() in _ORDINARY_BEFORE:
+                    continue   # "a shell": the word, not Shell
+            found.append(person)
+            break
+    return found

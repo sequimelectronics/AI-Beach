@@ -141,7 +141,7 @@ class Bridge:
     def __init__(self, world: str, beach: str, zone: str, bridge_token: str,
                  spectator_token: Callable[[], str | None], world_dir: str | None = None,
                  http: Callable[..., dict] = _http, log: Callable[[str], None] = print,
-                 store: "WorldStore | None" = None, tints: bool = True):
+                 store: "WorldStore | None" = None, tints: bool = True, join_key: str | None = None):
         self.world = world
         self.beach = beach
         self.zone = zone
@@ -154,6 +154,7 @@ class Bridge:
         self.store = store
         self.http = http
         self.log = log
+        self.join_key = join_key
         self.last_report: list | None = None
         self.last_tints: dict | None = None
         self.last_door: str | None = None
@@ -202,7 +203,7 @@ class Bridge:
     def step(self) -> dict | None:
         obs = self.read_world()
         report = door_report(obs) if obs is not None else []
-        body: dict = {"players": report, "world_url": self.world}
+        body: dict = {"players": report, "world_url": self.world, "join_key": self.join_key}
         tok = self.spectator_token()
         if tok and obs is not None:
             body["spectator_token"] = tok   # so the Beach can hand participants a working viewer link
@@ -216,6 +217,14 @@ class Bridge:
             self.last_report = report
         self.write_tints(res.get("looks") or {})
         return res
+
+    def leaving(self) -> None:
+        """The world is stopping: tell the Beach nobody is playing, and forget the join key."""
+        try:
+            self.http("POST", f"{self.beach}/zones/{self.zone}/players", self._auth(),
+                      {"players": [], "join_key": None})
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
 
     def write_tints(self, looks: dict) -> None:
         if not self.tints_path or looks == self.last_tints:
@@ -239,6 +248,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--world-dir", required=True,
                     help="the running world's directory (its DataStore holds the door's claims)")
     ap.add_argument("--no-tints", action="store_true", help="don't write static/tints.json (worlds that don't use it)")
+    ap.add_argument("--join-key-file", help="the world's join key (CLAWBLOX_JOIN_KEY), to hand to the Beach; "
+                    "or set CLAWBLOX_JOIN_KEY")
     ap.add_argument("--every", type=float, default=10.0, help="seconds between reports (default 10)")
     ap.add_argument("--once", action="store_true", help="report once and exit")
     a = ap.parse_args(argv)
@@ -255,16 +266,25 @@ def main(argv: list[str] | None = None) -> int:
         spect = lambda: spectator_token_from_log(a.spectator_log)  # noqa: E731
     else:
         spect = lambda: a.spectator_token or os.environ.get("CLAWBLOX_SPECTATOR_TOKEN")  # noqa: E731
-    b = Bridge(world, beach, a.zone, token, spect, a.world_dir, tints=not a.no_tints,
+    join_key = os.environ.get("CLAWBLOX_JOIN_KEY")
+    if a.join_key_file:
+        join_key = Path(a.join_key_file).expanduser().read_text().strip()
+    b = Bridge(world, beach, a.zone, token, spect, a.world_dir, tints=not a.no_tints, join_key=join_key or None,
                log=lambda m: print(time.strftime("%H:%M:%S"), m, flush=True))
+    run_loop(b, a.every, once=a.once)
+    return 0
+
+
+def run_loop(b: "Bridge", every: float = 10.0, once: bool = False, keep_going=lambda: True) -> None:
+    """Sync the door every second (joins wait on it); report presence every `every` seconds."""
     last_report = 0.0
-    while True:
-        b.sync_door()   # every second: joins wait on this
-        if time.monotonic() - last_report >= max(2.0, a.every):
+    while keep_going():
+        b.sync_door()
+        if time.monotonic() - last_report >= max(2.0, every):
             b.step()
             last_report = time.monotonic()
-        if a.once:
-            return 0
+        if once:
+            return
         time.sleep(1.0)
 
 

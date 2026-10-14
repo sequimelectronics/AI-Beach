@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 import math
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
-from .compact import beach_map_card_text, compact_view, map_card_text, view_text
+from .compact import beach_map_card_text, compact_view, display_name, map_card_text, view_text
 from .tokens import TokenCounter, approx_counter
 from .transport import HttpError, HttpTransport, join_path
 from .world import (
@@ -56,6 +57,14 @@ def _vec(v) -> tuple | None:
     return out if all(math.isfinite(x) for x in out) else None
 
 
+def user_id_of(agent_id: str) -> int | None:
+    """The UserId Clawblox gives a join (what world scripts see): the low 53 bits of its agent id."""
+    try:
+        return (uuid.UUID(agent_id).int & ((1 << 53) - 1)) or 1
+    except (ValueError, AttributeError):
+        return None
+
+
 def _num_id(msg_id: str) -> tuple:
     tail = str(msg_id).rsplit("_", 1)[-1]
     return (0, int(tail)) if tail.isdigit() else (1, str(msg_id))
@@ -79,7 +88,7 @@ class ClawbloxAdapter:
                  transport=None, rules: Rules | None = None,
                  counter: TokenCounter | None = None, sleep=time.sleep,
                  poll_interval: float = 0.25, session: str | None = None,
-                 vouch=None):
+                 vouch=None, join_via=None):
         if transport is None:
             if base_url is None:
                 raise ValueError("give base_url or transport")
@@ -95,6 +104,11 @@ class ClawbloxAdapter:
         # vouch(agent_id, name): called right after joining, for worlds behind a front door
         # (e.g. a Beach game zone; see front_door.beach_voucher). None for open worlds.
         self.vouch = vouch
+        # join_via(name) -> {"session", "agent_id"}: someone else makes the join for us (a Beach,
+        # for a world that only accepts joins carrying its key; see front_door.beach_joiner).
+        self.join_via = join_via
+        self._names_by_agent: dict[str, str] = {}   # agent id -> name its world shows now
+        self._names_by_user: dict[int, str] = {}    # UserId -> its character's label (PlayerName)
         self.agent_id: str | None = None
         self._statics: dict[str, Entity] = {}
         self._names_by_entity: dict[int, str] = {}
@@ -120,11 +134,16 @@ class ClawbloxAdapter:
     def join(self) -> None:
         if self.session:
             return
-        data = json.loads(self._call("POST", join_path(self.name)))
-        self.session, self.agent_id = data["session"], data["agent_id"]
-        if self.vouch:
-            self.vouch(self.agent_id, self.name)
+        if self.join_via:
+            data = self.join_via(self.name)
+            self.session, self.agent_id = data["session"], data["agent_id"]
             self._wait_for_door()
+        else:
+            data = json.loads(self._call("POST", join_path(self.name)))
+            self.session, self.agent_id = data["session"], data["agent_id"]
+            if self.vouch:
+                self.vouch(self.agent_id, self.name)
+                self._wait_for_door()
         # Right after joining the character is still being placed and loose
         # objects may still be falling; wait until you stand still (max ~4 s).
         last, waited = None, 0.0
@@ -156,6 +175,14 @@ class ClawbloxAdapter:
     def _ingest(self, raw: dict) -> Snapshot:
         snap = parse_observation(raw)
         self.last_snapshot = snap
+        for p in snap.named_players:
+            name = display_name(p)
+            if p.get("id") and name:
+                self._names_by_agent[str(p["id"])] = name
+        for e in snap.entities:  # labelled characters, in view or not (the beach world tags them)
+            label, uid = e.attrs.get("PlayerName"), e.attrs.get("PlayerUserId")
+            if isinstance(label, str) and label and label != "..." and isinstance(uid, (int, float)):
+                self._names_by_user[int(uid)] = label
         for e in snap.statics:
             self._statics[e.name] = e
         first = self._first_snap is None
@@ -252,7 +279,11 @@ class ClawbloxAdapter:
             if mid in self._chat_seen:
                 continue
             self._chat_seen.add(mid)
-            self._chat_log.append((f"{m.get('agent_name', '?')}: {m.get('content', '')}", False))
+            # Say who it is as the world names them now (a rename shows at once), else as they joined.
+            aid = str(m.get("agent_id", ""))
+            who = (self._names_by_agent.get(aid) or self._names_by_user.get(user_id_of(aid))
+                   or m.get("agent_name", "?"))
+            self._chat_log.append((f"{who}: {m.get('content', '')}", False))
 
     def hear(self) -> str:
         """Chat lines (and "World:" announcements) since your last hear(), oldest first.

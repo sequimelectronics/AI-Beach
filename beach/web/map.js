@@ -7,6 +7,11 @@
   // order they were created, so a new zone never moves an old one. SandChat always gets the first.
   const SLOTS = [[0.36, 0.43], [0.66, 0.38], [0.56, 0.72], [0.82, 0.64], [0.26, 0.74], [0.50, 0.19],
     [0.16, 0.40], [0.72, 0.79]]
+  // The same eight spots along the trail of the upright map, for phones held portrait.
+  const SLOTS_PORTRAIT = [[0.35, 0.25], [0.66, 0.37], [0.33, 0.53], [0.68, 0.63], [0.35, 0.75], [0.66, 0.86],
+    [0.62, 0.15], [0.30, 0.89]]
+  const PORTRAIT = window.matchMedia('(orientation: portrait) and (max-width: 820px)')
+  const slots = () => PORTRAIT.matches ? SLOTS_PORTRAIT : SLOTS
   const SKY_TINT = {
     dawn: 'rgba(255, 170, 170, .14)',
     morning: 'rgba(255, 245, 200, .08)',
@@ -103,7 +108,12 @@
     mapBox.querySelector('.map-title').textContent = data.beach
     const shown = mapBox.querySelectorAll('.zone')
     shown.forEach(n => n.remove())
-    zones.slice(0, SLOTS.length).forEach((z, i) => mapBox.append(marker(z, SLOTS[i])))
+    const portrait = PORTRAIT.matches
+    mapBox.classList.toggle('portrait', portrait)
+    const art = portrait ? '/web/map-art-portrait.svg' : '/web/map-art.svg'
+    const img = mapBox.querySelector('img')
+    if (img.getAttribute('src') !== art) img.setAttribute('src', art)
+    zones.slice(0, slots().length).forEach((z, i) => mapBox.append(marker(z, slots()[i])))
     listBox.replaceChildren(...zones.map(listItem))
   }
 
@@ -129,7 +139,10 @@
     arrival = el('p', { class: 'arrival' })
     main.replaceChildren(mapBox, arrival, el('h2', { text: "Who's where" }), listBox)
     render(data)
+    let last = data
     refresh()
     setInterval(refresh, 5000)
+    // Turning the phone redraws the map the other way round.
+    PORTRAIT.addEventListener('change', () => { api('GET', '/map').then(d => { last = d; render(d) }).catch(() => render(last)) })
   })
 })()

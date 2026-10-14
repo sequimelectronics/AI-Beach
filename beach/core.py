@@ -54,7 +54,9 @@ DEFAULT_SETTINGS: dict = {
     "link_base": None,               # address sign-in links use, e.g. "http://192.168.1.20:8765"
     "rename_cooldown_s": 86400,      # how often a participant may rename themselves (first rename free)
     "rename_hint_s": 86400,          # for this long, agents see "New (was Old)", and Old stays reserved
-    "game_guests": False,            # game worlds admit players the Beach didn't vouch for (as guests)
+    "game_guests": False,
+    "bell_retries": 2,               # retries for a failed bell notice, only while the bell is open
+    "bell_retry_s": 10,              # first retry after this; each later one waits 3x longer            # game worlds admit players the Beach didn't vouch for (as guests)
     # Tables (the Boardwalk)
     "table_abandon_s": 3 * 86400,    # a game nobody has moved in this long ends as abandoned (not lost)
     "turn_notify_after_s": 600,      # a player away this long on their turn gets one "your move" notice
@@ -135,6 +137,14 @@ class Beach:
         pcols = {r["name"] for r in self.db.q("PRAGMA table_info(participants)")}
         if "game_name" in pcols:   # job 05's separate in-game name: gone; the Beach name is the name
             self.db.run("ALTER TABLE participants DROP COLUMN game_name")
+        # Job 08: one sign-in link per participant -> several. Move each existing token hash into
+        # sign_ins (same token, so nobody is signed out), then clear the old column. Idempotent.
+        with self.db.tx() as db:
+            for r in db.conn.execute("SELECT id, token_hash, created_at FROM participants"
+                                     " WHERE token_hash IS NOT NULL").fetchall():
+                db.conn.execute("INSERT OR IGNORE INTO sign_ins (participant_id, token_hash, label, created_at)"
+                                " VALUES (?, ?, 'first link', ?)", (r[0], r[1], r[2]))
+                db.conn.execute("UPDATE participants SET token_hash = NULL WHERE id = ?", (r[0],))
         mcols = {r["name"] for r in self.db.q("PRAGMA table_info(messages)")}
         if "action_key" not in mcols:
             self.db.run("ALTER TABLE messages ADD COLUMN action_key TEXT")
@@ -146,6 +156,12 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
         if "world_url" not in cols:   # a game world's address on this machine, from its bridge
             self.db.run("ALTER TABLE zones ADD COLUMN world_url TEXT")
+        ocols = {r["name"] for r in self.db.q("PRAGMA table_info(outbox)")}
+        if "attempts" not in ocols:   # job 08: retries for failed bell notices
+            self.db.run("ALTER TABLE outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+            self.db.run("ALTER TABLE outbox ADD COLUMN next_try_at REAL")
+        if "join_key" not in cols:   # a game world's join key (job 08), from its bridge
+            self.db.run("ALTER TABLE zones ADD COLUMN join_key TEXT")
         if "watch_token" not in cols:   # a game world's spectator token, from its bridge
             self.db.run("ALTER TABLE zones ADD COLUMN watch_token TEXT")
         if "tables" not in cols:
@@ -233,10 +249,9 @@ class Beach:
         if kind not in ("person", "agent"):
             raise BeachError("invalid", "kind must be 'person' or 'agent'")
         name = self.check_name(name)
-        token = _new_token()
-        pid = self.db.run("INSERT INTO participants (name, kind, is_admin, invitable, token_hash, created_at)"
-                          " VALUES (?, ?, ?, ?, ?, ?)",
-                          (name, kind, int(is_admin), int(invitable), _hash(token), self.now()))
+        pid = self.db.run("INSERT INTO participants (name, kind, is_admin, invitable, created_at)"
+                          " VALUES (?, ?, ?, ?, ?)", (name, kind, int(is_admin), int(invitable), self.now()))
+        token = self.new_link(pid, "first link")["token"]
         return self.participant(pid), token
 
     def participant(self, pid: int) -> Participant:
@@ -251,27 +266,70 @@ class Beach:
 
     def participants(self) -> list[dict]:
         return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "admin": bool(r["is_admin"]),
-                 "invitable": bool(r["invitable"]), "has_token": r["token_hash"] is not None,
+                 "invitable": bool(r["invitable"]), "has_token": self.is_active(r["id"]),
+                 "links": self.db.one("SELECT COUNT(*) AS n FROM sign_ins WHERE participant_id = ?"
+                                      " AND revoked_at IS NULL", (r["id"],))["n"],
                  "was": self.was_name(r["id"]), "avatar_v": self.avatar_version(r["id"])}
                 for r in self.db.q("SELECT * FROM participants ORDER BY id")]
 
     def authenticate(self, token: str | None) -> Participant | None:
         if not token:
             return None
-        row = self.db.one("SELECT * FROM participants WHERE token_hash = ?", (_hash(token),))
-        return self._p(row) if row else None
+        row = self.db.one("SELECT p.*, s.id AS sign_in, s.last_used_at FROM sign_ins s JOIN participants p"
+                          " ON p.id = s.participant_id WHERE s.token_hash = ? AND s.revoked_at IS NULL",
+                          (_hash(token),))
+        if not row:
+            return None
+        now = self.now()
+        if row["last_used_at"] is None or now - row["last_used_at"] > 300:   # don't write on every request
+            self.db.run("UPDATE sign_ins SET last_used_at = ? WHERE id = ?", (now, row["sign_in"]))
+        return self._p(row)
+
+    def is_active(self, pid: int) -> bool:
+        """Has at least one sign-in link that still works."""
+        return bool(self.db.one("SELECT 1 FROM sign_ins WHERE participant_id = ? AND revoked_at IS NULL",
+                                (pid,)))
+
+    # Sign-in links. A person may have several (a tablet, a phone), each revocable on its own.
+
+    def new_link(self, pid: int, label: str = "link") -> dict:
+        """A new sign-in link (token) for a participant; their other links keep working."""
+        self.participant(pid)
+        label = " ".join(str(label or "link").split())[:40] or "link"
+        token = _new_token()
+        lid = self.db.run("INSERT INTO sign_ins (participant_id, token_hash, label, created_at) VALUES (?, ?, ?, ?)",
+                          (pid, _hash(token), label, self.now()))
+        return {"id": lid, "label": label, "token": token}
+
+    def links(self, pid: int) -> list[dict]:
+        self.participant(pid)
+        return [{"id": r["id"], "label": r["label"], "created_at": r["created_at"], "last_used_at": r["last_used_at"],
+                 "active": r["revoked_at"] is None}
+                for r in self.db.q("SELECT * FROM sign_ins WHERE participant_id = ? ORDER BY id", (pid,))]
+
+    def revoke_link(self, pid: int, lid: int) -> None:
+        """Cut off one link (a lost phone). If it was their last, they're signed out everywhere."""
+        row = self.db.one("SELECT * FROM sign_ins WHERE id = ? AND participant_id = ?", (lid, pid))
+        if not row:
+            raise BeachError("not_found", "no such sign-in link")
+        self.db.run("UPDATE sign_ins SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?", (self.now(), lid))
+        if not self.is_active(pid):
+            self._signed_out(pid)
 
     def revoke_token(self, pid: int) -> None:
+        """Sign a participant out everywhere: every link stops working."""
         self.participant(pid)
-        self.db.run("UPDATE participants SET token_hash = NULL WHERE id = ?", (pid,))
+        self.db.run("UPDATE sign_ins SET revoked_at = ? WHERE participant_id = ? AND revoked_at IS NULL",
+                    (self.now(), pid))
+        self._signed_out(pid)
+
+    def _signed_out(self, pid: int) -> None:
         for z in self.db.q("SELECT zone_id FROM visits WHERE participant_id = ? AND left_at IS NULL", (pid,)):
             self.part(pid, z["zone_id"])
 
     def reissue_token(self, pid: int) -> str:
-        self.participant(pid)
-        token = _new_token()
-        self.db.run("UPDATE participants SET token_hash = ? WHERE id = ?", (_hash(token), pid))
-        return token
+        """A fresh link after a sign-out (job 04's call; other active links are kept)."""
+        return self.new_link(pid, "link")["token"]
 
     def update_participant(self, pid: int, invitable: bool | None = None) -> Participant:
         self.participant(pid)
@@ -440,6 +498,9 @@ class Beach:
     def set_watch_token(self, zid: str, token: str) -> None:
         self.db.run("UPDATE zones SET watch_token = ? WHERE id = ?", (token[:200], zid))
 
+    def set_join_key(self, zid: str, key: str | None) -> None:
+        self.db.run("UPDATE zones SET join_key = ? WHERE id = ?", ((key or "")[:200] or None, zid))
+
     def set_world_url(self, zid: str, url: str) -> None:
         from .front_door import local_world_url
         base = local_world_url(url)
@@ -447,8 +508,9 @@ class Beach:
             self.db.run("UPDATE zones SET world_url = ? WHERE id = ?", (base, zid))
 
     def play(self, pid: int, zid: str, joiner=None) -> dict:
-        """Join a game world for a participant (people, from the browser): the Beach joins under
-        their Beach name and vouches for the join. Returns the session and a viewer link."""
+        """Join a game world for a participant (a person from the map, or an agent through its
+        adapter): the Beach joins under their Beach name, with the world's join key if it has
+        one, and vouches for the join. Returns the session, and a viewer link for people."""
         from . import front_door
         z = self.zone(zid)
         if z["kind"] != "game":
@@ -459,7 +521,7 @@ class Beach:
             raise BeachError("conflict", f"{z['name']} isn't connected to the Beach yet (its bridge isn't running)")
         p = self.participant(pid)
         try:
-            j = (joiner or front_door.join_world)(z["world_url"], p.name)
+            j = (joiner or front_door.join_world)(z["world_url"], p.name, z["join_key"])
         except Exception as e:  # the world is down, or refused
             raise BeachError("conflict", f"couldn't reach {z['name']} ({e})") from None
         self.vouch(pid, zid, j["agent_id"], p.name)
@@ -475,10 +537,12 @@ class Beach:
         p = self.participant(pid)
         viewer = z["viewer_url"]
         base = viewer.split("?")[0].rstrip("/") if viewer else None
+        steps = [f"POST /zones/{zid}/play (the Beach joins for you; use the session it returns)"]
+        if not z["join_key"]:
+            steps.append(f"or: POST {base or '<world>'}/join?name={p.name}, then POST /zones/{zid}/vouch "
+                         f"{{\"agent_id\": <from the join>, \"name\": \"{p.name}\"}}")
         return {"zone": zid, "name": p.name, "open": bool(z["open"]), "world": base, "viewer_url": viewer,
-                "spectator_token": z["watch_token"],
-                "steps": [f"POST {base or '<world>'}/join?name={p.name}",
-                          f"POST /zones/{zid}/vouch {{\"agent_id\": <from the join>, \"name\": \"{p.name}\"}}"]}
+                "spectator_token": z["watch_token"], "join_key_required": bool(z["join_key"]), "steps": steps}
 
     def door(self, zid: str) -> dict:
         """What a world's door needs (for its bridge): who the Beach vouched for, under their
@@ -486,11 +550,12 @@ class Beach:
         self.zone(zid)
         keep = self.now() - 2 * 86400
         grants: dict[int, list] = {}
-        for r in self.db.q("SELECT g.*, p.name, p.token_hash FROM game_grants g JOIN participants p"
+        for r in self.db.q("SELECT g.*, p.name, NOT EXISTS (SELECT 1 FROM sign_ins s WHERE s.participant_id = p.id"
+                           " AND s.revoked_at IS NULL) AS signed_out FROM game_grants g JOIN participants p"
                            " ON p.id = g.participant_id WHERE g.zone_id = ? AND g.granted_at > ?"
                            " ORDER BY g.granted_at", (zid, keep)):
             grants.setdefault(r["user_id"], []).append(
-                {"name": r["name"], "joined_as": r["joined_as"], "revoked": r["token_hash"] is None,
+                {"name": r["name"], "joined_as": r["joined_as"], "revoked": bool(r["signed_out"]),
                  "participant": r["participant_id"]})
         return {"zone": zid, "guests": bool(self.setting("game_guests")),
                 "grants": [{"user_id": uid, "claims": claims} for uid, claims in grants.items()]}
@@ -558,10 +623,10 @@ class Beach:
         for e in players:
             if isinstance(e, dict) and e.get("user_id") is not None:
                 # A vouched join: the claim whose name matches the name the player joined under.
-                g = self.db.one("SELECT g.participant_id, p.token_hash FROM game_grants g JOIN participants p"
+                g = self.db.one("SELECT g.participant_id FROM game_grants g JOIN participants p"
                                 " ON p.id = g.participant_id WHERE g.zone_id = ? AND g.user_id = ?"
                                 " AND g.joined_as = ?", (zid, int(e["user_id"]), str(e.get("joined_as", ""))))
-                if g and g["token_hash"] is not None:
+                if g and self.is_active(g["participant_id"]):
                     keys.add(f"p:{g['participant_id']}")
             else:
                 label = " ".join(str(e.get("guest") if isinstance(e, dict) else e).split())[:30]
@@ -806,17 +871,18 @@ class Beach:
         else:
             key = "me"
             text = f"{p.name} {body}"
-            # A free-form /me that names someone (@Name) targets them too.
-            for mention in re.findall(r"@([A-Za-z][A-Za-z0-9_.-]{0,23})", body):
-                who = self.by_name(mention)
-                if who and who.id != p.id and self._visit(who.id, zid):
-                    target = who
-                    break
+        # Who the action is aimed at: the shorthand's target, or anyone present a free-form /me
+        # names (with @, or by their plain name; see identity.names_in).
+        targets = [target] if target is not None else []
+        if key == "me":
+            others = [q for q in self.present(zid) if q.id != p.id]
+            targets = identity.names_in(body, others)
         # Targeted-action opt-out: nothing is posted, the sender gets a short private note.
-        if target is not None and self._opted_out(target.id, zid, key):
-            note = f"{target.name} isn't taking actions right now"
-            self._note(pid, note)
-            return {"posted": False, "note": note}
+        for t in targets:
+            if self._opted_out(t.id, zid, key):
+                note = f"{t.name} isn't taking actions right now"
+                self._note(pid, note)
+                return {"posted": False, "note": note}
         # Flood control: a cooldown per action, and a limit on actions in a row.
         cooldown = self.setting("action_cooldown_s")
         last = self.db.one("SELECT created_at FROM messages WHERE author_id = ? AND zone_id = ? AND kind = 'action'"
@@ -903,7 +969,8 @@ class Beach:
                           (SANDCHAT, pid, now, closes))
         self._post(SANDCHAT, pid, "bell", f"{p.name} rang the desk bell")
         here = {x.id for x in self.present(SANDCHAT)}
-        invitees = [r for r in self.db.q("SELECT * FROM participants WHERE invitable = 1 AND token_hash IS NOT NULL")
+        invitees = [r for r in self.db.q("SELECT * FROM participants p WHERE invitable = 1 AND EXISTS (SELECT 1 FROM sign_ins s"
+                                       " WHERE s.participant_id = p.id AND s.revoked_at IS NULL)")
                     if r["id"] not in here and r["id"] != pid]
         beach = self.setting("beach_name")
         for r in invitees:
@@ -980,7 +1047,8 @@ class Beach:
         now = self.now()
         counts = {"sent": 0, "failed": 0, "dropped": 0, "no_hook": 0}
         for o in self.db.q("SELECT o.*, b.closes_at, b.status AS bell_status FROM outbox o JOIN bells b"
-                           " ON b.id = o.bell_id WHERE o.status = 'queued' ORDER BY o.id"):
+                           " ON b.id = o.bell_id WHERE o.status = 'queued' AND (o.next_try_at IS NULL"
+                           " OR o.next_try_at <= ?) ORDER BY o.id", (now,)):
             if o["bell_status"] not in ("open", "answered") or now >= o["closes_at"]:
                 self.db.run("UPDATE outbox SET status = 'dropped', done_at = ? WHERE id = ?", (now, o["id"]))
                 counts["dropped"] += 1
@@ -993,9 +1061,23 @@ class Beach:
                 ok = bool(self.sender(json.loads(o["payload"])))
             except Exception:  # a hook failure must never break the Beach
                 ok = False
-            self.db.run("UPDATE outbox SET status = ?, done_at = ? WHERE id = ?",
-                        ("sent" if ok else "failed", self.now(), o["id"]))
-            counts["sent" if ok else "failed"] += 1
+            attempts = o["attempts"] + 1
+            if ok:
+                self.db.run("UPDATE outbox SET status = 'sent', attempts = ?, done_at = ? WHERE id = ?",
+                            (attempts, self.now(), o["id"]))
+                counts["sent"] += 1
+                continue
+            # Failed: try again a little later, but only if that's still within the bell's life.
+            # A late invitation is worse than none.
+            retry_at = self.now() + self.setting("bell_retry_s") * 3 ** (attempts - 1)
+            if attempts <= self.setting("bell_retries") and retry_at < o["closes_at"]:
+                self.db.run("UPDATE outbox SET attempts = ?, next_try_at = ? WHERE id = ?",
+                            (attempts, retry_at, o["id"]))
+                counts["retrying"] = counts.get("retrying", 0) + 1
+            else:
+                self.db.run("UPDATE outbox SET status = 'failed', attempts = ?, done_at = ? WHERE id = ?",
+                            (attempts, self.now(), o["id"]))
+                counts["failed"] += 1
         return counts
 
     def bell_invites(self, pid: int) -> list[dict]:

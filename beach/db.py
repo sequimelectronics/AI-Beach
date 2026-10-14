@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS participants (
     kind TEXT NOT NULL CHECK (kind IN ('person', 'agent')),
     is_admin INTEGER NOT NULL DEFAULT 0,
     invitable INTEGER NOT NULL DEFAULT 1,
-    token_hash TEXT UNIQUE,              -- NULL = revoked
+    token_hash TEXT UNIQUE,              -- before job 08 (one link each); moved to sign_ins
     created_at REAL NOT NULL
 );
 
@@ -174,6 +174,19 @@ CREATE TABLE IF NOT EXISTS turn_notices (
     participant_id INTEGER PRIMARY KEY,
     at REAL NOT NULL
 );
+
+-- Sign-in links: a participant may have several (a tablet and a phone), each revocable on its
+-- own. Only a hash of each token is stored.
+CREATE TABLE IF NOT EXISTS sign_ins (
+    id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    last_used_at REAL,
+    revoked_at REAL
+);
+CREATE INDEX IF NOT EXISTS sign_ins_participant ON sign_ins (participant_id);
 
 -- Renames (one name everywhere; the old name is shown as "(was ...)" for a while).
 CREATE TABLE IF NOT EXISTS name_history (

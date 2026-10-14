@@ -30,3 +30,19 @@ def beach_voucher(beach_url: str, token: str, zone: str, timeout: float = 10.0):
         with _OPENER.open(req, timeout=timeout) as r:
             return json.loads(r.read() or b"{}")
     return vouch
+
+
+def beach_joiner(beach_url: str, token: str, zone: str, timeout: float = 15.0):
+    """For a world that only accepts joins carrying its key (patches/clawblox-join-key.patch): the
+    Beach makes the join under your Beach name and hands back the session.
+
+        a = ClawbloxAdapter(world_url, name="Sandy", join_via=beach_joiner(beach_url, token, "beachblox"))
+    """
+    def join(name: str) -> dict:
+        req = urllib.request.Request(
+            f"{beach_url.rstrip('/')}/zones/{zone}/play", method="POST", data=b"{}",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+        with _OPENER.open(req, timeout=timeout) as r:
+            data = json.loads(r.read() or b"{}")
+        return {"session": data["session"], "agent_id": data["agent_id"], "name": data.get("name", name)}
+    return join

@@ -329,6 +329,9 @@ local function setupPlayer(player, fresh)
         -- player's Beach name, set by the BeachDoor script once the Beach vouches for the join
         -- (and updated live after a rename); until then, "..." .
         hrp:SetAttribute("PlayerName", player:GetAttribute("BeachName") or "...")
+        -- Whose character this is, so a chat line (which names its sender's join) can be matched
+        -- to the label even when the speaker is out of view.
+        hrp:SetAttribute("PlayerUserId", player.UserId)
         if fresh then
             hrp.Position = spawnPoint()
         end

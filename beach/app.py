@@ -129,6 +129,16 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
                 "optout": beach.optout_status(p.id, SANDCHAT),
                 "invites": beach.bell_invites(p.id)}
 
+    @app.get("/me/links")
+    def my_links(p: Participant = Depends(who)):
+        return {"links": beach.links(p.id)}
+
+    @app.delete("/me/links/{lid}")
+    def revoke_my_link(lid: int, p: Participant = Depends(who)):
+        """Sign out one of your own devices."""
+        beach.revoke_link(p.id, lid)
+        return {"links": beach.links(p.id)}
+
     @app.put("/me/name")
     def rename_me(body: dict = Body(...), p: Participant = Depends(who)):
         return beach.rename(p.id, str(body.get("name", "")))
@@ -236,7 +246,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     @app.get("/zones/{zid}/card")
     def get_zone_card(zid: str, _: Participant = Depends(who)):
         text = agent.zone_card(beach, zid)
-        return {"text": text, "tokens": counter(text), "token_method": counter.method}
+        return {"text": text, "tokens": counter(text), "token_method": counter.method,
+                "custom": bool(beach.zone(zid)["card"])}
 
     @app.get("/avatar-describe")
     @app.get("/me/avatar/describe")
@@ -338,7 +349,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
 
     @app.post("/zones/{zid}/play")
     def play(zid: str, p: Participant = Depends(who)):
-        """For people: the Beach joins the world under your Beach name and vouches for it."""
+        """The Beach joins the world under your Beach name and vouches for it (people and agents)."""
         return beach.play(p.id, zid)
 
     @app.get("/zones/{zid}/door")
@@ -364,6 +375,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
             beach.set_watch_token(zid, str(body["spectator_token"]))
         if body.get("world_url"):
             beach.set_world_url(zid, str(body["world_url"]))
+        if "join_key" in body:
+            beach.set_join_key(zid, str(body["join_key"]) if body["join_key"] else None)
         # The colours of each matched player's look, for a game that tints its characters.
         return {"zone": zid, "playing": n, "names": ", ".join(w["name"] for w in beach.who_in(zid)),
                 "looks": beach.game_looks(zid)}
@@ -396,13 +409,25 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
         return beach.set_avatar(pid, body, by_admin=True)
 
     @app.post("/admin/participants/{pid}/token")
-    def new_token(pid: int, _: Participant = Depends(admin)):
-        return {"id": pid, "token": beach.reissue_token(pid)}
+    def new_token(pid: int, body: dict = Body(default={}), _: Participant = Depends(admin)):
+        """A new sign-in link (e.g. for a second device). Their other links keep working."""
+        link = beach.new_link(pid, str(body.get("label") or "link"))
+        return {"id": pid, "token": link["token"], "link": {"id": link["id"], "label": link["label"]}}
 
     @app.delete("/admin/participants/{pid}/token")
     def revoke(pid: int, _: Participant = Depends(admin)):
+        """Sign out everywhere: every link stops working."""
         beach.revoke_token(pid)
         return {"id": pid, "revoked": True}
+
+    @app.get("/admin/participants/{pid}/links")
+    def links(pid: int, _: Participant = Depends(admin)):
+        return {"id": pid, "links": beach.links(pid)}
+
+    @app.delete("/admin/participants/{pid}/links/{lid}")
+    def revoke_link(pid: int, lid: int, _: Participant = Depends(admin)):
+        beach.revoke_link(pid, lid)
+        return {"id": pid, "links": beach.links(pid)}
 
     @app.get("/admin/settings")
     def get_settings(_: Participant = Depends(admin)):

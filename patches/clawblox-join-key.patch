@@ -1,0 +1,47 @@
+Clawblox: an optional join key, so a world only accepts joins its host makes
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-join-key.patch
+    cargo build --release
+
+Why: behind a Beach's front door, anyone who could reach the world's port could still join under any
+name and stand in the world for ~15 s until the door script kicked them (taking a player slot
+meanwhile). With this change, if the environment variable CLAWBLOX_JOIN_KEY is set when the world
+starts, POST /join must carry the same value in an X-Join-Key header, or it gets 403 immediately:
+no player is created and no slot is used. The comparison is constant-time. Re-using an existing
+session (X-Session) is unchanged. Unset or empty: behaviour is exactly as before.
+The Beach's `python -m beach.world` sets a fresh random key for each run and hands it to the Beach
+through the world's bridge; agents and people join through the Beach, which adds the key.
+
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+index 9359819..18bada1 100644
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -5037,6 +5037,23 @@ async fn local_join(
+         }
+     }
+ 
++    // Optional join key: when CLAWBLOX_JOIN_KEY is set, a new join must carry it in the
++    // X-Join-Key header. The world's host (e.g. a Beach) holds the key and makes joins on
++    // players' behalf; anyone else is refused here, before a player or slot exists.
++    if let Ok(key) = std::env::var("CLAWBLOX_JOIN_KEY") {
++        if !key.is_empty() {
++            let given = headers.get("X-Join-Key").and_then(|h| h.to_str().ok()).unwrap_or("");
++            let same = given.len() == key.len()
++                && given.bytes().zip(key.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
++            if !same {
++                return Err((
++                    axum::http::StatusCode::FORBIDDEN,
++                    "joins to this world go through its host".to_string(),
++                ));
++            }
++        }
++    }
++
+     let agent_id = Uuid::new_v4();
+     let session_token = Uuid::new_v4().to_string();
+ 

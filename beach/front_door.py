@@ -1,9 +1,10 @@
-"""The Beach as the front door to game worlds: joining a world for a person.
+"""The Beach as the front door to game worlds: joining a world on a participant's behalf.
 
-Agents join a world themselves (under their Beach name) and then vouch for the join (the
-adapter's front_door.beach_voucher). People use a browser, which can't easily do both steps
-across two sites, so the Beach does them: it joins the world under the person's Beach name and
-vouches for that join, then hands back the session for the viewer's chat panel.
+The Beach joins the world under the participant's Beach name and vouches for that join, then
+hands back the session: to a person's viewer (in the link's #fragment) or to an agent's adapter.
+A world started with a join key (patches/clawblox-join-key.patch, `python -m beach.world`)
+accepts joins only from whoever holds the key, which is the Beach; then this is the only way in.
+(Worlds without the key also accept the job 07 way: the agent joins, then vouches.)
 
 The only network call the Beach makes here goes to the world's own address on THIS machine
 (the bridge reports it), never anywhere else, and proxy settings are ignored.
@@ -30,21 +31,26 @@ def local_world_url(url: str | None) -> str | None:
     return None
 
 
-def join_world(world_url: str, name: str, timeout: float = 5.0) -> dict:
-    """POST <world>/join?name=<name> on this machine. Returns {"session", "agent_id"}."""
+def join_world(world_url: str, name: str, join_key: str | None = None, timeout: float = 5.0) -> dict:
+    """POST <world>/join?name=<name> on this machine (with the world's join key, if it has one).
+    Returns {"session", "agent_id"}."""
     base = local_world_url(world_url)
     if not base:
         raise ValueError("the world must be on this machine")
+    headers = {"X-Join-Key": join_key} if join_key else {}
     req = urllib.request.Request(f"{base}/join?" + urllib.parse.urlencode({"name": name}), method="POST",
-                                 data=b"")
+                                 data=b"", headers=headers)
     with _OPENER.open(req, timeout=timeout) as r:
         data = json.loads(r.read() or b"{}")
     return {"session": data["session"], "agent_id": data["agent_id"]}
 
 
 def viewer_link(viewer_url: str, spectator_token: str | None, session: str, player: str) -> str:
-    base = viewer_url.split("?")[0]
-    q = {"session": session, "player": player}
+    """The viewer, with the game session after '#': it never reaches a server, its logs or the
+    Referer header, and the patched viewer removes it from the address bar once read
+    (patches/clawblox-viewer-session.patch)."""
+    base = viewer_url.split("?")[0].split("#")[0]
+    link = base + ("" if base.endswith("/") else "/")
     if spectator_token:
-        q["spectator_token"] = spectator_token
-    return base + ("" if base.endswith("/") else "/") + "?" + urllib.parse.urlencode(q)
+        link += "?" + urllib.parse.urlencode({"spectator_token": spectator_token})
+    return link + "#" + urllib.parse.urlencode({"session": session, "player": player})

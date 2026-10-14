@@ -1,7 +1,7 @@
-Clawblox viewer: use a session the host already made, instead of joining as "Player-xxxx"
+Clawblox viewer: use a session the host already made, passed after '#', never in the address
 
-Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, with or without
-patches/clawblox-offline-frontend.patch (they touch different lines of main.js).
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
 Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
 lines of its code and is offered under the same MIT terms. Written for AI Beach.
 
@@ -9,24 +9,42 @@ lines of its code and is offered under the same MIT terms. Written for AI Beach.
     cargo build --release
 
 Why: the viewer's chat panel joins the world as a player, under a random local name. Behind a
-Beach's front door that join is refused (the Beach never vouched for it), so a person could
-watch but not chat in the world. With this change, when the viewer is opened with
-?session=<token>&player=<name> (the Beach does that after joining for the person under their
-Beach name), the chat panel uses that session. Without those parameters nothing changes.
+Beach's front door that join is refused, so a person could watch but not chat. With this change,
+when the viewer is opened with #session=<token>&player=<name> (the Beach does that after joining
+for the person under their Beach name), the chat panel uses that session. The part after '#' never
+reaches a server or its logs, nor the Referer header; the viewer reads it once at load and removes
+it from the address bar and the history entry. Without it, nothing changes.
+(Job 07's version read ?session= from the query string; this replaces it.)
 
 diff --git a/frontend_runtime/dist/main.js b/frontend_runtime/dist/main.js
-index 8fc373c..dc425e8 100644
+index c765a39..149bf18 100644
 --- a/frontend_runtime/dist/main.js
 +++ b/frontend_runtime/dist/main.js
-@@ -1759,6 +1759,14 @@ function makeLocalPlayerName() {
+@@ -1748,6 +1748,16 @@ function setChatPanelOpen(open) {
+   if (chatState.open) renderChatFeed()
+ }
+ 
++// A host's session arrives after '#' (#session=...&player=...), so it never reaches a server log
++// or the Referer header; read it once, then take it out of the address bar and history entry.
++const HOST_SESSION = (() => {
++  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
++  const token = params.get('session')
++  if (!token) return {}
++  try { history.replaceState(null, '', window.location.pathname + window.location.search) } catch (_) {}
++  return { token, player: params.get('player') }
++})()
++
+ function makeLocalPlayerName() {
+   const key = 'clawblox_local_chat_name'
+   const existing = localStorage.getItem(key)
+@@ -1759,6 +1769,13 @@ function makeLocalPlayerName() {
  
  async function ensureChatSession() {
    if (chatState.sessionToken) return
 +  // A host (e.g. a Beach front door) may have joined for this viewer already: use that session.
-+  const hostSession = new URLSearchParams(window.location.search).get('session')
-+  if (hostSession) {
-+    chatState.sessionToken = hostSession
-+    chatState.playerName = new URLSearchParams(window.location.search).get('player') || 'you'
++  if (HOST_SESSION.token) {
++    chatState.sessionToken = HOST_SESSION.token
++    chatState.playerName = HOST_SESSION.player || 'you'
 +    setChatLocalStatus(`Chatting as ${chatState.playerName}`)
 +    return
 +  }

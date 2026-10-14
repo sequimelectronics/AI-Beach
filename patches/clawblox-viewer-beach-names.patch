@@ -1,0 +1,78 @@
+Clawblox viewer: show a player's world-given name ("BeachName") in the Players and chat panels
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-viewer-beach-names.patch
+    cargo build --release
+
+Why: Clawblox fixes a player's name when they join. A Beach's front door labels each admitted
+player with their current Beach name (player attribute "BeachName", updated live after a rename).
+With this change the viewer's Players panel, the sender of each world-chat message and its "heard
+by" line (matched by player id) show that name when it's present, so a rename shows everywhere at
+once without re-joining. Players without the attribute show exactly as before.
+
+diff --git a/frontend_runtime/dist/main.js b/frontend_runtime/dist/main.js
+index 149bf18..bdf8174 100644
+--- a/frontend_runtime/dist/main.js
++++ b/frontend_runtime/dist/main.js
+@@ -1471,6 +1471,21 @@ function startReplayPolling() {
+   }, 300)
+ }
+ 
++// A world may name its players itself (attribute "BeachName", set by a Beach's front door, kept
++// current across renames). Show that name when present, else the name the player joined with.
++function playerDisplayName(player) {
++  const named = player?.attributes?.BeachName
++  return String((typeof named === 'string' && named) || player?.name || 'Player')
++}
++
++// A chat message's sender (or an audibility entry): their current name, by agent id.
++function chatDisplayName(msg, fallback = 'Player') {
++  const id = String(msg?.agent_id || '')
++  const players = Array.isArray(latestSpectatorState?.players) ? latestSpectatorState.players : []
++  const player = id ? players.find((p) => String(p?.id || '') === id) : null
++  return player ? playerDisplayName(player) : String(msg?.agent_name || fallback)
++}
++
+ function renderPlayerList(players) {
+   if (!playerListBodyEl) return
+   const list = Array.isArray(players) ? [...players] : []
+@@ -1478,7 +1493,7 @@ function renderPlayerList(players) {
+   if (selectedSpectatorPlayerId && !availableIds.has(selectedSpectatorPlayerId)) {
+     selectedSpectatorPlayerId = null
+   }
+-  list.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
++  list.sort((a, b) => playerDisplayName(a).localeCompare(playerDisplayName(b)))
+   if (playerListCountEl) playerListCountEl.textContent = String(list.length)
+   playerListBodyEl.textContent = ''
+ 
+@@ -1515,7 +1530,7 @@ function renderPlayerList(players) {
+ 
+     const name = document.createElement('div')
+     name.className = 'player-list__name'
+-    name.textContent = String(player?.name || 'Player')
++    name.textContent = playerDisplayName(player)
+ 
+     const hp = document.createElement('div')
+     hp.className = 'player-list__hp'
+@@ -1815,7 +1830,7 @@ function formatChatAudibility(msg) {
+   const heard = audibility.filter((entry) => entry && entry.heard)
+   if (!heard.length) return 'heard by nobody'
+   const names = heard
+-    .map((entry) => String(entry.agent_name || '').trim())
++    .map((entry) => chatDisplayName(entry, '').trim())
+     .filter(Boolean)
+   if (!names.length) return `heard by ${heard.length}`
+   if (names.length <= 4) return `heard by ${names.join(', ')}`
+@@ -1841,7 +1856,7 @@ function renderChatFeed() {
+ 
+       const name = document.createElement('span')
+       name.className = 'chat-message__name'
+-      name.textContent = String(msg.agent_name || 'Player')
++      name.textContent = chatDisplayName(msg)
+       name.style.color = nameColor(name.textContent)
+ 
+       const time = document.createElement('span')

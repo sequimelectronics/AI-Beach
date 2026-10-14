@@ -282,3 +282,15 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
 }
 .table-layout > * { min-width: 0; }
 .name-card { margin-bottom: 1em; }
+.card-editor { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .95rem; padding: .6em;
+  border: 2px solid var(--line); border-radius: 8px; background: #fff; line-height: 1.45; }
+.card-edit { margin-top: .8em; padding: .8em; border: 2px solid var(--sea); border-radius: 10px; background: #fff; }
+.card-edit h3 { margin: 0 0 .3em; }
+.links-panel table { margin: .5em 0; }
+
+/* The upright map (phones held portrait): taller art, bigger markers. */
+.map-wrap.portrait { aspect-ratio: 10 / 16; }
+.map-wrap.portrait .zone { width: 44%; }
+.map-wrap.portrait .zone .sign { font-size: clamp(.85rem, 3.8vw, 1.1rem); }
+.map-wrap.portrait .zone .crowd .avatar { width: clamp(30px, 8vw, 46px); height: clamp(36px, 9.6vw, 55px); }
+.map-wrap.portrait .map-title { font-size: clamp(1rem, 5vw, 1.6rem); }
