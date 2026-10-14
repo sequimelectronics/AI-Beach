@@ -220,7 +220,15 @@ def run_session(c: Client, steps_target: int = 50) -> dict:
     obs = c.observe(note="look for rock")
     rock = nearest_pickup(obs, "Rock")
     if rock:
-        obs = walk_to(c, rock["position"], tolerance=2.5)
+        # The rock rests on SmallPlateau (2 units tall). MoveTo does not climb,
+        # so stop ~7 units short on the +x side, then Jump *before* MoveTo.
+        # (MoveTo first and Jump at the wall leaves the character stuck.)
+        r = rock["position"]
+        walk_to(c, [r[0] + 13.4, 1, r[2]], tolerance=1.5)
+        c.act("Jump", note="Jump onto plateau")
+        c.act("MoveTo", {"position": [r[0] + 2.4, r[1], r[2]]}, note="MoveTo onto plateau")
+        time.sleep(2.0)
+        obs = c.observe(note="on plateau?")
         rock = nearest_pickup(obs, "Rock") or rock
         obs = c.act("Pickup", {"position": rock["position"]}, note="Pickup rock")
         results["action_results"]["PickupRock"] = obs.get("player", {}).get("attributes", {}).get("LastActionResult")
