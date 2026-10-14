@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+
+# Machine-local engine installs, builds, runs and data. Never committed:
+# third-party source (e.g. a Clawblox checkout), build output, run recordings,
+# world databases, and anything from a particular household's Beach.
+_local/
