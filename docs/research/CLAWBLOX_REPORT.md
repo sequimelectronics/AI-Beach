@@ -202,6 +202,14 @@ Notes:
 
 ### Q2 answer: does it fit in about 8k?
 
+> **Budget correction (added in job 02, 2026-10-14).** This job assumed the model's whole working
+> budget was about 8,000 tokens. That was wrong. The target model has a 65,536-token window, but the
+> agent's own system uses most of it for its own purposes. So a raw move (a look, plus the second full
+> observation that the action returns, about 27k tokens) is still about as much as fits. The game's
+> own content per turn, including recent history, should target **about 2.5–3k tokens and stay under
+> 8k**. The measurements below stand as recorded. See `docs/research/ADAPTER_REPORT.md` for the
+> adapter built to that target.
+
 **No, not the raw observation.** At stock radius one observation (about 13.7k tokens) is bigger
 than the whole budget. At radius 25 it's about 7.8k, which still leaves nothing for
 instructions (API.md alone is 424 tokens), conversation, or the model's reply. At radius 15
