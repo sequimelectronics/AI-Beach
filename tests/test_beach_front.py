@@ -269,7 +269,10 @@ class FrontApiTests(unittest.TestCase):
         card = self.http.get("/avatar/card", headers=self.sandy).json()
         self.assertIn("AVATAR CARD", card["text"])
         turn = self.http.get("/agent/turn", headers=self.sandy).json()
-        self.assertNotIn("avatar", turn["tools"]["text"].lower())
+        # The tools piece only points at it; the card itself comes on request.
+        self.assertNotIn("AVATAR CARD", turn["tools"]["text"])
+        self.assertNotIn("PUT /me/avatar", turn["tools"]["text"])
+        self.assertIn("GET /avatar-describe", turn["tools"]["text"])
 
     def test_map_and_pages(self):
         self.http.post("/zones/sandchat/join", headers=self.sandy)

@@ -130,6 +130,51 @@ CREATE TABLE IF NOT EXISTS zone_players (
     PRIMARY KEY (zone_id, name)
 );
 
+-- Game tables in zones that have them (the Boardwalk). The game's own state is JSON
+-- the game module writes; the core never interprets it.
+CREATE TABLE IF NOT EXISTS game_tables (
+    id INTEGER PRIMARY KEY,
+    zone_id TEXT NOT NULL,
+    game TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'waiting',   -- waiting | playing | finished | abandoned | closed
+    state TEXT NOT NULL,
+    result TEXT,                              -- JSON once over: winner seat (or null), reason
+    draw_offer INTEGER,                       -- the seat offering a draw, or NULL
+    created_by INTEGER NOT NULL,
+    created_at REAL NOT NULL,
+    started_at REAL,
+    last_activity REAL NOT NULL,              -- for abandoning forgotten games
+    turn_since REAL,                          -- when the current turn began
+    notified_ply INTEGER,                     -- the turn a "your move" notice was sent for
+    finished_at REAL
+);
+CREATE TABLE IF NOT EXISTS table_seats (
+    table_id INTEGER NOT NULL,
+    seat INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    PRIMARY KEY (table_id, seat)
+);
+CREATE TABLE IF NOT EXISTS table_watchers (
+    table_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    PRIMARY KEY (table_id, participant_id)
+);
+CREATE TABLE IF NOT EXISTS table_moves (
+    table_id INTEGER NOT NULL,
+    ply INTEGER NOT NULL,
+    seat INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    move TEXT NOT NULL,
+    info TEXT,                                -- JSON from the game (captures, crowning)
+    at REAL NOT NULL,
+    PRIMARY KEY (table_id, ply)
+);
+-- When each participant last got a "your move" notice (rate limit).
+CREATE TABLE IF NOT EXISTS turn_notices (
+    participant_id INTEGER PRIMARY KEY,
+    at REAL NOT NULL
+);
+
 -- Each participant's look (avatar.py). No row = the default look for their id.
 CREATE TABLE IF NOT EXISTS avatars (
     participant_id INTEGER PRIMARY KEY REFERENCES participants(id),

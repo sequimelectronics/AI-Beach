@@ -261,10 +261,12 @@ class ClawbloxAdapter:
         defs = json.dumps(action_definitions(self.rules), separators=(",", ":"))
         return f"{card.strip()}\n\nTOOLS {defs}"
 
-    def turn_bundle(self, n_actions: int = 8, n_chat: int = 6, include_map: bool | None = None) -> dict:
+    def turn_bundle(self, n_actions: int = 8, n_chat: int = 6, include_map: bool | None = None,
+                    beach_card: str | None = None) -> dict:
         """The three labeled pieces the game provides for one turn, with token sizes.
 
-        tools  - the play card and the action definitions
+        tools  - the play card and the action definitions (after `beach_card`, if given: when
+                 the world is a zone of a Beach, its directory card, from GET /agent/beach-card)
         state  - the map card (first bundle only, unless include_map) and the current look
         recent - the last n action results and the last chat lines
         """
@@ -279,7 +281,10 @@ class ClawbloxAdapter:
         chat = [line for line, _ in self._chat_log[-n_chat:]]
         recent = "RECENT ACTIONS\n" + ("\n".join(h.line() for h in acts) if acts else "none yet")
         recent += "\nRECENT CHAT\n" + ("\n".join(chat) if chat else "none")
-        pieces = {"tools": self.tools_text(), "state": state, "recent": recent}
+        tools = self.tools_text()
+        if beach_card:
+            tools = beach_card.strip() + "\n\n" + tools
+        pieces = {"tools": tools, "state": state, "recent": recent}
         out = {k: {"text": v, "tokens": self.counter(v)} for k, v in pieces.items()}
         out["total_tokens"] = sum(p["tokens"] for p in out.values())
         out["token_method"] = self.counter.method

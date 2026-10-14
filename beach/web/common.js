@@ -115,8 +115,10 @@ const Beach = (() => {
     let map
     try { map = await api('GET', '/map') } catch (e) { return null }
     document.title = (document.title ? document.title + ' · ' : '') + map.beach
-    const chat = map.zones.find(z => z.kind === 'chat') || { name: 'Chat', id: 'sandchat' }
-    const links = [['map', '/', 'Map'], ['chat', '/chat?zone=' + encodeURIComponent(chat.id), chat.name], ['avatar', '/avatar', 'My look']]
+    const chat = map.zones.find(z => z.id === 'sandchat') || map.zones.find(z => z.kind === 'chat' && !z.tables) || { name: 'Chat', id: 'sandchat' }
+    const links = [['map', '/', 'Map'], ['chat', '/chat?zone=' + encodeURIComponent(chat.id), chat.name]]
+    for (const z of map.zones.filter(z => z.tables)) links.push(['boardwalk', '/boardwalk?zone=' + encodeURIComponent(z.id), z.name])
+    links.push(['avatar', '/avatar', 'My look'])
     if (map.me.admin) links.push(['keeper', '/keeper', 'Keeper'])
     bar.append(
       el('a', { class: 'beach-name', href: '/', text: map.beach }),

@@ -16,6 +16,7 @@
     night: 'rgba(15, 25, 70, .42)'
   }
   const ICON = {
+    tables: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="2" fill="#f5e2b3" stroke="#2f2323" stroke-width="1.5"/><path d="M7 2.5h5v5H7zM17 2.5h4.5v5H17M2.5 7.5H7v5H2.5zM12 7.5h5v5h-5zM7 12.5h5v5H7zM17 12.5h4.5v5H17zM2.5 17.5H7v4H2.5zM12 17.5h5v4h-5z" fill="#7a4b2a"/><circle cx="9.5" cy="15" r="2.2" fill="#c2462e" stroke="#2f2323"/></svg>',
     chat: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 11 Q12 1 22 11 Z" fill="#e0674f" stroke="#2f2323" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 11 V22" stroke="#2f2323" stroke-width="1.8"/></svg>',
     game: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="#fff" stroke="#2f2323" stroke-width="1.5"/><path d="M12 2.5 A9.5 9.5 0 0 1 21.5 12 L12 12Z" fill="#e0674f"/><path d="M2.5 12 A9.5 9.5 0 0 0 12 21.5 L12 12Z" fill="#2a9d8f"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#2f2323" stroke-width="1.5"/></svg>'
   }
@@ -29,7 +30,8 @@
 
   function go (z) {
     if (!z.open) return
-    if (z.kind === 'chat') location.href = '/chat?zone=' + encodeURIComponent(z.id)
+    if (z.tables) location.href = '/boardwalk?zone=' + encodeURIComponent(z.id)
+    else if (z.kind === 'chat') location.href = '/chat?zone=' + encodeURIComponent(z.id)
     else if (z.viewer_url) window.open(z.viewer_url, '_blank', 'noopener')
     else Beach.toast(z.name + " doesn't have a viewer yet; the keeper can add one.")
   }
@@ -59,7 +61,7 @@
       'aria-disabled': z.open ? null : 'true',
       onclick: () => go(z)
     },
-    el('span', { class: 'zone-name' }, svgNode(ICON[z.kind] || ICON.chat), z.name),
+    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : z.kind] || ICON.chat), z.name),
     el('span', { class: 'count', text: countText(z) }))
     sign.querySelector('svg').setAttribute('class', 'kind-icon')
     const m = el('div', { class: 'zone' + (z.open ? '' : ' closed'), 'data-zone': z.id }, crowd(z), sign)
@@ -75,7 +77,7 @@
         el('strong', { text: z.name }),
         el('span', { class: 'hint', text: (z.kind === 'game' ? 'game · ' : '') + countText(z) })),
       names.length ? el('div', { class: 'names', text: names.join(', ') }) : null,
-      z.open ? el('div', { class: 'row' }, el('button', { class: 'primary', type: 'button', onclick: () => go(z), text: z.kind === 'chat' ? 'Go in' : 'Watch' })) : null)
+      z.open ? el('div', { class: 'row' }, el('button', { class: 'primary', type: 'button', onclick: () => go(z), text: z.tables ? 'Play' : z.kind === 'chat' ? 'Go in' : 'Watch' })) : null)
   }
 
   function order (zones) {

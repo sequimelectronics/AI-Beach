@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from beach.agent import card_text, turn_bundle  # noqa: E402
+from beach.agent import beach_card, card_text, turn_bundle, zone_card  # noqa: E402
 from beach.core import SANDCHAT, Beach, BeachError  # noqa: E402
 
 
@@ -92,7 +92,9 @@ class ZoneAndPresenceTests(BeachTestCase):
         self.assertEqual(z["name"], "SandChat")
         self.beach.update_settings({"sandchat_name": "The Shore", "beach_name": "Tide Pool"})
         self.assertEqual(self.beach.zone(SANDCHAT)["name"], "The Shore")
-        self.assertIn("The Shore is the chat at Tide Pool", card_text(self.beach))
+        self.assertIn("You're at Tide Pool", beach_card(self.beach))
+        self.assertIn("- sandchat: The Shore (chat)", beach_card(self.beach))
+        self.assertTrue(zone_card(self.beach).startswith("THE SHORE CARD\nThe Shore is a chat."))
 
     def test_multi_zone_presence_and_part_never_fails(self):
         self.beach.add_zone("lagoon", "Lagoon", "chat")
@@ -378,7 +380,7 @@ class MapAndFactsTests(BeachTestCase):
         self.beach.report_players("beachblox", ["Pebble", "Drift"])
         self.assertEqual(self.beach.arrival_line(self.sandy.id),
                          "The beach is quiet, but you hear sounds of play from BeachBlox.")
-        self.assertEqual(self.beach.zone_map_text(), "zones: SandChat: 0 here; BeachBlox (game): 2 playing")
+        self.assertEqual(self.beach.zone_map_text(), "zones: SandChat: 0 here; BeachBlox (game): 2 playing; The Boardwalk (game tables): 0 here")
         self.beach.join(self.coral.id, SANDCHAT)
         self.assertEqual(self.beach.arrival_line(self.sandy.id), "")  # someone is here: no cue
         self.clock.advance(200)  # stale bridge report expires
@@ -428,7 +430,12 @@ class BundleTests(BeachTestCase):
 
     def test_card_size(self):
         # Exact Gemma 4 E4B count is in BEACH_CORE_REPORT.md; guard against growth here.
-        self.assertLess(len(card_text(self.beach)), 1250)
+        # Two levels: the Beach card (the directory) and the zone's card; nothing repeated.
+        self.assertLess(len(beach_card(self.beach)), 1000)
+        self.assertLess(len(zone_card(self.beach)), 900)
+        self.assertEqual(card_text(self.beach), beach_card(self.beach) + "\n\n" + zone_card(self.beach))
+        self.assertNotIn("/join", zone_card(self.beach))
+        self.assertNotIn("bell", zone_card(self.beach).lower())
 
 
 class HookTests(unittest.TestCase):

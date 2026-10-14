@@ -22,7 +22,8 @@ from .core import SANDCHAT, SKIES, Beach, BeachError, Participant
 from .tokens import make_counter
 
 WEB = Path(__file__).parent / "web"
-PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html"}
+PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
+         "/boardwalk": "boardwalk.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
 WEB_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
@@ -71,7 +72,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
 
     @app.exception_handler(BeachError)
     async def beach_error(_: Request, exc: BeachError):
-        body: dict[str, Any] = {"error": exc.code, "message": exc.message}
+        body: dict[str, Any] = {"error": exc.code, "message": exc.message, **exc.data}
         headers = {}
         if exc.retry_after is not None:
             body["retry_after"] = exc.retry_after
@@ -220,6 +221,17 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     def set_my_avatar(body: dict = Body(...), p: Participant = Depends(who)):
         return beach.set_avatar(p.id, body)
 
+    @app.get("/agent/beach-card")
+    def get_beach_card(_: Participant = Depends(who)):
+        text = agent.beach_card(beach)
+        return {"text": text, "tokens": counter(text), "token_method": counter.method}
+
+    @app.get("/zones/{zid}/card")
+    def get_zone_card(zid: str, _: Participant = Depends(who)):
+        text = agent.zone_card(beach, zid)
+        return {"text": text, "tokens": counter(text), "token_method": counter.method}
+
+    @app.get("/avatar-describe")
     @app.get("/me/avatar/describe")
     def describe_me(p: Participant = Depends(who)):
         return {"text": beach.avatar(p.id)["describe"]}
@@ -247,8 +259,67 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
         return _image(pid, fmt, size)
 
     @app.get("/agent/turn")
-    def turn(zone: str = SANDCHAT, p: Participant = Depends(who)):
+    def turn(zone: str = SANDCHAT, table: int | None = None, p: Participant = Depends(who)):
+        if table is not None:
+            return agent.table_bundle(beach, p.id, table, counter=counter)
         return agent.turn_bundle(beach, p.id, zone, counter=counter)
+
+    # ----------------------------------------------------------- tables (the Boardwalk)
+    bw = beach.tables
+
+    @app.get("/zones/{zid}/tables")
+    def tables(zid: str, _: Participant = Depends(who)):
+        from .games import GAMES
+        return {"zone": zid, "games": {k: {"title": g.title, "seats": list(g.seat_names)} for k, g in GAMES.items()},
+                "tables": bw.list(zid)}
+
+    @app.post("/zones/{zid}/tables")
+    def open_table(zid: str, body: dict = Body(default={}), p: Participant = Depends(who)):
+        seat = body.get("seat", 0)
+        return bw.open(p.id, zid, str(body.get("game", "checkers")), None if seat is None else int(seat))
+
+    @app.get("/tables/{tid}")
+    def table_view(tid: int, p: Participant = Depends(who)):
+        return bw.view(p.id, tid)
+
+    @app.post("/tables/{tid}/sit")
+    def sit(tid: int, body: dict = Body(default={}), p: Participant = Depends(who)):
+        seat = body.get("seat")
+        return bw.sit(p.id, tid, None if seat is None else int(seat))
+
+    @app.post("/tables/{tid}/stand")
+    def stand(tid: int, p: Participant = Depends(who)):
+        return bw.stand(p.id, tid)
+
+    @app.post("/tables/{tid}/watch")
+    def watch(tid: int, p: Participant = Depends(who)):
+        return bw.watch(p.id, tid, True)
+
+    @app.post("/tables/{tid}/unwatch")
+    def unwatch(tid: int, p: Participant = Depends(who)):
+        return bw.watch(p.id, tid, False)
+
+    @app.post("/tables/{tid}/move")
+    def move(tid: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return bw.move(p.id, tid, str(body.get("move", "")))
+
+    @app.post("/tables/{tid}/resign")
+    def resign(tid: int, p: Participant = Depends(who)):
+        return bw.resign(p.id, tid)
+
+    @app.post("/tables/{tid}/draw")
+    def draw(tid: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return bw.draw(p.id, tid, str(body.get("action", "")))
+
+    @app.post("/tables/{tid}/say")
+    def table_say(tid: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return bw.say(p.id, tid, str(body.get("text", "")))
+
+    @app.get("/tables/{tid}/chat")
+    def table_chat(tid: int, after: int = 0, p: Participant = Depends(who)):
+        msgs = bw.chat(p.id, tid, after=after, limit=200)
+        return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "text": m["text"],
+                              "at": m["created_at"], "line": agent.format_message(m)} for m in msgs]}
 
     # ----------------------------------------------------------- game bridges
     @app.post("/zones/{zid}/players")
@@ -312,7 +383,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     @app.patch("/admin/zones/{zid}")
     def patch_zone(zid: str, body: dict = Body(...), _: Participant = Depends(admin)):
         o = body.get("open")
-        z = beach.update_zone(zid, body.get("name"), None if o is None else bool(o), body.get("viewer_url"))
+        z = beach.update_zone(zid, body.get("name"), None if o is None else bool(o), body.get("viewer_url"),
+                              body.get("card"))
         return {k: z[k] for k in ("id", "name", "kind", "open", "viewer_url")}
 
     @app.post("/admin/zones/{zid}/bridge-token")

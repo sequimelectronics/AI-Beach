@@ -27,6 +27,7 @@ from . import avatar as avatar_mod
 from .db import Database
 
 SANDCHAT = "sandchat"
+BOARDWALK = "boardwalk"
 SKIES = ("dawn", "morning", "midday", "afternoon", "sunset", "night")
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 _.-]{0,23}$")
 MAX_POST_CHARS = 2000
@@ -50,6 +51,12 @@ DEFAULT_SETTINGS: dict = {
     "notify_hook": None,             # {"command": [...]} or {"url": "http://127.0.0.1:.../..."}
     "avatar_cooldown_s": 3600,       # how often a participant may change their look (first change free)
     "link_base": None,               # address sign-in links use, e.g. "http://192.168.1.20:8765"
+    # Tables (the Boardwalk)
+    "table_abandon_s": 3 * 86400,    # a game nobody has moved in this long ends as abandoned (not lost)
+    "turn_notify_after_s": 600,      # a player away this long on their turn gets one "your move" notice
+    "turn_notify_gap_s": 3600,       # at most one such notice per participant per this long
+    "announce_results": True,        # finished games are announced in SandChat
+    "checkers_quiet_limit": 40,      # a draw after this many moves each with no capture
 }
 
 DEFAULT_ACTIONS: dict[str, tuple[bool, list[str]]] = {
@@ -74,11 +81,12 @@ DEFAULT_ACTIONS: dict[str, tuple[bool, list[str]]] = {
 class BeachError(Exception):
     """A refused request. `code` maps to an HTTP status in app.py."""
 
-    def __init__(self, code: str, message: str, retry_after: float | None = None):
+    def __init__(self, code: str, message: str, retry_after: float | None = None, data: dict | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
         self.retry_after = retry_after
+        self.data = data or {}
 
 
 def _hash(token: str) -> str:
@@ -109,6 +117,8 @@ class Beach:
         self.sender: Callable[[dict], bool] | None = None  # set by hooks.install()
         self._migrate()
         self._seed()
+        from .boardwalk import Boardwalk
+        self.tables = Boardwalk(self)
 
     # ------------------------------------------------------------------ setup
 
@@ -124,6 +134,12 @@ class Beach:
         mcols = {r["name"] for r in self.db.q("PRAGMA table_info(messages)")}
         if "action_key" not in mcols:
             self.db.run("ALTER TABLE messages ADD COLUMN action_key TEXT")
+        if "table_id" not in mcols:
+            self.db.run("ALTER TABLE messages ADD COLUMN table_id INTEGER")
+        if "card" not in cols:
+            self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
+        if "tables" not in cols:
+            self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
 
     def _seed(self) -> None:
         now = self.now()
@@ -132,6 +148,11 @@ class Beach:
         if not self.db.one("SELECT 1 FROM zones WHERE id = ?", (SANDCHAT,)):
             self.db.run("INSERT INTO zones (id, name, kind, created_at) VALUES (?, ?, 'chat', ?)",
                         (SANDCHAT, self.setting("sandchat_name"), now))
+        if not self.db.one("SELECT 1 FROM meta WHERE key = 'boardwalk_seeded'"):
+            # The Boardwalk: a chat zone with game tables. Its name is the keeper's to change.
+            self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, tables, created_at) VALUES (?, ?, 'chat', 1, ?)",
+                        (BOARDWALK, "The Boardwalk", now))
+            self.db.run("INSERT INTO meta VALUES ('boardwalk_seeded', '1')")
         if not self.db.one("SELECT 1 FROM meta WHERE key = 'actions_seeded'"):
             for name, (targeted, variants) in DEFAULT_ACTIONS.items():
                 self.db.run("INSERT OR IGNORE INTO action_templates VALUES (?, ?, ?)",
@@ -339,8 +360,12 @@ class Beach:
         return self.zone(zid)
 
     def update_zone(self, zid: str, name: str | None = None, open: bool | None = None,
-                    viewer_url: str | None = None):
+                    viewer_url: str | None = None, card: str | None = None):
         self.zone(zid)
+        if card is not None:
+            if len(card) > 4000:
+                raise BeachError("invalid", "a zone card is at most 4000 characters")
+            self.db.run("UPDATE zones SET card = ? WHERE id = ?", (card.strip() or None, zid))
         if name is not None:
             name = self._display_name(name)
             self.db.run("UPDATE zones SET name = ? WHERE id = ?", (name, zid))
@@ -441,12 +466,13 @@ class Beach:
 
     # ------------------------------------------------------------- messages
 
-    def _post(self, zid: str, author: int | None, kind: str, text: str, action_key: str | None = None) -> int:
+    def _post(self, zid: str, author: int | None, kind: str, text: str, action_key: str | None = None,
+              table_id: int | None = None) -> int:
         now = self.now()
         with self.db.tx() as db:
-            mid = db.conn.execute("INSERT INTO messages (zone_id, author_id, kind, text, created_at, action_key)"
-                                  " VALUES (?, ?, ?, ?, ?, ?)",
-                                  (zid, author, kind, text, now, action_key)).lastrowid
+            mid = db.conn.execute("INSERT INTO messages (zone_id, author_id, kind, text, created_at, action_key,"
+                                  " table_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                  (zid, author, kind, text, now, action_key, table_id)).lastrowid
             # Record who was present when it was posted; reading is bounded by this.
             db.conn.execute("INSERT INTO witnesses SELECT ?, participant_id FROM visits"
                             " WHERE zone_id = ? AND left_at IS NULL", (mid, zid))
@@ -481,24 +507,24 @@ class Beach:
                 raise BeachError("rate_limited", "slow down a little so everyone can keep up",
                                  retry_after=round(wait, 1))
 
-    def post(self, pid: int, zid: str, text: str) -> dict:
-        """Say something in a chat zone. '/me ...' is an action."""
+    def post(self, pid: int, zid: str, text: str, table_id: int | None = None) -> dict:
+        """Say something in a chat zone (or a table's thread in it). '/me ...' is an action."""
         text = (text or "").strip()
         if not text:
             raise BeachError("invalid", "say something")
         if len(text) > MAX_POST_CHARS:
             raise BeachError("invalid", f"posts are at most {MAX_POST_CHARS} characters")
         if text.lower().startswith("/me ") or text.lower() == "/me":
-            return self.action(pid, zid, text[3:].strip())
+            return self.action(pid, zid, text[3:].strip(), table_id=table_id)
         p = self.participant(pid)
         self._require_present(pid, zid)
         self._rate_check(p, zid)
-        mid = self._post(zid, pid, "say", text)
+        mid = self._post(zid, pid, "say", text, table_id=table_id)
         self.touch(pid, zid)
         return {"posted": True, "id": mid}
 
     def read(self, pid: int, zid: str, after: int = 0, limit: int | None = None,
-             all_visits: bool = False) -> list[dict]:
+             all_visits: bool = False, table_id: int | None = None) -> list[dict]:
         """Messages this participant was present for, oldest first.
 
         By default only the current visit (from arrival on). With all_visits,
@@ -510,8 +536,9 @@ class Beach:
         sql = ("SELECT m.id, m.kind, m.text, m.created_at, m.author_id, p.name AS author, p.kind AS author_kind"
                " FROM messages m JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                " LEFT JOIN participants p ON p.id = m.author_id"
-               " WHERE m.zone_id = ? AND m.deleted = 0 AND m.id > ?")
-        args: list = [pid, zid, after]
+               " WHERE m.zone_id = ? AND m.deleted = 0 AND m.id > ?"
+               + (" AND m.table_id = ?" if table_id is not None else " AND m.table_id IS NULL"))
+        args: list = [pid, zid, after] + ([table_id] if table_id is not None else [])
         if not all_visits:
             sql += " AND m.created_at >= ?"
             args.append(v["joined_at"])
@@ -568,7 +595,7 @@ class Beach:
             return False
         return bool(v["optout_all"]) or key in json.loads(v["optout_actions"])
 
-    def action(self, pid: int, zid: str, body: str) -> dict:
+    def action(self, pid: int, zid: str, body: str, table_id: int | None = None) -> dict:
         """'/me <body>': a free-form action, or a keeper-defined shorthand like 'toast @Coral'."""
         p = self.participant(pid)
         self._require_present(pid, zid)
@@ -621,7 +648,7 @@ class Beach:
             if len(recent) >= limit and all(r["kind"] == "action" for r in recent):
                 raise BeachError("cooldown", f"that's {limit} actions in a row; say something first")
         self._rate_check(p, zid)
-        mid = self._post(zid, pid, "action", text, action_key=key)
+        mid = self._post(zid, pid, "action", text, action_key=key, table_id=table_id)
         self.touch(pid, zid)
         return {"posted": True, "id": mid, "text": text}
 
@@ -814,7 +841,7 @@ class Beach:
                 here = len(self.players_in(z["id"]))
             out.append({"id": z["id"], "name": z["name"], "kind": z["kind"], "open": bool(z["open"]),
                         "here": here, "viewer_url": z["viewer_url"], "sky": z["sky"],
-                        "created_at": z["created_at"]})
+                        "created_at": z["created_at"], "tables": bool(z["tables"])})
         return out
 
     def zone_map_text(self) -> str:
@@ -823,7 +850,7 @@ class Beach:
             if not z["open"]:
                 parts.append(f"{z['name']}: closed")
             elif z["kind"] == "chat":
-                parts.append(f"{z['name']}: {z['here']} here")
+                parts.append(f"{z['name']}{' (game tables)' if z['tables'] else ''}: {z['here']} here")
             else:
                 parts.append(f"{z['name']} (game): {z['here']} playing")
         return "zones: " + "; ".join(parts)
@@ -856,11 +883,11 @@ class Beach:
         z = self.zone(zid)
         if z["occupied_since"] is not None:
             n = self.db.one("SELECT COUNT(*) AS n FROM messages WHERE zone_id = ? AND kind IN ('say', 'action')"
-                            " AND deleted = 0 AND created_at >= ?", (zid, z["occupied_since"]))["n"]
+                            " AND deleted = 0 AND table_id IS NULL AND created_at >= ?", (zid, z["occupied_since"]))["n"]
             if n:
                 facts.append(f"this conversation is {n} messages long")
         last_say = self.db.one("SELECT created_at FROM messages WHERE zone_id = ? AND kind IN ('say', 'action')"
-                               " ORDER BY id DESC LIMIT 1", (zid,))
+                               " AND table_id IS NULL ORDER BY id DESC LIMIT 1", (zid,))
         if last_say and now - last_say["created_at"] >= 300:
             facts.append(f"nobody has said anything for {int((now - last_say['created_at']) // 60)} minutes")
         return facts
@@ -871,3 +898,4 @@ class Beach:
         """Periodic upkeep: idle auto-leave, closing bells, handing notices to the hook."""
         self.sweep_idle()
         self.deliver_notices()
+        self.tables.sweep()
