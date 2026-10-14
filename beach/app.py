@@ -43,7 +43,10 @@ def _token(authorization: str | None) -> str | None:
     return None
 
 
-def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
+def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict | None = None) -> FastAPI:
+    """`serving` says how this run is being served (for the keeper page): e.g.
+    {"http": "http://127.0.0.1:8765", "https": "https://...:8766", "own_ca": True}."""
+    serving = dict(serving or {})
     stop = threading.Event()
     wake = threading.Event()
 
@@ -436,6 +439,23 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     @app.patch("/admin/settings")
     def patch_settings(body: dict = Body(...), _: Participant = Depends(admin)):
         return beach.update_settings(body)
+
+    @app.get("/admin/https")
+    def https_status(_: Participant = Depends(admin)):
+        """What's running now (HTTPS settings take effect when the Beach starts)."""
+        return {"setting": bool(beach.setting("https")), "running": serving,
+                "restart_needed": bool(beach.setting("https")) != bool(serving.get("https")),
+                "ca_download": "/beach-ca.pem" if serving.get("own_ca") else None}
+
+    @app.get("/beach-ca.pem")
+    def beach_ca():
+        """The Beach's own certificate authority, for a browser or phone to trust once. Public: a
+        certificate is not a secret (its private key never leaves the data directory)."""
+        ca = beach.data_dir / "tls" / "beach-ca.pem"
+        if not serving.get("own_ca") or not ca.exists():
+            raise HTTPException(404, "this Beach isn't using a certificate it made itself")
+        return Response(ca.read_bytes(), media_type="application/x-x509-ca-cert",
+                        headers={"Content-Disposition": 'attachment; filename="ai-beach-ca.crt"'})
 
     @app.post("/admin/zones")
     def add_zone(body: dict = Body(...), _: Participant = Depends(admin)):

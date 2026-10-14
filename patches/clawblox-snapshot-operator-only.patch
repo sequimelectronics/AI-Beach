@@ -1,0 +1,46 @@
+Clawblox: a world's snapshot (GET /snapshot) is for its operator only, not for spectators
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-snapshot-operator-only.patch
+    cargo build --release
+
+Why: a local run's snapshot holds every joined player's session token. GET /snapshot accepted the
+spectator token, which is in every viewer link (?spectator_token=...), so anyone holding a viewer
+link could read a player's session and act as that player. A join key can't help there: a stolen
+session never joins. With this change /snapshot answers only with the operator token
+(X-Operator-Token, which `clawblox` sets as WORLD_OPERATOR_TOKEN when it launches a world for the
+save/load protocol), and refuses everything else with 403. Watching (/spectate) is unchanged.
+
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+index 18bada1..8fb943c 100644
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -4869,17 +4869,18 @@ fn capture_local_runtime_snapshot(state: &LocalState) -> Result<LocalRuntimeSnap
+ async fn local_snapshot(
+     State(state): State<LocalState>,
+     headers: axum::http::HeaderMap,
+-    Query(query): Query<SpectatorAccessQuery>,
+ ) -> Result<Json<LocalRuntimeSnapshot>, (axum::http::StatusCode, String)> {
+     if let Some(err) = check_halted(&state) {
+         return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, err));
+     }
++    // A snapshot holds every player's session token, so it is for the world's operator only.
++    // The spectator token is in every viewer link; accepting it here would let anyone holding a
++    // viewer link act as any player.
+     if !operator_token_matches(&headers) {
+-        require_spectator_access(
+-            &state.spectator_token,
+-            &headers,
+-            query.spectator_token.as_deref(),
+-        )?;
++        return Err((
++            axum::http::StatusCode::FORBIDDEN,
++            "snapshots need the operator token (X-Operator-Token)".to_string(),
++        ));
+     }
+ 
+     let snapshot = capture_local_runtime_snapshot(&state)

@@ -54,9 +54,16 @@ DEFAULT_SETTINGS: dict = {
     "link_base": None,               # address sign-in links use, e.g. "http://192.168.1.20:8765"
     "rename_cooldown_s": 86400,      # how often a participant may rename themselves (first rename free)
     "rename_hint_s": 86400,          # for this long, agents see "New (was Old)", and Old stays reserved
-    "game_guests": False,
+    "game_guests": False,            # game worlds admit players the Beach didn't vouch for (as guests)
     "bell_retries": 2,               # retries for a failed bell notice, only while the bell is open
-    "bell_retry_s": 10,              # first retry after this; each later one waits 3x longer            # game worlds admit players the Beach didn't vouch for (as guests)
+    "bell_retry_s": 10,              # first retry after this; each later one waits 3x longer
+    "message_retention_days": 90,    # messages older than this are removed; None = keep forever
+    # HTTPS (read when the Beach starts; see beach/tls.py)
+    "https": False,                  # also serve HTTPS (plain HTTP then stays on this computer only)
+    "https_port": 8766,
+    "https_cert": None,              # the keeper's own certificate chain and key (PEM files);
+    "https_key": None,               #   None: the Beach makes its own, offline
+    "https_names": [],               # extra names or addresses for the Beach's own certificate
     # Tables (the Boardwalk)
     "table_abandon_s": 3 * 86400,    # a game nobody has moved in this long ends as abandoned (not lost)
     "turn_notify_after_s": 600,      # a player away this long on their turn gets one "your move" notice
@@ -156,6 +163,8 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
         if "world_url" not in cols:   # a game world's address on this machine, from its bridge
             self.db.run("ALTER TABLE zones ADD COLUMN world_url TEXT")
+        if "detail" not in {r["name"] for r in self.db.q("PRAGMA table_info(audit)")}:
+            self.db.run("ALTER TABLE audit ADD COLUMN detail TEXT")   # job 09: e.g. what a retention sweep did
         ocols = {r["name"] for r in self.db.q("PRAGMA table_info(outbox)")}
         if "attempts" not in ocols:   # job 08: retries for failed bell notices
             self.db.run("ALTER TABLE outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
@@ -216,6 +225,26 @@ class Beach:
                 v = self._display_name(v)
             if k.endswith("_s") and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):
                 raise BeachError("invalid", f"{k} is a number of seconds, 0 or more")
+            if k == "message_retention_days" and v is not None and (
+                    not isinstance(v, int) or isinstance(v, bool) or v < 1):
+                raise BeachError("invalid", "message_retention_days is a whole number of days (1 or more), "
+                                            "or null to keep messages forever")
+            if k == "https" and not isinstance(v, bool):
+                raise BeachError("invalid", "https is true or false")
+            if k == "https_port" and (not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= 65535):
+                raise BeachError("invalid", "https_port is a port number")
+            if k in ("https_cert", "https_key") and v is not None:
+                v = str(v).strip() or None
+                if v and not Path(v).expanduser().is_file():
+                    raise BeachError("invalid", f"{k}: no such file: {v}")
+            if k == "https_names":
+                from .tls import check_name
+                if not isinstance(v, list):
+                    raise BeachError("invalid", "https_names is a list of host names or addresses")
+                try:
+                    v = [check_name(str(n)) for n in v if str(n).strip()]
+                except ValueError as e:
+                    raise BeachError("invalid", str(e)) from None
             self.db.run("INSERT OR REPLACE INTO settings VALUES (?, ?)", (k, json.dumps(v)))
             if k == "sandchat_name":
                 self.db.run("UPDATE zones SET name = ? WHERE id = ?", (v, SANDCHAT))
@@ -810,10 +839,34 @@ class Beach:
         # Don't leave the old text in the write-ahead log either.
         self.db.checkpoint()
 
+    def sweep_retention(self) -> int:
+        """Remove messages older than message_retention_days, the way an admin delete removes one
+        (the text is gone from the database file and its write-ahead log), and forget who was
+        present for them. One audit row says what was removed; the audit trail itself is kept.
+        Returns how many messages were removed."""
+        days = self.setting("message_retention_days")
+        if not days:
+            return 0
+        cutoff = self.now() - days * 86400
+        with self.db.tx() as db:
+            row = db.conn.execute("SELECT COUNT(*), MAX(id) FROM messages WHERE created_at < ? AND deleted = 0",
+                                  (cutoff,)).fetchone()
+            n, last = row[0], row[1]
+            db.conn.execute("UPDATE messages SET text = NULL, deleted = 1 WHERE created_at < ? AND deleted = 0",
+                            (cutoff,))
+            db.conn.execute("DELETE FROM witnesses WHERE message_id IN (SELECT id FROM messages WHERE created_at < ?)",
+                            (cutoff,))
+            if n:
+                db.conn.execute("INSERT INTO audit (at, admin_id, what, message_id, detail) VALUES (?, 0, 'retention', ?, ?)",
+                                (self.now(), last, f"removed {n} message{'s' if n != 1 else ''} older than {days} days"))
+        if n:
+            self.db.checkpoint()
+        return n
+
     def audit(self) -> list[dict]:
         return [dict(r) for r in self.db.q(
-            "SELECT a.id, a.at, a.what, a.message_id, p.name AS admin FROM audit a"
-            " JOIN participants p ON p.id = a.admin_id ORDER BY a.id")]
+            "SELECT a.id, a.at, a.what, a.message_id, a.detail, COALESCE(p.name, 'the Beach') AS admin FROM audit a"
+            " LEFT JOIN participants p ON p.id = a.admin_id ORDER BY a.id")]
 
     # -------------------------------------------------------------- actions
 
@@ -1161,7 +1214,11 @@ class Beach:
     # ------------------------------------------------------------ upkeep
 
     def tick(self) -> None:
-        """Periodic upkeep: idle auto-leave, closing bells, handing notices to the hook."""
+        """Periodic upkeep: idle auto-leave, closing bells, handing notices to the hook, and (every
+        10 minutes) removing messages past their retention."""
         self.sweep_idle()
         self.deliver_notices()
         self.tables.sweep()
+        if self.now() - getattr(self, "_retention_at", float("-inf")) >= 600:
+            self._retention_at = self.now()
+            self.sweep_retention()

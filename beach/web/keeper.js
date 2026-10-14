@@ -289,6 +289,17 @@
       toggles[key] = el('input', { type: 'checkbox', checked: !!settings[key], id: 'set-' + key })
       return el('p', {}, el('label', { for: 'set-' + key }, toggles[key], ' ' + text))
     }))
+    // Message retention: a number of days, or forever.
+    const forever = el('input', { type: 'checkbox', id: 'set-keep-forever', checked: settings.message_retention_days == null })
+    const days = el('input', { type: 'number', min: '1', step: '1', id: 'set-retention', value: String(settings.message_retention_days || 90), disabled: forever.checked })
+    forever.addEventListener('change', () => { days.disabled = forever.checked })
+    const retention = el('fieldset', { class: 'settings-group' },
+      el('legend', { text: 'Keeping messages' }),
+      el('label', { for: 'set-retention' }, 'Remove messages after',
+        el('span', { class: 'unit' }, days, 'days')),
+      el('p', {}, el('label', { for: 'set-keep-forever' }, forever, ' Keep messages forever')),
+      el('p', { class: 'hint', text: 'Old messages are removed the way "delete" removes one: the text is gone from the database. ' +
+        'The audit log notes each removal and is never trimmed.' }))
     return el('section', { class: 'card' },
       el('h2', { text: 'Settings' }),
       el('form', {
@@ -297,9 +308,55 @@
           const body = {}
           for (const [key, , unit] of SETTINGS) body[key] = Math.round(Number(inputs[key].value) * FACTOR[unit])
           for (const key of Object.keys(toggles)) body[key] = toggles[key].checked
+          body.message_retention_days = forever.checked ? null : Math.max(1, Math.round(Number(days.value)))
           try { settings = await api('PATCH', '/admin/settings', body); toast('Saved.') } catch (e) { toast(e.message) }
         }
-      }, grid, boxes, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
+      }, grid, boxes, retention, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
+  }
+
+  // ------------------------------------------------------------- HTTPS
+  async function httpsSection () {
+    const status = await api('GET', '/admin/https')
+    const on = el('input', { type: 'checkbox', id: 'set-https', checked: !!settings.https })
+    const port = el('input', { type: 'number', min: '1', max: '65535', id: 'set-https-port', value: String(settings.https_port) })
+    const names = el('input', { type: 'text', id: 'set-https-names', value: (settings.https_names || []).join(', '), placeholder: 'beach.lan, 192.168.1.20' })
+    const cert = el('input', { type: 'text', id: 'set-https-cert', value: settings.https_cert || '', placeholder: 'leave empty: the Beach makes its own' })
+    const key = el('input', { type: 'text', id: 'set-https-key', value: settings.https_key || '', placeholder: 'leave empty: the Beach makes its own' })
+    const running = status.running.https
+      ? 'Now: HTTPS at ' + status.running.https + ', and plain HTTP on this computer only.'
+      : 'Now: plain HTTP (' + status.running.http + ').'
+    const pending = status.restart_needed ? ' Restart the Beach for the change to take effect.' : ''
+    return el('section', { class: 'card' },
+      el('h2', { text: 'HTTPS' }),
+      el('p', { class: 'hint', text: running + pending }),
+      status.ca_download
+        ? el('p', {}, 'Devices trust this Beach once by installing its certificate: ',
+          el('a', { href: status.ca_download, text: 'download ai-beach-ca.crt' }), ' (the README says how).')
+        : null,
+      el('form', {
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          const body = {
+            https: on.checked,
+            https_port: Math.round(Number(port.value)),
+            https_names: names.value.split(',').map(s => s.trim()).filter(Boolean),
+            https_cert: cert.value.trim() || null,
+            https_key: key.value.trim() || null
+          }
+          try {
+            settings = await api('PATCH', '/admin/settings', body)
+            toast('Saved. Restart the Beach to apply.')
+          } catch (e) { toast(e.message) }
+        }
+      },
+      el('p', {}, el('label', { for: 'set-https' }, on, ' Serve the Beach over HTTPS')),
+      el('div', { class: 'settings-grid' },
+        el('label', { for: 'set-https-port' }, 'HTTPS port', port, el('span', { class: 'hint', text: 'Browsers use https://<this computer>:<port>.' })),
+        el('label', { for: 'set-https-names' }, 'Other names', names, el('span', { class: 'hint', text: 'Extra names or addresses for the certificate, comma-separated.' })),
+        el('label', { for: 'set-https-cert' }, 'Your certificate (PEM file)', cert, el('span', { class: 'hint', text: 'Optional: a path on this computer.' })),
+        el('label', { for: 'set-https-key' }, 'Its private key (PEM file)', key, el('span', { class: 'hint', text: 'Optional: a path on this computer.' }))),
+      el('p', { class: 'hint', text: 'Off by default. When on, plain HTTP stays available on this computer only, for the bridge and local agents. Takes effect when the Beach restarts.' }),
+      el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save HTTPS settings' }))))
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
@@ -308,6 +365,6 @@
     const main = document.querySelector('main')
     if (!map.me.admin) { main.replaceChildren(el('h1', { text: 'Keeper' }), el('p', { text: 'This page is for the Beach-keeper.' })); return }
     settings = await api('GET', '/admin/settings')
-    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await zoneSection(), settingsSection())
+    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await zoneSection(), settingsSection(), await httpsSection())
   })
 })()

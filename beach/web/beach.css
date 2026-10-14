@@ -218,6 +218,10 @@ td .avatar { width: 36px; height: 43px; }
 .settings-grid .hint { font-weight: 400; }
 .unit { display: flex; align-items: center; gap: .4em; }
 .unit input { width: 7em; }
+.settings-group { border: 1px solid var(--line); border-radius: var(--radius); padding: .6em 1em; margin: 1em 0; }
+.settings-group legend { font-weight: 700; padding: 0 .3em; }
+.settings-group label { font-weight: 600; }
+.settings-grid input[type=text] { width: 100%; }
 .inline-form label input, .inline-form label select { font-size: 1rem; font-weight: 400; }
 .chat-layout > *, .builder > * { min-width: 0; }
 @media (max-width: 760px) { .people li { min-width: 0; } .people li strong { overflow-wrap: anywhere; } }

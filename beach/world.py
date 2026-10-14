@@ -11,8 +11,10 @@
   patches/clawblox-join-key.patch, the world then refuses every join that doesn't come through
   the Beach. The bridge hands the key to the Beach, which makes joins on participants' behalf.
 - Runs the bridge (python -m beach.bridge) in this same process.
-- Ctrl+C (or SIGTERM) stops both; if the world stops on its own, the bridge stops too, and the
-  Beach is told nobody is playing.
+- Ctrl+C (or SIGTERM, or closing the terminal) stops both; if the world stops on its own, the
+  bridge stops too, and the Beach is told nobody is playing.
+- If this launcher is killed outright (its window closed on Windows, `kill -9`), the world ends
+  with it: see beach/procs.py. The bridge runs in this process, so it ends anyway.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ import urllib.request
 from pathlib import Path
 
 from .bridge import Bridge, require_local, run_loop, spectator_token_from_log
+from .procs import TiedChild
 
 ROOT = Path(__file__).resolve().parents[1]
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -61,7 +64,7 @@ def prepare(world: Path, run_dir: Path, in_place: bool) -> Path:
     return run_dir
 
 
-def wait_up(url: str, proc: subprocess.Popen, timeout: float) -> bool:
+def wait_up(url: str, proc: TiedChild, timeout: float) -> bool:
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         if proc.poll() is not None:
@@ -82,7 +85,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--bridge-token-file", help="the zone's bridge token (or set BEACH_BRIDGE_TOKEN)")
     ap.add_argument("--beach", default="http://127.0.0.1:8765", help="the Beach (this machine)")
     ap.add_argument("--clawblox", default=os.environ.get("CLAWBLOX_BIN", "clawblox"),
-                    help="the clawblox program (default: clawblox on PATH, or CLAWBLOX_BIN)")
+                    help="the clawblox program (default: clawblox on PATH, or CLAWBLOX_BIN); "
+                         "a .py file is run with this Python (the tests' stand-in engine)")
     ap.add_argument("--run-dir", help="where the running copy goes (default: $AI_BEACH_DATA/worlds/<zone>)")
     ap.add_argument("--in-place", action="store_true", help="run --world itself (it's already a copy)")
     ap.add_argument("--no-join-key", action="store_true",
@@ -107,17 +111,18 @@ def main(argv: list[str] | None = None) -> int:
         env["CLAWBLOX_JOIN_KEY"] = join_key
     say = lambda m: print(time.strftime("%H:%M:%S"), m, flush=True)  # noqa: E731
     url = f"http://127.0.0.1:{a.port}"
+    engine = [sys.executable, a.clawblox] if a.clawblox.endswith(".py") else [a.clawblox]
     with open(log_path, "w") as log:
-        proc = subprocess.Popen([a.clawblox, "run", str(run_dir), "--port", str(a.port)], stdout=log,
-                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env,
-                                start_new_session=True)
+        proc = TiedChild(engine + ["run", str(run_dir), "--port", str(a.port)], stdout=log,
+                         stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
     say(f"world starting: {run_dir} on port {a.port} (log: {log_path})")
     stopping = {"now": False}
 
     def stop(*_):
         stopping["now"] = True
-    signal.signal(signal.SIGINT, stop)
-    signal.signal(signal.SIGTERM, stop)
+    for name in ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"):   # SIGHUP: POSIX; SIGBREAK: Windows
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), stop)
     bridge = None
     try:
         if not wait_up(url, proc, 180):
@@ -135,15 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if bridge:
             bridge.leaving()
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-                proc.wait(timeout=10)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+        proc.stop()
 
 
 if __name__ == "__main__":

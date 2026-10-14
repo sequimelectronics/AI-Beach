@@ -358,33 +358,24 @@ http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
 '''
 
 
-class LauncherTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="launcher-"))
+def _answers(port: int) -> bool:
+    """Is anything listening and answering on this local port?"""
+    import urllib.request
+    try:
+        urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            f"http://127.0.0.1:{port}/api.md", timeout=2).read()
+        return True
+    except OSError:
+        return False
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_prepare_copies_and_refuses_the_repo(self):
-        from beach.world import prepare
-        world = self.tmp / "world"
-        (world / ".clawblox").mkdir(parents=True)
-        (world / "world.toml").write_text('name = "W"\n')
-        (world / ".clawblox" / "local-8100.db").write_text("old run")
-        run = prepare(world, self.tmp / "run", in_place=False)
-        self.assertTrue((run / "world.toml").exists())
-        self.assertFalse((run / ".clawblox").exists())          # a fresh run, not the last one's data
-        prepare(world, self.tmp / "run", in_place=False)          # its own folder: replaced
-        (self.tmp / "mine").mkdir()
-        with self.assertRaises(SystemExit):
-            prepare(world, self.tmp / "mine", in_place=False)     # someone else's folder
-        with self.assertRaises(SystemExit):
-            prepare(ROOT / "worlds" / "beach", self.tmp / "x", in_place=True)   # the repo's own world
+class FakeBeach:
+    """A stand-in Beach that records the bridge's reports."""
 
-    def test_starts_both_and_stops_both(self):
-        reports = []
+    def __init__(self):
+        reports = self.reports = []
 
-        class Beach(http.server.BaseHTTPRequestHandler):
+        class H(http.server.BaseHTTPRequestHandler):
             def _reply(self, obj):
                 body = json.dumps(obj).encode()
                 self.send_response(200)
@@ -403,46 +394,109 @@ class LauncherTests(unittest.TestCase):
 
             def log_message(self, *a):
                 pass
-        srv = http.server.HTTPServer(("127.0.0.1", 0), Beach)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+
+    def close(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
+class LauncherTests(unittest.TestCase):
+    """Run on Windows and POSIX alike: the stand-in engine is a Python script."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="launcher-"))
+        self.beach = FakeBeach()
+
+    def tearDown(self):
+        self.beach.close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def launch(self, port: int) -> subprocess.Popen:
         fake = self.tmp / "fake_clawblox.py"
         fake.write_text(FAKE_CLAWBLOX)
-        exe = self.tmp / "clawblox"
-        exe.write_text(f"#!/bin/sh\nexec {sys.executable} {fake} \"$@\"\n")
-        exe.chmod(0o755)
         world = self.tmp / "world"
-        world.mkdir()
+        world.mkdir(exist_ok=True)
         (world / "world.toml").write_text('name = "W"\n')
         (self.tmp / "bt").write_text("bridge-token")
-        port = 18000 + os.getpid() % 1000
         env = dict(os.environ, FAKE_OUT=str(self.tmp / "out"), PYTHONPATH=str(ROOT))
-        proc = subprocess.Popen([sys.executable, "-m", "beach.world", "--world", str(world), "--zone", "beachblox",
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0   # for CTRL_BREAK below
+        return subprocess.Popen([sys.executable, "-m", "beach.world", "--world", str(world), "--zone", "beachblox",
                                  "--port", str(port), "--bridge-token-file", str(self.tmp / "bt"),
-                                 "--beach", f"http://127.0.0.1:{srv.server_port}", "--clawblox", str(exe),
+                                 "--beach", self.beach.url, "--clawblox", str(fake),
                                  "--run-dir", str(self.tmp / "run"), "--every", "2"],
-                                cwd=str(ROOT), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                                cwd=str(ROOT), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, creationflags=flags)
+
+    def wait_for_report(self):
+        end = time.time() + 30
+        while time.time() < end and not any(r.get("join_key") for r in self.beach.reports):
+            time.sleep(0.2)
+
+    def test_prepare_copies_and_refuses_the_repo(self):
+        from beach.world import prepare
+        world = self.tmp / "world"
+        (world / ".clawblox").mkdir(parents=True)
+        (world / "world.toml").write_text('name = "W"\n')
+        (world / ".clawblox" / "local-8100.db").write_text("old run")
+        run = prepare(world, self.tmp / "run", in_place=False)
+        self.assertTrue((run / "world.toml").exists())
+        self.assertFalse((run / ".clawblox").exists())          # a fresh run, not the last one's data
+        prepare(world, self.tmp / "run", in_place=False)          # its own folder: replaced
+        (self.tmp / "mine").mkdir()
+        with self.assertRaises(SystemExit):
+            prepare(world, self.tmp / "mine", in_place=False)     # someone else's folder
+        with self.assertRaises(SystemExit):
+            prepare(ROOT / "worlds" / "beach", self.tmp / "x", in_place=True)   # the repo's own world
+
+    def test_starts_both_and_stops_both(self):
+        port = 18000 + os.getpid() % 1000
+        proc = self.launch(port)
         try:
-            end = time.time() + 30
-            while time.time() < end and not any(r.get("join_key") for r in reports):
-                time.sleep(0.2)
+            self.wait_for_report()
             key = (self.tmp / "out.key").read_text()
             self.assertGreater(len(key), 20)                         # the world got a fresh join key...
+            reports = self.beach.reports
             self.assertEqual([r["join_key"] for r in reports if "join_key" in r][0], key)   # ...and the Beach too
             self.assertEqual(reports[0]["spectator_token"], "spec-123")
-            proc.send_signal(signal.SIGINT)
+            # Ctrl+C (Ctrl+Break is what one process can send another on Windows)
+            proc.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
             out, _ = proc.communicate(timeout=20)
             self.assertEqual(proc.returncode, 0, out)
             self.assertEqual(reports[-1], {"players": [], "join_key": None})   # the Beach hears it stopped
-            # ...and the world process is gone too.
-            r = subprocess.run(["python3", "-c", f"import urllib.request;urllib.request.build_opener("
-                                f"urllib.request.ProxyHandler({{}})).open('http://127.0.0.1:{port}/api.md', timeout=2)"],
-                               capture_output=True)
-            self.assertNotEqual(r.returncode, 0)
+            self.assertFalse(_answers(port))                                     # ...and the world is gone
         finally:
             if proc.poll() is None:
                 proc.kill()
-            srv.shutdown()
-            srv.server_close()
+
+    def test_killing_the_launcher_outright_ends_the_world(self):
+        # As if its window were closed: no signal handler, no finally. TerminateProcess on Windows,
+        # SIGKILL elsewhere.
+        port = 19000 + os.getpid() % 1000
+        proc = self.launch(port)
+        try:
+            self.wait_for_report()
+            self.assertTrue(_answers(port))
+            proc.kill()
+            proc.wait(timeout=10)
+            end = time.time() + 15
+            while time.time() < end and _answers(port):
+                time.sleep(0.2)
+            self.assertFalse(_answers(port), "the world kept running after its launcher was killed")
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            if proc.stdout:
+                proc.stdout.close()
+
+    def test_job_object_layout(self):
+        # The Windows structure must match JOBOBJECT_EXTENDED_LIMIT_INFORMATION (144 bytes on 64-bit,
+        # 112 on 32-bit); the layout can be checked anywhere.
+        import ctypes
+        from beach.procs import _ExtendedLimits
+        self.assertEqual(ctypes.sizeof(_ExtendedLimits), 144 if ctypes.sizeof(ctypes.c_void_p) == 8 else 112)
 
 
 # 7 ----------------------------------------------------------------------- Desk Bell retries
