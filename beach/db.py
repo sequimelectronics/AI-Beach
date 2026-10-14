@@ -1,0 +1,194 @@
+"""SQLite storage for the Beach: one file in the data directory, WAL mode.
+
+One connection guarded by a lock: the Beach is a single small process on a
+home machine, and this keeps it simple and idle-cheap.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import threading
+from pathlib import Path
+
+SCHEMA_VERSION = 1
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS participants (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    kind TEXT NOT NULL CHECK (kind IN ('person', 'agent')),
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    invitable INTEGER NOT NULL DEFAULT 1,
+    token_hash TEXT UNIQUE,              -- NULL = revoked
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS zones (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('chat', 'game')),
+    open INTEGER NOT NULL DEFAULT 1,
+    viewer_url TEXT,
+    sky TEXT NOT NULL DEFAULT 'afternoon',
+    sky_set_by INTEGER,
+    sky_set_at REAL,
+    created_at REAL NOT NULL
+);
+
+-- One row per visit: a participant present in a zone from joined_at until left_at.
+CREATE TABLE IF NOT EXISTS visits (
+    id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    zone_id TEXT NOT NULL REFERENCES zones(id),
+    joined_at REAL NOT NULL,
+    left_at REAL,
+    last_active REAL NOT NULL,
+    optout_all INTEGER NOT NULL DEFAULT 0,
+    optout_actions TEXT NOT NULL DEFAULT '[]'   -- per-visit; gone when the visit ends
+);
+CREATE INDEX IF NOT EXISTS visits_open ON visits (zone_id, left_at);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY,
+    zone_id TEXT NOT NULL,
+    author_id INTEGER,                    -- NULL for the Beach's own notices
+    kind TEXT NOT NULL,                   -- say | action | sky | bell | presence
+    text TEXT,                            -- NULL once deleted
+    created_at REAL NOT NULL,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS messages_zone ON messages (zone_id, id);
+
+-- Who was present when each message was posted. Reading is bounded by this.
+CREATE TABLE IF NOT EXISTS witnesses (
+    message_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    PRIMARY KEY (message_id, participant_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS audit (
+    id INTEGER PRIMARY KEY,
+    at REAL NOT NULL,
+    admin_id INTEGER NOT NULL,
+    what TEXT NOT NULL,                   -- e.g. 'delete_message'
+    message_id INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS action_templates (
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    targeted INTEGER NOT NULL,
+    variants TEXT NOT NULL                -- JSON list of strings with {actor} / {target}
+);
+
+-- Private notes and events for one participant (never shown to the room).
+CREATE TABLE IF NOT EXISTS inbox (
+    id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                   -- note | event
+    text TEXT NOT NULL,
+    data TEXT,
+    created_at REAL NOT NULL,
+    delivered INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS bells (
+    id INTEGER PRIMARY KEY,
+    zone_id TEXT NOT NULL,
+    ringer_id INTEGER NOT NULL,
+    rung_at REAL NOT NULL,
+    closes_at REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'   -- open | answered | unanswered
+);
+
+CREATE TABLE IF NOT EXISTS invites (
+    bell_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending | came | declined | lapsed
+    responded_at REAL,
+    PRIMARY KEY (bell_id, participant_id)
+);
+
+-- Notification outbox: a hook call waiting to be made. Never delivered after its bell closes.
+CREATE TABLE IF NOT EXISTS outbox (
+    id INTEGER PRIMARY KEY,
+    bell_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',   -- queued | sent | failed | dropped
+    queued_at REAL NOT NULL,
+    done_at REAL
+);
+
+-- Who is playing in a game zone, as reported by the game's bridge.
+CREATE TABLE IF NOT EXISTS zone_players (
+    zone_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    reported_at REAL NOT NULL,
+    PRIMARY KEY (zone_id, name)
+);
+"""
+
+
+class Database:
+    def __init__(self, path: Path | str):
+        self.path = str(path)
+        self.lock = threading.RLock()
+        self.conn = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
+        self.conn.row_factory = sqlite3.Row
+        with self.lock:
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("PRAGMA synchronous=NORMAL")
+            self.conn.execute("PRAGMA foreign_keys=ON")
+            # Deleted content is overwritten with zeros rather than left in free pages.
+            self.conn.execute("PRAGMA secure_delete=ON")
+            self.conn.executescript(SCHEMA)
+            self.conn.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+
+    def q(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
+        with self.lock:
+            return self.conn.execute(sql, args).fetchall()
+
+    def one(self, sql: str, args: tuple = ()) -> sqlite3.Row | None:
+        with self.lock:
+            return self.conn.execute(sql, args).fetchone()
+
+    def run(self, sql: str, args: tuple = ()) -> int:
+        with self.lock:
+            cur = self.conn.execute(sql, args)
+            return cur.lastrowid
+
+    def checkpoint(self) -> None:
+        """Fold the write-ahead log into the main file and empty it (used after deletes)."""
+        with self.lock:
+            self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    def tx(self):
+        """Context manager for a transaction (BEGIN IMMEDIATE ... COMMIT)."""
+        return _Tx(self)
+
+    def close(self) -> None:
+        with self.lock:
+            self.conn.close()
+
+
+class _Tx:
+    def __init__(self, db: Database):
+        self.db = db
+
+    def __enter__(self):
+        self.db.lock.acquire()
+        self.db.conn.execute("BEGIN IMMEDIATE")
+        return self.db
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            if exc_type is None:
+                self.db.conn.execute("COMMIT")
+            else:
+                self.db.conn.execute("ROLLBACK")
+        finally:
+            self.db.lock.release()
+        return False

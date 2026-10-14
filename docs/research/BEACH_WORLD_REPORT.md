@@ -20,7 +20,7 @@ tokenizer: **Gemma 4 E4B** (`google/gemma-4-E4B-it`, as in job 02).
   - a beach map card;
   - `beach/PLAY_CARD.md` (400 tokens).
 - A chat-cursor bug fix, explained below.
-- Name hygiene: job 01/02's test players "Alice" and "Bob" were renamed to the neutral names
+- Name hygiene: job 01/02's two test players (ordinary first names) were renamed to the neutral names
   "Coral" and "Drift" everywhere (fixtures, tests, scripts, reports). No measurement changed.
 - `scripts/beach_agent.py` (a scripted player that sees only the adapter's text),
   `scripts/beach_two_players.py`, and `scripts/beach_capture_fixtures.py`.
