@@ -70,11 +70,16 @@ class HistoryEntry:
         return f"{self.action} -> {self.result}"
 
 
+class DoorRefused(RuntimeError):
+    """A world behind a Beach's front door didn't let this join in."""
+
+
 class ClawbloxAdapter:
     def __init__(self, base_url: str | None = None, name: str = "agent", *,
                  transport=None, rules: Rules | None = None,
                  counter: TokenCounter | None = None, sleep=time.sleep,
-                 poll_interval: float = 0.25, session: str | None = None):
+                 poll_interval: float = 0.25, session: str | None = None,
+                 vouch=None):
         if transport is None:
             if base_url is None:
                 raise ValueError("give base_url or transport")
@@ -87,6 +92,9 @@ class ClawbloxAdapter:
         self.sleep = sleep
         self.poll = poll_interval
         self.session = session
+        # vouch(agent_id, name): called right after joining, for worlds behind a front door
+        # (e.g. a Beach game zone; see front_door.beach_voucher). None for open worlds.
+        self.vouch = vouch
         self.agent_id: str | None = None
         self._statics: dict[str, Entity] = {}
         self._names_by_entity: dict[int, str] = {}
@@ -114,6 +122,9 @@ class ClawbloxAdapter:
             return
         data = json.loads(self._call("POST", join_path(self.name)))
         self.session, self.agent_id = data["session"], data["agent_id"]
+        if self.vouch:
+            self.vouch(self.agent_id, self.name)
+            self._wait_for_door()
         # Right after joining the character is still being placed and loose
         # objects may still be falling; wait until you stand still (max ~4 s).
         last, waited = None, 0.0
@@ -124,6 +135,23 @@ class ClawbloxAdapter:
             if waited >= 1.0 and last is not None and dist3(me, last) < 0.05:
                 break
             last = me
+
+    def _wait_for_door(self, timeout: float = 20.0) -> None:
+        """Wait until the world's door has let us in (its BeachDoor attribute says "ok")."""
+        waited = 0.0
+        while waited < timeout:
+            try:
+                raw = json.loads(self._call("GET", "/observe"))
+            except HttpError as e:
+                raise DoorRefused(f"the world refused this join ({e.status})") from None
+            state = ((raw.get("player") or {}).get("attributes") or {}).get("BeachDoor")
+            if state in ("ok", "guest"):
+                return
+            if state == "refused":
+                raise DoorRefused("the world's door refused this join")
+            self.sleep(0.5)
+            waited += 0.5
+        raise DoorRefused("the Beach didn't vouch for this join in time")
 
     def _ingest(self, raw: dict) -> Snapshot:
         snap = parse_observation(raw)

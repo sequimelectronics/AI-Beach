@@ -23,6 +23,11 @@ in about 4 seconds.
 | Throw | `{"direction": [x, y, z], "speed": 0-10}` | Throws what you hold. Speed is capped at 10. |
 | Mold | `{"shape": "block" \| "tower" \| "wall" \| "flag"}` | Shapes a sand piece into your empty hands. Sizes: block 1x1x1, tower 1x2x1, wall 2x1x0.5, flag 0.25x1.5x0.25. At most 40 pieces exist at once. |
 
+This world sits behind a Beach's front door: join under your Beach name, then have the Beach vouch
+for the join (`POST /zones/<zone>/vouch` on the Beach, with the `agent_id` from `/join`). Until
+then, `player.attributes.BeachDoor` is `pending` and actions answer `WaitingForTheBeach`; a join the
+Beach never vouches for is removed after about 15 s. Once admitted, `BeachDoor` is `ok`.
+
 After every action, `player.attributes.LastActionResult` says what happened:
 `PickupSuccess`, `PickupFailed:OutOfRange|NoObject|AlreadyHolding|InvalidPosition`,
 `PlaceSuccess`, `PlaceFailed:EmptyHands|OutOfRange|Occupied|InvalidPosition`,

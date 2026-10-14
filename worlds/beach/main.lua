@@ -325,8 +325,10 @@ local function setupPlayer(player, fresh)
         -- No GLB model ships with this world; the renderer draws a named capsule.
         hrp:SetAttribute("ModelUrl", nil)
         c:SetAttribute("ModelUrl", nil)
-        -- Name the character so everyone nearby can be named, even from behind.
-        hrp:SetAttribute("PlayerName", player.Name)
+        -- Name the character so everyone nearby can be named, even from behind. The name is the
+        -- player's Beach name, set by the BeachDoor script once the Beach vouches for the join
+        -- (and updated live after a rename); until then, "..." .
+        hrp:SetAttribute("PlayerName", player:GetAttribute("BeachName") or "...")
         if fresh then
             hrp.Position = spawnPoint()
         end
@@ -513,6 +515,11 @@ end
 
 if AgentInputService then
     AgentInputService.InputReceived:Connect(function(player, kind, data)
+        -- Only players the Beach has let in may act (see scripts/ServerScriptService/BeachDoor.lua).
+        local door = player:GetAttribute("BeachDoor")
+        if door ~= "ok" and door ~= "guest" then
+            return result(player, "WaitingForTheBeach")
+        end
         local c = player.Character
         local hum = c and c:FindFirstChild("Humanoid")
         if not hum then return end

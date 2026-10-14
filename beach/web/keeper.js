@@ -7,6 +7,8 @@
   // Durations shown in friendly units; stored in seconds.
   const SETTINGS = [
     ['avatar_cooldown_s', 'Changing looks', 'min', 'How often someone may change their avatar.'],
+    ['rename_cooldown_s', 'Changing names', 'h', 'How often someone may rename themselves.'],
+    ['rename_hint_s', 'Show the old name', 'h', 'How long "(was ...)" shows after a rename.'],
     ['sky_cooldown_s', 'Changing the sky', 'min', 'Per zone, for everyone.'],
     ['action_cooldown_s', 'Same action again', 's', 'Per person, per action.'],
     ['max_actions_in_a_row', 'Actions in a row', 'n', 'Before saying something in between.'],
@@ -18,7 +20,7 @@
     ['burst_cap_s', 'Agent burst cap', 's', '0 = off. An agent can\'t answer another agent faster than this.'],
     ['game_report_ttl_s', 'Game report lasts', 's', 'If a game stops reporting, its players fade after this.']
   ]
-  const FACTOR = { min: 60, s: 1, n: 1 }
+  const FACTOR = { h: 3600, min: 60, s: 1, n: 1 }
 
   function linkFor (token) {
     const base = settings.link_base || location.origin
@@ -79,17 +81,24 @@
     const render = async () => {
       const { participants } = await api('GET', '/admin/participants')
       const rows = participants.map(p => {
-        const game = el('input', { type: 'text', value: p.game_name || '', placeholder: p.name, size: '12', 'aria-label': 'In-game name for ' + p.name })
-        game.addEventListener('change', async () => {
-          try { await api('PATCH', '/admin/participants/' + p.id, { game_name: game.value }); toast('Saved.') } catch (e) { toast(e.message) }
+        const rename = el('button', {
+          type: 'button',
+          class: 'quiet',
+          text: 'Rename',
+          onclick: async () => {
+            const next = prompt('New name for ' + p.name + '? It changes everywhere: chat, tables, game worlds.', p.name)
+            if (!next || next.trim() === p.name) return
+            try { await api('PATCH', '/admin/participants/' + p.id, { name: next.trim() }); toast('Renamed.'); render() } catch (e) { toast(e.message) }
+          }
         })
         const inv = el('input', { type: 'checkbox', checked: p.invitable, 'aria-label': 'Desk Bell can invite ' + p.name })
         inv.addEventListener('change', () => api('PATCH', '/admin/participants/' + p.id, { invitable: inv.checked }).catch(e => toast(e.message)))
         return el('tr', {},
           el('td', {}, avatar({ id: p.id, v: p.avatar_v })),
-          el('td', {}, el('strong', { text: p.name }), p.admin ? el('span', { class: 'hint', text: ' (admin)' }) : null),
+          el('td', {}, el('strong', { text: p.name }), p.admin ? el('span', { class: 'hint', text: ' (admin)' }) : null,
+            p.was ? el('div', { class: 'hint', text: 'was ' + p.was }) : null),
           el('td', { text: p.kind }),
-          el('td', {}, game),
+          el('td', {}, rename),
           el('td', {}, inv),
           el('td', { text: p.has_token ? 'active' : 'revoked' }),
           el('td', {}, p.admin ? null : el('div', { class: 'inline-form' },
@@ -119,7 +128,7 @@
       table.querySelector('tbody').replaceChildren(...rows)
     }
     const table = el('table', {}, el('thead', {}, el('tr', {},
-      ['', 'Name', 'Kind', 'In-game name', 'Bell', 'Access', ''].map(h => el('th', { text: h })))), el('tbody'))
+      ['', 'Name', 'Kind', '', 'Bell', 'Access', ''].map(h => el('th', { text: h })))), el('tbody'))
     const name = el('input', { type: 'text', maxlength: '24', id: 'new-name', required: true })
     const kind = el('select', { id: 'new-kind' }, el('option', { value: 'person', text: 'person' }), el('option', { value: 'agent', text: 'agent' }))
     box.append(
@@ -142,7 +151,7 @@
       el('label', { for: 'new-kind' }, 'Kind', kind),
       el('button', { class: 'primary', type: 'submit', text: 'Add' })),
       out,
-      el('p', { class: 'hint', text: 'In-game name: what they are called inside a game, if it differs from their name here. The map uses it to show who is playing.' }))
+      el('p', { class: 'hint', text: 'A name is the same everywhere: chat, tables and every game world. Renaming changes it everywhere, and for a day others see "(was ...)" next to it.' }))
     await render()
     return box
   }
@@ -216,8 +225,15 @@
       const v = settings[key] / FACTOR[unit]
       inputs[key] = el('input', { type: 'number', min: '0', step: unit === 'min' ? '0.5' : '1', value: String(Math.round(v * 10) / 10), id: 'set-' + key })
       return el('label', { for: 'set-' + key }, label,
-        el('span', { class: 'unit' }, inputs[key], unit === 'min' ? 'minutes' : unit === 's' ? 'seconds' : ''),
+        el('span', { class: 'unit' }, inputs[key], unit === 'h' ? 'hours' : unit === 'min' ? 'minutes' : unit === 's' ? 'seconds' : ''),
         el('span', { class: 'hint', text: hint }))
+    }))
+    const toggles = {}
+    const flags = [['game_guests', 'Let unlisted guests into game worlds (labelled "Guest N", never with someone\'s name)'],
+      ['announce_results', 'Announce finished Boardwalk games in SandChat']]
+    const boxes = el('div', {}, flags.map(([key, text]) => {
+      toggles[key] = el('input', { type: 'checkbox', checked: !!settings[key], id: 'set-' + key })
+      return el('p', {}, el('label', { for: 'set-' + key }, toggles[key], ' ' + text))
     }))
     return el('section', { class: 'card' },
       el('h2', { text: 'Settings' }),
@@ -226,9 +242,10 @@
           ev.preventDefault()
           const body = {}
           for (const [key, , unit] of SETTINGS) body[key] = Math.round(Number(inputs[key].value) * FACTOR[unit])
+          for (const key of Object.keys(toggles)) body[key] = toggles[key].checked
           try { settings = await api('PATCH', '/admin/settings', body); toast('Saved.') } catch (e) { toast(e.message) }
         }
-      }, grid, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
+      }, grid, boxes, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

@@ -196,22 +196,6 @@ class AvatarCoreTests(unittest.TestCase):
         self.beach.update_zone(SANDCHAT, name="The Snack Shack")
         self.assertEqual(self.beach.setting("sandchat_name"), "The Snack Shack")
 
-    def test_who_in_maps_game_names(self):
-        self.beach.add_zone("beachblox", "BeachBlox", "game")
-        self.beach.update_participant(self.coral.id, game_name="CoralPlays")
-        self.beach.report_players("beachblox", ["CoralPlays", "Sandy", "Visitor9"])
-        who = {w["game_name"]: w for w in self.beach.who_in("beachblox")}
-        self.assertEqual(who["CoralPlays"]["name"], "Coral")
-        self.assertEqual(who["Sandy"]["name"], "Sandy")          # no in-game name set: matched by Beach name
-        self.assertEqual(who["Visitor9"]["kind"], "guest")
-        self.assertIsNone(who["Visitor9"]["id"])
-        looks = self.beach.game_looks("beachblox")
-        self.assertEqual(sorted(looks), ["CoralPlays", "Sandy"])
-        self.assertRegex(looks["Sandy"]["outfit"], r"^#[0-9a-f]{6}$")
-        # Coral's Beach name no longer matches once an in-game name is set.
-        self.beach.report_players("beachblox", ["Coral"])
-        self.assertEqual(self.beach.who_in("beachblox")[0]["kind"], "guest")
-
 
 @unittest.skipUnless(HAVE_FASTAPI, "fastapi/httpx not installed")
 class FrontApiTests(unittest.TestCase):
@@ -305,8 +289,8 @@ class FrontApiTests(unittest.TestCase):
         self.assertEqual(r.json()["name"], "Shell Shack")
         self.assertFalse(r.json()["open"])
         self.assertEqual(self.http.post("/zones/sandchat/join", headers=self.sandy).status_code, 409)
-        r = self.http.patch(f"/admin/participants/{self.sandy_id}", headers=self.admin, json={"game_name": "SandyB"})
-        self.assertEqual(r.status_code, 200)
+        r = self.http.patch(f"/admin/participants/{self.sandy_id}", headers=self.admin, json={"name": "Sandbar"})
+        self.assertEqual(r.json()["name"], "Sandbar")
         r = self.http.put(f"/admin/participants/{self.sandy_id}/avatar", headers=self.admin, json={"hair": "teal"})
         self.assertEqual(r.json()["avatar"]["hair"], "teal")
         self.assertEqual(self.http.patch("/admin/settings", headers=self.sandy, json={"beach_name": "X"}).status_code, 403)
@@ -314,112 +298,6 @@ class FrontApiTests(unittest.TestCase):
         self.assertEqual(r.json()["link_base"], "http://192.168.1.20:8765")
         self.assertEqual(self.http.patch("/admin/settings", headers=self.admin,
                                          json={"link_base": "javascript:alert(1)"}).status_code, 400)
-
-
-@unittest.skipUnless(HAVE_FASTAPI, "fastapi/httpx not installed")
-class BridgeTests(unittest.TestCase):
-    """The bridge, with the world faked and the Beach real (through its HTTP door)."""
-
-    def setUp(self):
-        from beach.app import create_app
-        self.dir = tempfile.mkdtemp(prefix="beach-bridge-")
-        self.clock = FakeClock()
-        self.beach = Beach(self.dir, clock=self.clock, rng=random.Random(1))
-        self.admin = {"Authorization": f"Bearer {self.beach.ensure_admin()}"}
-        self.http = TestClient(create_app(self.beach, upkeep_interval=None))
-        self.beach.add_zone("beachblox", "BeachBlox", "game", viewer_url="http://127.0.0.1:8100/")
-        self.bridge_token = self.http.post("/admin/zones/beachblox/bridge-token", headers=self.admin).json()["token"]
-        coral, _ = self.beach.add_participant("Coral", "person")
-        self.beach.add_participant("Sandy", "agent")
-        self.beach.update_participant(coral.id, game_name="CoralPlays")
-        self.beach.set_avatar(coral.id, {"theme": "sunset", "hair": "teal"})
-        self.world_players = []
-        self.world_up = True
-        self.calls = []
-        self.logs = []
-
-    def tearDown(self):
-        self.beach.db.close()
-        shutil.rmtree(self.dir, ignore_errors=True)
-
-    def fake_http(self, method, url, headers, body=None):
-        import urllib.error
-        self.calls.append((method, url, dict(headers)))
-        if url.startswith("http://127.0.0.1:8100"):
-            if not self.world_up:
-                raise urllib.error.URLError("connection refused")
-            assert headers.get("X-Spectator-Token") == "spec-tok"
-            return {"players": [{"name": n, "position": [0, 3, 0]} for n in self.world_players]}
-        path = url.split("http://127.0.0.1:8765", 1)[1]
-        r = self.http.request(method, path, headers=headers, json=body)
-        r.raise_for_status()
-        return r.json()
-
-    def make(self, world_dir=None):
-        from beach.bridge import Bridge
-        return Bridge("http://127.0.0.1:8100", "http://127.0.0.1:8765", "beachblox", self.bridge_token,
-                      lambda: "spec-tok", world_dir, http=self.fake_http, log=self.logs.append)
-
-    def zone(self):
-        return [z for z in self.http.get("/map", headers=self.admin).json()["zones"] if z["id"] == "beachblox"][0]
-
-    def test_reports_who_is_playing(self):
-        b = self.make()
-        self.world_players = ["CoralPlays", "Sandy", "Visitor9"]
-        res = b.step()
-        self.assertEqual(res["playing"], 3)
-        z = self.zone()
-        self.assertEqual(z["here"], 3)
-        self.assertEqual(sorted(w["name"] for w in z["who"]), ["Coral", "Sandy", "Visitor9"])
-        self.assertEqual(self.beach.arrival_line(None),
-                         "The beach is quiet, but you hear sounds of play from BeachBlox.")
-        self.world_players = ["Sandy"]
-        b.step()
-        self.assertEqual([w["name"] for w in self.zone()["who"]], ["Sandy"])
-
-    def test_world_down_reports_nobody(self):
-        b = self.make()
-        self.world_players = ["Sandy"]
-        b.step()
-        self.world_up = False
-        b.step()
-        self.assertEqual(self.zone()["here"], 0)
-        self.assertTrue(any("not reachable" in m for m in self.logs))
-
-    def test_reports_expire_if_the_bridge_stops(self):
-        b = self.make()
-        self.world_players = ["Sandy"]
-        b.step()
-        self.clock.advance(self.beach.setting("game_report_ttl_s") + 1)
-        self.assertEqual(self.zone()["here"], 0)
-
-    def test_writes_tints_for_the_renderer(self):
-        world = Path(self.dir) / "world"
-        b = self.make(str(world))
-        self.world_players = ["CoralPlays", "Visitor9"]
-        b.step()
-        tints = json.loads((world / "static" / "tints.json").read_text())["players"]
-        self.assertEqual(list(tints), ["CoralPlays"])  # guests keep the game's own colours
-        self.assertEqual(tints["CoralPlays"]["outfit"], avatar.THEMES["sunset"][0])
-        self.assertEqual(tints["CoralPlays"]["hair"], "#008080")
-
-    def test_only_the_zones_bridge_token_reports(self):
-        tok = self.http.post("/admin/participants", json={"name": "Pebble", "kind": "agent"},
-                             headers=self.admin).json()["token"]
-        r = self.http.post("/zones/beachblox/players", headers={"Authorization": f"Bearer {tok}"},
-                           json={"players": ["x"]})
-        self.assertEqual(r.status_code, 403)
-
-    def test_addresses_must_be_local(self):
-        from beach.bridge import require_local, spectator_token_from_log
-        self.assertEqual(require_local("http://127.0.0.1:8100/", "w"), "http://127.0.0.1:8100")
-        require_local("http://localhost:8765", "b")
-        for bad in ("http://192.168.1.5:8100", "http://example.com", "file:///etc/passwd"):
-            with self.assertRaises(SystemExit):
-                require_local(bad, "w")
-        log = Path(self.dir) / "server.log"
-        log.write_text("start\nspectator_token=old\nrestart\nspectator_token=abc-123_x\n")
-        self.assertEqual(spectator_token_from_log(str(log)), "abc-123_x")
 
 
 if __name__ == "__main__":

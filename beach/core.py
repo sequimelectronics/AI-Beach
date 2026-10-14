@@ -24,12 +24,13 @@ from pathlib import Path
 from typing import Callable
 
 from . import avatar as avatar_mod
+from . import identity
 from .db import Database
 
 SANDCHAT = "sandchat"
 BOARDWALK = "boardwalk"
 SKIES = ("dawn", "morning", "midday", "afternoon", "sunset", "night")
-NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 _.-]{0,23}$")
+NAME_RE = identity.NAME_RE
 MAX_POST_CHARS = 2000
 
 DEFAULT_SETTINGS: dict = {
@@ -51,6 +52,9 @@ DEFAULT_SETTINGS: dict = {
     "notify_hook": None,             # {"command": [...]} or {"url": "http://127.0.0.1:.../..."}
     "avatar_cooldown_s": 3600,       # how often a participant may change their look (first change free)
     "link_base": None,               # address sign-in links use, e.g. "http://192.168.1.20:8765"
+    "rename_cooldown_s": 86400,      # how often a participant may rename themselves (first rename free)
+    "rename_hint_s": 86400,          # for this long, agents see "New (was Old)", and Old stays reserved
+    "game_guests": False,            # game worlds admit players the Beach didn't vouch for (as guests)
     # Tables (the Boardwalk)
     "table_abandon_s": 3 * 86400,    # a game nobody has moved in this long ends as abandoned (not lost)
     "turn_notify_after_s": 600,      # a player away this long on their turn gets one "your move" notice
@@ -129,15 +133,21 @@ class Beach:
         if "bridge_token_hash" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN bridge_token_hash TEXT")
         pcols = {r["name"] for r in self.db.q("PRAGMA table_info(participants)")}
-        if "game_name" not in pcols:
-            self.db.run("ALTER TABLE participants ADD COLUMN game_name TEXT")
+        if "game_name" in pcols:   # job 05's separate in-game name: gone; the Beach name is the name
+            self.db.run("ALTER TABLE participants DROP COLUMN game_name")
         mcols = {r["name"] for r in self.db.q("PRAGMA table_info(messages)")}
         if "action_key" not in mcols:
             self.db.run("ALTER TABLE messages ADD COLUMN action_key TEXT")
         if "table_id" not in mcols:
             self.db.run("ALTER TABLE messages ADD COLUMN table_id INTEGER")
+        if "author_name" not in mcols:   # the author's name when they said it
+            self.db.run("ALTER TABLE messages ADD COLUMN author_name TEXT")
         if "card" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
+        if "world_url" not in cols:   # a game world's address on this machine, from its bridge
+            self.db.run("ALTER TABLE zones ADD COLUMN world_url TEXT")
+        if "watch_token" not in cols:   # a game world's spectator token, from its bridge
+            self.db.run("ALTER TABLE zones ADD COLUMN watch_token TEXT")
         if "tables" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
 
@@ -200,15 +210,29 @@ class Beach:
     def _p(self, row) -> Participant:
         return Participant(row["id"], row["name"], row["kind"], bool(row["is_admin"]), bool(row["invitable"]))
 
+    def check_name(self, name: str, pid: int | None = None) -> str:
+        """A name that may be used: the right shape, and not mistakable for anyone else's name
+        (or for a name someone gave up within rename_hint_s). Returns it tidied."""
+        name = " ".join((name or "").split())
+        if not identity.shape_ok(name):
+            raise BeachError("invalid", identity.NAME_RULE)
+        sk = identity.skeleton(name)
+        for r in self.db.q("SELECT id, name FROM participants"):
+            if r["id"] != pid and identity.skeleton(r["name"]) == sk:
+                same = r["name"].casefold() == name.casefold()
+                raise BeachError("conflict", f"there is already a participant called {r['name']}" if same else
+                                 f"'{name}' is too easy to mistake for {r['name']}")
+        recent = self.now() - self.setting("rename_hint_s")
+        for r in self.db.q("SELECT participant_id, old_name FROM name_history WHERE at > ?", (recent,)):
+            if r["participant_id"] != pid and identity.skeleton(r["old_name"]) == sk:
+                raise BeachError("conflict", f"'{name}' was someone's name until recently; choose another")
+        return name
+
     def add_participant(self, name: str, kind: str, invitable: bool = True,
                         is_admin: bool = False) -> tuple[Participant, str]:
-        name = (name or "").strip()
-        if not NAME_RE.match(name):
-            raise BeachError("invalid", "names are 1-24 letters, digits, spaces, '.', '_' or '-', starting with a letter")
         if kind not in ("person", "agent"):
             raise BeachError("invalid", "kind must be 'person' or 'agent'")
-        if self.db.one("SELECT 1 FROM participants WHERE name = ?", (name,)):
-            raise BeachError("conflict", f"there is already a participant called {name}")
+        name = self.check_name(name)
         token = _new_token()
         pid = self.db.run("INSERT INTO participants (name, kind, is_admin, invitable, token_hash, created_at)"
                           " VALUES (?, ?, ?, ?, ?, ?)",
@@ -228,7 +252,7 @@ class Beach:
     def participants(self) -> list[dict]:
         return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "admin": bool(r["is_admin"]),
                  "invitable": bool(r["invitable"]), "has_token": r["token_hash"] is not None,
-                 "game_name": r["game_name"], "avatar_v": self.avatar_version(r["id"])}
+                 "was": self.was_name(r["id"]), "avatar_v": self.avatar_version(r["id"])}
                 for r in self.db.q("SELECT * FROM participants ORDER BY id")]
 
     def authenticate(self, token: str | None) -> Participant | None:
@@ -249,17 +273,66 @@ class Beach:
         self.db.run("UPDATE participants SET token_hash = ? WHERE id = ?", (_hash(token), pid))
         return token
 
-    def update_participant(self, pid: int, invitable: bool | None = None,
-                           game_name: str | None = None) -> Participant:
+    def update_participant(self, pid: int, invitable: bool | None = None) -> Participant:
         self.participant(pid)
         if invitable is not None:
             self.db.run("UPDATE participants SET invitable = ? WHERE id = ?", (int(invitable), pid))
-        if game_name is not None:
-            g = game_name.strip()
-            if g and not re.match(r"^[A-Za-z0-9 _.-]{1,40}$", g):
-                raise BeachError("invalid", "an in-game name is 1-40 letters, digits, spaces, '.', '_' or '-'")
-            self.db.run("UPDATE participants SET game_name = ? WHERE id = ?", (g or None, pid))
         return self.participant(pid)
+
+    # ------------------------------------------------------------------ names
+
+    def _rename_wait(self, pid: int) -> float:
+        row = self.db.one("SELECT at, by_admin FROM name_history WHERE participant_id = ? ORDER BY id DESC LIMIT 1",
+                          (pid,))
+        if not row or row["by_admin"]:
+            return 0
+        left = self.setting("rename_cooldown_s") - (self.now() - row["at"])
+        return round(left, 1) if left > 0 else 0
+
+    def rename(self, pid: int, new_name: str, by_admin: bool = False) -> dict:
+        """Change a participant's name, everywhere, like IRC's /nick. Participants: first rename
+        free, then once per rename_cooldown_s; the keeper can rename anyone at any time."""
+        p = self.participant(pid)
+        new = self.check_name(new_name, pid)
+        if new == p.name:
+            raise BeachError("invalid", f"you're already called {new}")
+        if not by_admin:
+            wait = self._rename_wait(pid)
+            if wait > 0:
+                raise BeachError("cooldown", "names can change once per "
+                                 f"{max(1, round(self.setting('rename_cooldown_s') / 3600))} h so everyone can keep "
+                                 f"track; try again in about {math.ceil(wait / 3600)} h", retry_after=wait)
+        now = self.now()
+        self.db.run("UPDATE participants SET name = ? WHERE id = ?", (new, pid))
+        self.db.run("INSERT INTO name_history (participant_id, old_name, new_name, at, by_admin) VALUES (?, ?, ?, ?, ?)",
+                    (pid, p.name, new, now, int(by_admin)))
+        line = f"{p.name} is now known as {new}"
+        zones = {SANDCHAT} | set(self.zones_of(pid))
+        for zid in sorted(zones):
+            self._post(zid, None, "nick", line)
+        for t in self.db.q("SELECT DISTINCT t.id, t.zone_id FROM game_tables t"
+                           " LEFT JOIN table_seats s ON s.table_id = t.id AND s.participant_id = ?"
+                           " LEFT JOIN table_watchers w ON w.table_id = t.id AND w.participant_id = ?"
+                           " WHERE t.status IN ('waiting', 'playing')"
+                           " AND (s.participant_id IS NOT NULL OR w.participant_id IS NOT NULL)", (pid, pid)):
+            self._post(t["zone_id"], None, "nick", line, table_id=t["id"])
+        return {"id": pid, "name": new, "was": p.name, "next_rename_in": self._rename_wait(pid)}
+
+    def was_name(self, pid: int) -> str | None:
+        """The name this participant had until recently (within rename_hint_s), else None."""
+        row = self.db.one("SELECT old_name, at FROM name_history WHERE participant_id = ? ORDER BY id DESC LIMIT 1",
+                          (pid,))
+        if row and self.now() - row["at"] < self.setting("rename_hint_s"):
+            first = self.db.one("SELECT old_name FROM name_history WHERE participant_id = ? AND at > ?"
+                                " ORDER BY id LIMIT 1", (pid, self.now() - self.setting("rename_hint_s")))
+            return first["old_name"] if first else row["old_name"]
+        return None
+
+    def label(self, pid: int) -> str:
+        """The name an agent sees: "Sandcastle Sam (was Sandy)" for a while after a rename."""
+        p = self.participant(pid)
+        was = self.was_name(pid)
+        return f"{p.name} (was {was})" if was and was != p.name else p.name
 
     @staticmethod
     def _display_name(v) -> str:
@@ -313,31 +386,114 @@ class Beach:
         return self.avatar(pid)
 
     def who_in(self, zid: str) -> list[dict]:
-        """Who is in a zone, for the map: participants present (chat) or matched players (game).
-
-        A game reports in-game names; each is matched to a participant by their in-game name,
-        or else their Beach name (ignoring case). Unmatched players are shown as guests.
-        """
+        """Who is in a zone, for the map: participants present (chat), or the players a game's
+        bridge reported (game). A game player is a participant only if the Beach vouched for
+        their join (see vouch()); anyone else is a guest, shown under a guest label."""
         z = self.zone(zid)
         if z["kind"] == "chat":
             return [{"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id)}
                     for p in self.present(zid)]
         out = []
-        for n in self.players_in(zid):
-            row = self.db.one("SELECT * FROM participants WHERE game_name = ? COLLATE NOCASE", (n,)) or \
-                self.db.one("SELECT * FROM participants WHERE name = ? AND (game_name IS NULL OR game_name = '')",
-                            (n,))
-            if row:
-                out.append({"id": row["id"], "name": row["name"], "kind": row["kind"], "game_name": n,
-                            "v": self.avatar_version(row["id"])})
+        for key in self.players_in(zid):
+            if key.startswith("p:"):
+                p = self.participant(int(key[2:]))
+                out.append({"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id)})
             else:
-                out.append({"id": None, "name": n, "kind": "guest", "game_name": n, "v": 0})
+                out.append({"id": None, "name": key, "kind": "guest", "v": 0})
         return out
 
     def game_looks(self, zid: str) -> dict:
-        """In-game name -> colours, for a game that tints characters with their owner's look."""
-        return {w["game_name"]: avatar_mod.hexes(self.avatar_record(w["id"]))
+        """Current name -> colours, for a game that tints characters with their owner's look."""
+        return {w["name"]: avatar_mod.hexes(self.avatar_record(w["id"]))
                 for w in self.who_in(zid) if w["id"] is not None}
+
+    # ------------------------------------------------------- the front door to game worlds
+
+    @staticmethod
+    def user_id_for(agent_id: str) -> int:
+        """The UserId a Clawblox world gives the player for a join (low 53 bits of its agent_id)."""
+        import uuid
+        uid = uuid.UUID(str(agent_id)).int & ((1 << 53) - 1)
+        return uid or 1
+
+    def vouch(self, pid: int, zid: str, agent_id: str, joined_as: str) -> dict:
+        """A participant tells the Beach "this world join is me". The world admits the join only
+        once the Beach has vouched for it, and only if it joined under the participant's Beach name."""
+        z = self.zone(zid)
+        if z["kind"] != "game":
+            raise BeachError("invalid", "only game zones have worlds to join")
+        if not z["open"]:
+            raise BeachError("closed", f"{z['name']} is closed right now")
+        p = self.participant(pid)
+        try:
+            uid = self.user_id_for(agent_id)
+        except (ValueError, TypeError):
+            raise BeachError("invalid", "agent_id is the id the world's /join returned") from None
+        if joined_as != p.name:
+            raise BeachError("invalid", f"join the world as {p.name}, exactly: your Beach name is your name there too")
+        # Several participants may claim the same join; the world honours only the claim whose
+        # name matches the name the join used, which only its rightful owner can make.
+        self.db.run("INSERT OR REPLACE INTO game_grants VALUES (?, ?, ?, ?, ?, ?)",
+                    (str(agent_id), uid, zid, pid, joined_as, self.now()))
+        return {"zone": zid, "user_id": uid, "name": p.name}
+
+    def set_watch_token(self, zid: str, token: str) -> None:
+        self.db.run("UPDATE zones SET watch_token = ? WHERE id = ?", (token[:200], zid))
+
+    def set_world_url(self, zid: str, url: str) -> None:
+        from .front_door import local_world_url
+        base = local_world_url(url)
+        if base:
+            self.db.run("UPDATE zones SET world_url = ? WHERE id = ?", (base, zid))
+
+    def play(self, pid: int, zid: str, joiner=None) -> dict:
+        """Join a game world for a participant (people, from the browser): the Beach joins under
+        their Beach name and vouches for the join. Returns the session and a viewer link."""
+        from . import front_door
+        z = self.zone(zid)
+        if z["kind"] != "game":
+            raise BeachError("invalid", "only game zones have worlds to play in")
+        if not z["open"]:
+            raise BeachError("closed", f"{z['name']} is closed right now")
+        if not z["world_url"]:
+            raise BeachError("conflict", f"{z['name']} isn't connected to the Beach yet (its bridge isn't running)")
+        p = self.participant(pid)
+        try:
+            j = (joiner or front_door.join_world)(z["world_url"], p.name)
+        except Exception as e:  # the world is down, or refused
+            raise BeachError("conflict", f"couldn't reach {z['name']} ({e})") from None
+        self.vouch(pid, zid, j["agent_id"], p.name)
+        viewer = z["viewer_url"] or z["world_url"] + "/"
+        return {"zone": zid, "name": p.name, "session": j["session"], "agent_id": j["agent_id"],
+                "viewer": front_door.viewer_link(viewer, z["watch_token"], j["session"], p.name)}
+
+    def world_info(self, zid: str, pid: int) -> dict:
+        """For a participant: how to join this world as themselves, and a viewer link."""
+        z = self.zone(zid)
+        if z["kind"] != "game":
+            raise BeachError("invalid", "only game zones have worlds")
+        p = self.participant(pid)
+        viewer = z["viewer_url"]
+        base = viewer.split("?")[0].rstrip("/") if viewer else None
+        return {"zone": zid, "name": p.name, "open": bool(z["open"]), "world": base, "viewer_url": viewer,
+                "spectator_token": z["watch_token"],
+                "steps": [f"POST {base or '<world>'}/join?name={p.name}",
+                          f"POST /zones/{zid}/vouch {{\"agent_id\": <from the join>, \"name\": \"{p.name}\"}}"]}
+
+    def door(self, zid: str) -> dict:
+        """What a world's door needs (for its bridge): who the Beach vouched for, under their
+        current names, and whether guests may stay. Revoked participants are listed as revoked."""
+        self.zone(zid)
+        keep = self.now() - 2 * 86400
+        grants: dict[int, list] = {}
+        for r in self.db.q("SELECT g.*, p.name, p.token_hash FROM game_grants g JOIN participants p"
+                           " ON p.id = g.participant_id WHERE g.zone_id = ? AND g.granted_at > ?"
+                           " ORDER BY g.granted_at", (zid, keep)):
+            grants.setdefault(r["user_id"], []).append(
+                {"name": r["name"], "joined_as": r["joined_as"], "revoked": r["token_hash"] is None,
+                 "participant": r["participant_id"]})
+        return {"zone": zid, "guests": bool(self.setting("game_guests")),
+                "grants": [{"user_id": uid, "claims": claims} for uid, claims in grants.items()]}
 
     # ------------------------------------------------------------------ zones
 
@@ -391,16 +547,40 @@ class Beach:
         row = self.db.one("SELECT id FROM zones WHERE bridge_token_hash = ?", (_hash(token),))
         return row["id"] if row else None
 
-    def report_players(self, zid: str, names: list[str]) -> int:
-        """Called by a game bridge: the full current list of who is playing."""
+    def report_players(self, zid: str, players: list) -> int:
+        """Called by a game bridge: the full current list of who is playing. Each entry is
+        {"user_id": n} for a join the Beach vouched for, or {"guest": "Guest 3"} (or a bare name,
+        which counts as a guest: the Beach doesn't take a world's word for who someone is)."""
         if self.zone(zid)["kind"] != "game":
             raise BeachError("invalid", "only game zones report players")
         now = self.now()
+        keys = set()
+        for e in players:
+            if isinstance(e, dict) and e.get("user_id") is not None:
+                # A vouched join: the claim whose name matches the name the player joined under.
+                g = self.db.one("SELECT g.participant_id, p.token_hash FROM game_grants g JOIN participants p"
+                                " ON p.id = g.participant_id WHERE g.zone_id = ? AND g.user_id = ?"
+                                " AND g.joined_as = ?", (zid, int(e["user_id"]), str(e.get("joined_as", ""))))
+                if g and g["token_hash"] is not None:
+                    keys.add(f"p:{g['participant_id']}")
+            else:
+                label = " ".join(str(e.get("guest") if isinstance(e, dict) else e).split())[:30]
+                if not label:
+                    continue
+                if not label.lower().startswith("guest"):
+                    # A guest never wears a participant's name, or anything mistakable for one.
+                    sk = identity.skeleton(label)
+                    taken = any(identity.skeleton(r["name"]) == sk for r in self.db.q("SELECT name FROM participants"))
+                    label = "Guest" if taken else f"Guest {label}"
+                n, base = 2, label
+                while label in keys:
+                    label, n = f"{base} {n}", n + 1
+                keys.add(label)
         with self.db.tx() as db:
             db.conn.execute("DELETE FROM zone_players WHERE zone_id = ?", (zid,))
-            for n in {str(n)[:40] for n in names if str(n).strip()}:
-                db.conn.execute("INSERT INTO zone_players VALUES (?, ?, ?)", (zid, n, now))
-        return len(names)
+            for k in keys:
+                db.conn.execute("INSERT INTO zone_players VALUES (?, ?, ?)", (zid, k, now))
+        return len(keys)
 
     def players_in(self, zid: str) -> list[str]:
         ttl = self.setting("game_report_ttl_s")
@@ -470,9 +650,12 @@ class Beach:
               table_id: int | None = None) -> int:
         now = self.now()
         with self.db.tx() as db:
+            name = None
+            if author is not None:
+                name = db.conn.execute("SELECT name FROM participants WHERE id = ?", (author,)).fetchone()[0]
             mid = db.conn.execute("INSERT INTO messages (zone_id, author_id, kind, text, created_at, action_key,"
-                                  " table_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                  (zid, author, kind, text, now, action_key, table_id)).lastrowid
+                                  " table_id, author_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                  (zid, author, kind, text, now, action_key, table_id, name)).lastrowid
             # Record who was present when it was posted; reading is bounded by this.
             db.conn.execute("INSERT INTO witnesses SELECT ?, participant_id FROM visits"
                             " WHERE zone_id = ? AND left_at IS NULL", (mid, zid))
@@ -533,7 +716,8 @@ class Beach:
         v = self._visit(pid, zid)
         if not v and not all_visits:
             return []
-        sql = ("SELECT m.id, m.kind, m.text, m.created_at, m.author_id, p.name AS author, p.kind AS author_kind"
+        sql = ("SELECT m.id, m.kind, m.text, m.created_at, m.author_id, COALESCE(m.author_name, p.name) AS author,"
+               " p.name AS author_now, p.kind AS author_kind"
                " FROM messages m JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                " LEFT JOIN participants p ON p.id = m.author_id"
                " WHERE m.zone_id = ? AND m.deleted = 0 AND m.id > ?"

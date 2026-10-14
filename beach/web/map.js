@@ -32,8 +32,19 @@
     if (!z.open) return
     if (z.tables) location.href = '/boardwalk?zone=' + encodeURIComponent(z.id)
     else if (z.kind === 'chat') location.href = '/chat?zone=' + encodeURIComponent(z.id)
-    else if (z.viewer_url) window.open(z.viewer_url, '_blank', 'noopener')
-    else Beach.toast(z.name + " doesn't have a viewer yet; the keeper can add one.")
+    else play(z)
+  }
+
+  // A game world: the Beach joins it for you under your Beach name, then opens the viewer, whose
+  // chat panel plays as you. If the world isn't connected to the Beach, you can still watch.
+  async function play (z) {
+    try {
+      const r = await Beach.api('POST', '/zones/' + encodeURIComponent(z.id) + '/play')
+      location.href = r.viewer
+    } catch (e) {
+      if (z.viewer_url) { Beach.toast(e.message + ' Opening it to watch.'); setTimeout(() => { location.href = z.viewer_url }, 1500) }
+      else Beach.toast(e.message)
+    }
   }
 
   function crowd (z) {

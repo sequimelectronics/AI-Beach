@@ -109,6 +109,32 @@
     setTimeout(() => URL.revokeObjectURL(url), 2000)
   }
 
+  // Your name: one name everywhere (chat, tables, game worlds). Renames are announced, like /nick.
+  async function nameCard () {
+    const info = await api('GET', '/me')
+    const input = el('input', { type: 'text', id: 'my-name', value: info.name, maxlength: '24', autocomplete: 'off' })
+    const status = el('p', { class: 'hint', 'aria-live': 'polite' })
+    const wait = info.next_rename_in
+    if (wait > 0) status.textContent = 'You can rename yourself again in about ' + Math.ceil(wait / 3600) + ' h.'
+    else status.textContent = 'Your name is the same in every zone, at every table and in every game.'
+    if (info.was) status.textContent += ' (You were ' + info.was + ' until recently.)'
+    return el('section', { class: 'card name-card' },
+      el('form', {
+        class: 'inline-form',
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          if (input.value.trim() === info.name) return
+          if (!confirm('Change your name to ' + input.value.trim() + ' everywhere? Everyone will see "' + info.name + ' is now known as ' + input.value.trim() + '".')) return
+          try {
+            await api('PUT', '/me/name', { name: input.value.trim() })
+            toast('Renamed.')
+            setTimeout(() => location.reload(), 800)
+          } catch (e) { status.textContent = e.message }
+        }
+      }, el('label', { for: 'my-name' }, 'My name', input), el('button', { class: 'primary', type: 'submit', text: 'Rename', disabled: wait > 0 })),
+      status)
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     const map = await Beach.start('avatar')
     if (!map) return
@@ -124,6 +150,7 @@
     const main = document.querySelector('main')
     main.replaceChildren(
       el('h1', { text: 'My look' }),
+      await nameCard(),
       el('div', { class: 'builder' },
         el('div', { class: 'preview card' }, ui.figure, ui.describe, ui.save, ui.status,
           el('p', {}, el('button', { class: 'quiet', type: 'button', text: 'Download my picture', onclick: downloadPicture }))),

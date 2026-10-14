@@ -5,6 +5,7 @@ afk_timeout = 300
 
 [scripts]
 main = "main.lua"
+tree = "scripts"
 api = "API.md"
 
 [renderer]

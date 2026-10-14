@@ -6,6 +6,8 @@ lays our pieces over the copy:
 
 - worlds/clawblox/renderer/  mesa-island's renderer, adapted (three.js from the vendored copy)
 - static/vendor/             three.js and lucide, from worlds/beach/static/vendor/
+- scripts/ServerScriptService/BeachDoor.lua   the Beach's front door (from worlds/beach/), so only
+                             participants the Beach vouches for can play, under their Beach names
 
     python3 scripts/clawblox_world.py --clawblox ~/src/clawblox --out ~/beach-worlds/clawblox
     clawblox run ~/beach-worlds/clawblox --port 8200
@@ -44,8 +46,19 @@ def assemble(clawblox: Path, out: Path, max_players: int | None = None) -> Path:
     shutil.copytree(ROOT / "worlds" / "clawblox" / "renderer", out / "renderer",
                     ignore=shutil.ignore_patterns("dist", ".build.lock"))
     shutil.copytree(ROOT / "worlds" / "beach" / "static" / "vendor", out / "static" / "vendor")
+    # The front door: the same script the beach world runs, in a script tree.
+    door_src = ROOT / "worlds" / "beach" / "scripts" / "ServerScriptService" / "BeachDoor.lua"
+    (out / "scripts" / "ServerScriptService").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(door_src, out / "scripts" / "ServerScriptService" / "BeachDoor.lua")
+    toml = out / "world.toml"
+    text = toml.read_text()
+    if re.search(r"(?m)^tree\s*=", text):
+        raise SystemExit("mesa-island already has a script tree; merge BeachDoor.lua into it by hand")
+    text, n = re.subn(r"(?m)^(\[scripts\]\s*\n)", r'\1tree = "scripts"\n', text)
+    if n != 1:
+        raise SystemExit("couldn't find [scripts] in mesa-island's world.toml")
+    toml.write_text(text)
     if max_players:
-        toml = out / "world.toml"
         text, n = re.subn(r"(?m)^max_players\s*=\s*\d+", f"max_players = {int(max_players)}", toml.read_text())
         if n != 1:
             raise SystemExit("couldn't find max_players in mesa-island's world.toml")

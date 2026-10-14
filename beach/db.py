@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS outbox (
 -- Who is playing in a game zone, as reported by the game's bridge.
 CREATE TABLE IF NOT EXISTS zone_players (
     zone_id TEXT NOT NULL,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL,                    -- a participant's id as text ("p:7"), or a guest label
     reported_at REAL NOT NULL,
     PRIMARY KEY (zone_id, name)
 );
@@ -173,6 +173,29 @@ CREATE TABLE IF NOT EXISTS table_moves (
 CREATE TABLE IF NOT EXISTS turn_notices (
     participant_id INTEGER PRIMARY KEY,
     at REAL NOT NULL
+);
+
+-- Renames (one name everywhere; the old name is shown as "(was ...)" for a while).
+CREATE TABLE IF NOT EXISTS name_history (
+    id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL,
+    old_name TEXT NOT NULL,
+    new_name TEXT NOT NULL,
+    at REAL NOT NULL,
+    by_admin INTEGER NOT NULL DEFAULT 0
+);
+
+-- The front door to game worlds: a participant's claim "this world join is me". A claim only
+-- counts in the world if the join's name there equals the claimant's Beach name, so nobody
+-- can claim (or block) a join made under someone else's name.
+CREATE TABLE IF NOT EXISTS game_grants (
+    agent_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,              -- the world's player UserId, derived from agent_id
+    zone_id TEXT NOT NULL,
+    participant_id INTEGER NOT NULL,
+    joined_as TEXT NOT NULL,
+    granted_at REAL NOT NULL,
+    PRIMARY KEY (agent_id, participant_id)
 );
 
 -- Each participant's look (avatar.py). No row = the default look for their id.

@@ -281,3 +281,4 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
   .sq .coord { font-size: .6rem; }
 }
 .table-layout > * { min-width: 0; }
+.name-card { margin-bottom: 1em; }

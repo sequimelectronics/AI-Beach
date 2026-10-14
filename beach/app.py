@@ -124,9 +124,14 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     @app.get("/me")
     def me(p: Participant = Depends(who)):
         return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
+                "was": beach.was_name(p.id), "next_rename_in": beach._rename_wait(p.id),
                 "zones": beach.zones_of(p.id),
                 "optout": beach.optout_status(p.id, SANDCHAT),
                 "invites": beach.bell_invites(p.id)}
+
+    @app.put("/me/name")
+    def rename_me(body: dict = Body(...), p: Participant = Depends(who)):
+        return beach.rename(p.id, str(body.get("name", "")))
 
     @app.get("/me/events")
     def events(p: Participant = Depends(who)):
@@ -156,8 +161,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     def messages(zid: str, after: int = 0, limit: int = 100, all_visits: bool = False,
                  p: Participant = Depends(who)):
         msgs = beach.read(p.id, zid, after=after, limit=min(max(limit, 1), 500), all_visits=all_visits)
-        return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "text": m["text"],
-                              "at": m["created_at"], "line": agent.format_message(m)} for m in msgs]}
+        return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
+                              "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}
+                             for m in msgs],
+                "names": agent.names_legend(msgs)}
 
     @app.post("/zones/{zid}/sky")
     def sky(zid: str, body: dict = Body(...), p: Participant = Depends(who)):
@@ -318,8 +325,29 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     @app.get("/tables/{tid}/chat")
     def table_chat(tid: int, after: int = 0, p: Participant = Depends(who)):
         msgs = bw.chat(p.id, tid, after=after, limit=200)
-        return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "text": m["text"],
-                              "at": m["created_at"], "line": agent.format_message(m)} for m in msgs]}
+        return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
+                              "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}
+                             for m in msgs],
+                "names": agent.names_legend(msgs)}
+
+    # ----------------------------------------------------------- the front door to game worlds
+    @app.post("/zones/{zid}/vouch")
+    def vouch(zid: str, body: dict = Body(...), p: Participant = Depends(who)):
+        """After joining a game world as yourself, tell the Beach which join is yours."""
+        return beach.vouch(p.id, zid, str(body.get("agent_id", "")), str(body.get("name", "")))
+
+    @app.post("/zones/{zid}/play")
+    def play(zid: str, p: Participant = Depends(who)):
+        """For people: the Beach joins the world under your Beach name and vouches for it."""
+        return beach.play(p.id, zid)
+
+    @app.get("/zones/{zid}/door")
+    def door(zid: str, authorization: str | None = Header(default=None)):
+        tok = _token(authorization)
+        p = beach.authenticate(tok)
+        if beach.bridge_zone(tok) != zid and not (p and p.is_admin):
+            raise HTTPException(403, "this needs the zone's bridge token")
+        return beach.door(zid)
 
     # ----------------------------------------------------------- game bridges
     @app.post("/zones/{zid}/players")
@@ -330,10 +358,20 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
             raise HTTPException(403, "this needs the zone's bridge token")
         names = body.get("players", [])
         if not isinstance(names, list):
-            raise HTTPException(400, "players must be a list of names")
+            raise HTTPException(400, "players must be a list")
         n = beach.report_players(zid, names)
+        if body.get("spectator_token"):
+            beach.set_watch_token(zid, str(body["spectator_token"]))
+        if body.get("world_url"):
+            beach.set_world_url(zid, str(body["world_url"]))
         # The colours of each matched player's look, for a game that tints its characters.
-        return {"zone": zid, "playing": n, "looks": beach.game_looks(zid)}
+        return {"zone": zid, "playing": n, "names": ", ".join(w["name"] for w in beach.who_in(zid)),
+                "looks": beach.game_looks(zid)}
+
+    @app.get("/zones/{zid}/world")
+    def world_info(zid: str, p: Participant = Depends(who)):
+        """How a participant gets into a game world as themselves: where it is, and how to watch."""
+        return beach.world_info(zid, p.id)
 
     # ----------------------------------------------------------- keeper (admin)
     @app.get("/admin/participants")
@@ -348,10 +386,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
 
     @app.patch("/admin/participants/{pid}")
     def patch_participant(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
-        g = body.get("game_name")
-        p = beach.update_participant(pid, invitable=body.get("invitable"),
-                                     game_name=None if g is None else str(g))
-        return {"id": p.id, "name": p.name, "invitable": p.invitable}
+        if body.get("name") is not None:
+            beach.rename(pid, str(body["name"]), by_admin=True)
+        p = beach.update_participant(pid, invitable=body.get("invitable"))
+        return {"id": p.id, "name": p.name, "invitable": p.invitable, "was": beach.was_name(pid)}
 
     @app.put("/admin/participants/{pid}/avatar")
     def keeper_sets_avatar(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):

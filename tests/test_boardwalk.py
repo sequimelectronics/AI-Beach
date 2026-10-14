@@ -391,12 +391,15 @@ class ClawBloxZoneTests(unittest.TestCase):
     """The ClawBlox zone: the bridge reads mesa-island's players, and the world is assembled offline-ready."""
 
     def test_bridge_reads_mesa_island_players(self):
-        from beach.bridge import player_names
-        # The shape mesa-island's /spectate returned in the live run: names, no PlayerName labels.
-        spect = {"players": [{"id": "a", "name": "Drift", "position": [0, 5, 0], "health": 100,
-                              "attributes": {"LastActionResult": "", "ViewFovDeg": 70}},
-                             {"id": "b", "name": "Pebble", "position": [3, 5, 0], "health": 100}]}
+        from beach.bridge import door_report, player_names
+        # The shape mesa-island's /spectate returned in the live run: names, plus the door's attributes.
+        a1, a2 = "687b2927-119e-4a49-8fc3-4f3d259506fb", "11111111-2222-4333-8444-555555555555"
+        spect = {"players": [{"id": a1, "name": "Drift", "position": [0, 5, 0], "health": 100,
+                              "attributes": {"LastActionResult": "", "BeachDoor": "ok", "BeachName": "Drift"}},
+                             {"id": a2, "name": "Pebble", "position": [3, 5, 0], "health": 100,
+                              "attributes": {"BeachDoor": "pending"}}]}
         self.assertEqual(player_names(spect), ["Drift", "Pebble"])
+        self.assertEqual(door_report(spect), [{"user_id": Beach.user_id_for(a1), "joined_as": "Drift"}])
 
     def test_assemble_world_from_a_checkout(self):
         import importlib.util
@@ -408,7 +411,7 @@ class ClawBloxZoneTests(unittest.TestCase):
             mesa = tmp / "clawblox" / "worlds" / "mesa-island"
             (mesa / "renderer" / "src").mkdir(parents=True)
             (mesa / "assets").mkdir()
-            (mesa / "world.toml").write_text('name = "Mesa World"\nmax_players = 1\n')
+            (mesa / "world.toml").write_text('name = "Mesa World"\nmax_players = 1\n\n[scripts]\nmain = "main.lua"\n')
             (mesa / "main.lua").write_text("-- mesa")
             (mesa / "assets" / "player.glb").write_bytes(b"glb")
             (mesa / "renderer" / "src" / "index.js").write_text("import * as THREE from 'https://esm.sh/three'")
@@ -421,6 +424,8 @@ class ClawBloxZoneTests(unittest.TestCase):
             self.assertIn("../../static/vendor/three/build/three.module.min.js", ours)
             self.assertTrue((out / "static" / "vendor" / "three" / "build" / "three.module.min.js").exists())
             self.assertTrue((out / "static" / "vendor" / "lucide" / "lucide.mjs").exists())
+            self.assertTrue((out / "scripts" / "ServerScriptService" / "BeachDoor.lua").exists())
+            self.assertIn('tree = "scripts"', (out / "world.toml").read_text())
             mod.assemble(tmp / "clawblox", tmp / "world")          # its own folder: replaced
             (tmp / "mine").mkdir()
             with self.assertRaises(SystemExit):

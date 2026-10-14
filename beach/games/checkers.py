@@ -7,7 +7,8 @@
   there's a choice of captures (or of paths within one), any of them may be chosen.
 - A man reaching the far row is crowned and the move ends there, even mid-sequence.
 - You lose when you have no legal move (no pieces, or all blocked).
-- Draws: by agreement (handled by the table), or after `quiet_limit` moves each with no capture.
+- Draws: by agreement (handled by the table), or after `quiet_limit` moves each in which nobody
+  captured and no man (uncrowned piece) moved: only kings shuffling about.
 
 Squares are named a1..h8 (a1 is a dark square, bottom left from Black's side). Notation:
 "c3-d4" for a step, "e3xc5xa7" for a capture with every landing square.
@@ -178,13 +179,14 @@ class Checkers(TableGame):
         crowned = piece in MEN and rz == (7 if seat == 0 else 0)
         board[rz * 8 + fz] = KINGS[seat] if crowned else piece
         new = dict(state, board="".join(board), turn=1 - seat, ply=state["ply"] + 1,
-                   quiet=0 if captured else state["quiet"] + 1)
+                   # Progress (a capture, or any man moving) resets the no-progress count.
+                   quiet=0 if (captured or piece in MEN) else state["quiet"] + 1)
         info = {"move": move, "seat": seat, "captured": captured, "crowned": crowned}
         if not self.legal_moves(new):
             gone = not any(_seat_of(p) == 1 - seat for p in new["board"])
             new["over"] = {"winner": seat, "reason": "all pieces captured" if gone else "no moves left"}
         elif new["quiet"] >= 2 * new["quiet_limit"]:
-            new["over"] = {"winner": None, "reason": f"{new['quiet_limit']} moves each with no capture"}
+            new["over"] = {"winner": None, "reason": f"{new['quiet_limit']} moves each with only kings moving and no capture"}
         return new, info
 
     # ------------------------------------------------------------- showing it

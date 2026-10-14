@@ -177,19 +177,45 @@ class EndingTests(unittest.TestCase):
         s2, _ = G.play(s, "a1-b2")
         self.assertEqual(G.outcome(s2), {"winner": 0, "reason": "no moves left"})
 
-    def test_draw_after_quiet_moves(self):
+    def test_draw_after_kings_shuffle_with_no_capture(self):
         s = P({"a1": "B", "h8": "W"}, quiet_limit=2)
         for m in ("a1-b2", "h8-g7", "b2-a1", "g7-h8"):
             self.assertIsNone(G.outcome(s))
             s, _ = G.play(s, m)
-        self.assertEqual(G.outcome(s), {"winner": None, "reason": "2 moves each with no capture"})
+        self.assertEqual(G.outcome(s), {"winner": None,
+                                        "reason": "2 moves each with only kings moving and no capture"})
 
-    def test_capture_resets_the_quiet_count(self):
-        s = P({"a1": "B", "h8": "W", "c3": "b", "d4": "w"}, quiet_limit=40)
-        s, _ = G.play(s, "c3xe5")
+    def test_capture_resets_the_count(self):
+        s = P({"a1": "B", "h8": "W", "c3": "B", "d4": "w"}, quiet_limit=40)
+        s["quiet"] = 30
+        s, _ = G.play(s, "c3xe5")            # a king captures
         self.assertEqual(s["quiet"], 0)
         s, _ = G.play(s, "h8-g7")
         self.assertEqual(s["quiet"], 1)
+
+    def test_any_man_move_resets_the_count(self):
+        s = P({"a1": "B", "h8": "W", "c3": "b", "f6": "w"}, quiet_limit=40)
+        s["quiet"] = 30
+        s, _ = G.play(s, "a1-b2")            # a king moves: no progress
+        self.assertEqual(s["quiet"], 31)
+        s, _ = G.play(s, "f6-g5")            # a White man moves: progress
+        self.assertEqual(s["quiet"], 0)
+        s, _ = G.play(s, "c3-d4")            # a Black man moves: progress
+        self.assertEqual(s["quiet"], 0)
+        s, _ = G.play(s, "h8-g7")
+        self.assertEqual(s["quiet"], 1)
+
+    def test_a_man_move_saves_a_game_about_to_be_drawn(self):
+        s = P({"a1": "B", "h8": "W", "c3": "b"}, quiet_limit=2)
+        s, _ = G.play(s, "a1-b2")
+        s, _ = G.play(s, "h8-g7")
+        s, _ = G.play(s, "b2-a1")           # 3 quiet plies
+        s, _ = G.play(s, "g7-h8")           # 4: drawn
+        self.assertEqual(G.outcome(s)["winner"], None)
+        s = P({"a1": "B", "h8": "W", "c3": "b"}, quiet_limit=2)
+        for m in ("a1-b2", "h8-g7", "c3-d4", "g7-h8", "b2-a1"):
+            s, _ = G.play(s, m)
+        self.assertIsNone(G.outcome(s))     # the man's move at ply 3 reset the count
 
     def test_default_quiet_limit_is_forty_each(self):
         self.assertEqual(G.new({})["quiet_limit"], 40)

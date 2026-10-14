@@ -1,0 +1,35 @@
+Clawblox viewer: use a session the host already made, instead of joining as "Player-xxxx"
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, with or without
+patches/clawblox-offline-frontend.patch (they touch different lines of main.js).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-viewer-session.patch
+    cargo build --release
+
+Why: the viewer's chat panel joins the world as a player, under a random local name. Behind a
+Beach's front door that join is refused (the Beach never vouched for it), so a person could
+watch but not chat in the world. With this change, when the viewer is opened with
+?session=<token>&player=<name> (the Beach does that after joining for the person under their
+Beach name), the chat panel uses that session. Without those parameters nothing changes.
+
+diff --git a/frontend_runtime/dist/main.js b/frontend_runtime/dist/main.js
+index 8fc373c..dc425e8 100644
+--- a/frontend_runtime/dist/main.js
++++ b/frontend_runtime/dist/main.js
+@@ -1759,6 +1759,14 @@ function makeLocalPlayerName() {
+ 
+ async function ensureChatSession() {
+   if (chatState.sessionToken) return
++  // A host (e.g. a Beach front door) may have joined for this viewer already: use that session.
++  const hostSession = new URLSearchParams(window.location.search).get('session')
++  if (hostSession) {
++    chatState.sessionToken = hostSession
++    chatState.playerName = new URLSearchParams(window.location.search).get('player') || 'you'
++    setChatLocalStatus(`Chatting as ${chatState.playerName}`)
++    return
++  }
+   const playerName = chatState.playerName || makeLocalPlayerName()
+   chatState.playerName = playerName
+   const resp = await fetch(withBasePath(`/join?name=${encodeURIComponent(playerName)}`), { method: 'POST' })

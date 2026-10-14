@@ -36,6 +36,7 @@ def beach_card(beach: Beach) -> str:
         "If you're invited: POST /bell/<id>/respond {\"answer\": \"come\"|\"decline\"}",
         "a zone's turn: GET /agent/turn?zone=<id> (a game table: ?table=<id>)",
         "your look in one sentence: GET /avatar-describe (more: GET /avatar/card)",
+        "rename yourself: PUT /me/name {\"name\": \"...\"}; your one name in every zone, table and game",
     ])
 
 
@@ -92,7 +93,7 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
     lines.append(f"{beach.setting('beach_name')} / {z['name']}; sky: {sky}")
     here = beach.present(zid)
     if here:
-        lines.append("here: " + ", ".join(f"{p.name} ({p.kind})" for p in here))
+        lines.append("here: " + ", ".join(f"{beach.label(p.id)} ({p.kind})" for p in here))
     else:
         lines.append("here: nobody")
     lines.append(beach.zone_map_text())
@@ -119,14 +120,15 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
         lines.append(f"invited: {inv['rung_by']} rang the bell (id {inv['bell_id']}); come or decline")
     if z["tables"]:
         for t in beach.tables.list(zid)[:6]:
-            lines.append("table " + _table_line(t))
+            lines.append("table " + _table_line(beach, t))
     for item in beach.inbox(pid, consume=consume_notes):
         lines.append(f"private: {item['text']}")
     return "\n".join(lines)
 
 
-def _table_line(t: dict) -> str:
-    players = " vs ".join(s["player"]["name"] if s["player"] else f"(empty {s['name']} seat)" for s in t["seats"])
+def _table_line(beach: Beach, t: dict) -> str:
+    players = " vs ".join(beach.label(s["player"]["id"]) if s["player"] else f"(empty {s['name']} seat)"
+                          for s in t["seats"])
     if t["status"] == "playing":
         mover = t["seats"][t["to_move"]]["player"]["name"]
         status = f"{mover} to move"
@@ -147,7 +149,7 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
     seats = bw.seats(tid)
     me = bw.seat_of(tid, pid)
     zone = beach.zone(row["zone_id"])["name"]
-    names = {s: beach.participant(q).name for s, q in seats.items()}
+    names = {s: beach.label(q) for s, q in seats.items()}
     lines = [f"{zone} / table {tid}: {g.title}"]
     if me is not None:
         others = [f"{names[s]} is {g.seat_names[s]}" for s in sorted(names) if s != me]
@@ -194,6 +196,9 @@ def table_recent_text(beach: Beach, pid: int, tid: int, moves: int = 6, chat: in
     if msgs:
         out.append("table chat (newest last):")
         out.extend(format_message(m) for m in msgs)
+        legend = names_legend(msgs)
+        if legend:
+            out.append(legend)
     return "\n".join(out)
 
 
@@ -227,7 +232,21 @@ def recent_text(beach: Beach, pid: int, zid: str = SANDCHAT, cap: int | None = N
     msgs = beach.read(pid, zid, limit=cap)
     if not msgs:
         return "recent: nothing yet since you arrived"
-    return "recent (since you arrived, newest last):\n" + "\n".join(format_message(m) for m in msgs)
+    text = "recent (since you arrived, newest last):\n" + "\n".join(format_message(m) for m in msgs)
+    legend = names_legend(msgs)
+    return text + ("\n" + legend if legend else "")
+
+
+def names_legend(msgs: list[dict]) -> str:
+    """Lines show each name as it was when said. If anyone in them has been renamed since,
+    say who they are now, so an agent can always tell who said what."""
+    now = {}
+    for m in msgs:
+        if m.get("author") and m.get("author_now") and m["author"] != m["author_now"]:
+            now[m["author"]] = m["author_now"]
+    if not now:
+        return ""
+    return "names: " + "; ".join(f"{old} is now {new}" for old, new in now.items())
 
 
 def turn_bundle(beach: Beach, pid: int, zid: str = SANDCHAT, counter: TokenCounter | None = None,
