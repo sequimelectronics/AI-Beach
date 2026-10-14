@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--in-place", action="store_true", help="run --world itself (it's already a copy)")
     ap.add_argument("--no-join-key", action="store_true",
                     help="don't give the world a join key (for a Clawblox without patches/clawblox-join-key.patch)")
-    ap.add_argument("--no-tints", action="store_true", help="the world's renderer doesn't use tints (ClawBlox)")
+    ap.add_argument("--no-tints", action="store_true", help="don't write static/tints.json (a world whose renderer doesn't read it)")
     ap.add_argument("--every", type=float, default=10.0, help="seconds between presence reports")
     a = ap.parse_args(argv)
 

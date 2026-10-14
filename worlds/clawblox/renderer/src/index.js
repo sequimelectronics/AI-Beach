@@ -1,8 +1,11 @@
 // Adapted for AI Beach from Clawblox's worlds/mesa-island/renderer/src/index.js (commit 8be90a0),
 // MIT License, Copyright (c) 2026 nacloos; see ../LICENSE.clawblox. One change: three.js comes
 // from the vendored copy next to the world (static/vendor/three, MIT) instead of esm.sh, so the
-// ClawBlox viewer works without the internet. Everything else is mesa-island's code, unchanged.
+// ClawBlox viewer works without the internet. A second change (marked "AI Beach" below): each
+// player's character wears their Beach colours, via ./beach-tint.js (ours). Everything else is
+// mesa-island's code, unchanged.
 import * as THREE from '../../static/vendor/three/build/three.module.min.js'
+import { startTints, tintModel } from './beach-tint.js'
 
 const COLLIDER_DEBUG_FILL_MATERIAL = new THREE.MeshBasicMaterial({
   color: 0x00d8ff,
@@ -577,9 +580,14 @@ export function createRenderer(ctx) {
   function updateScene(obs, dt) {
     const activeIds = new Set()
     const stateByRootPartId = new Map()
+    const nameByRootPartId = new Map()   // AI Beach: whose character this is, as the Beach names them
     for (const player of obs.players || []) {
       if (typeof player.root_part_id === 'number' && typeof player.humanoid_state === 'string') {
         stateByRootPartId.set(player.root_part_id, player.humanoid_state)
+      }
+      if (typeof player.root_part_id === 'number') {
+        const beachName = player.attributes && player.attributes.BeachName
+        nameByRootPartId.set(player.root_part_id, String(beachName || player.name || ''))
       }
     }
 
@@ -623,6 +631,8 @@ export function createRenderer(ctx) {
             speed,
             humanoidState: stateByRootPartId.get(entity.id) || null,
           })
+          startTints()                                               // AI Beach
+          tintModel(obj, nameByRootPartId.get(entity.id) || null)    // AI Beach
         }
       }
     }

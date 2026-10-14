@@ -490,8 +490,9 @@ class Beach:
         return out
 
     def game_looks(self, zid: str) -> dict:
-        """Current name -> colours, for a game that tints characters with their owner's look."""
-        return {w["name"]: avatar_mod.hexes(self.avatar_record(w["id"]))
+        """Current name -> look, for a game that draws each character in its participant's look: the
+        colours as '#rrggbb' (hair, eyes, skin, outfit, trim), plus the hairstyle and accessory."""
+        return {w["name"]: avatar_mod.game_look(self.avatar_record(w["id"]))
                 for w in self.who_in(zid) if w["id"] is not None}
 
     # ------------------------------------------------------- the front door to game worlds

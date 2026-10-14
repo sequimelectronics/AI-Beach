@@ -125,6 +125,11 @@ def hexes(rec: dict) -> dict:
             "skin": SKINS[rec["skin"]], "outfit": outfit, "trim": trim}
 
 
+def game_look(rec: dict) -> dict:
+    """What a game world needs to draw the chibi in 3D: the colours, the hairstyle, the accessory."""
+    return {**hexes(rec), "preset": rec["preset"], "accessory": rec["accessory"]}
+
+
 def _a(phrase: str) -> str:
     return ("an " if phrase[0] in "aeiou" else "a ") + phrase
 

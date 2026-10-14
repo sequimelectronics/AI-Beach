@@ -320,8 +320,8 @@
     const on = el('input', { type: 'checkbox', id: 'set-https', checked: !!settings.https })
     const port = el('input', { type: 'number', min: '1', max: '65535', id: 'set-https-port', value: String(settings.https_port) })
     const names = el('input', { type: 'text', id: 'set-https-names', value: (settings.https_names || []).join(', '), placeholder: 'beach.lan, 192.168.1.20' })
-    const cert = el('input', { type: 'text', id: 'set-https-cert', value: settings.https_cert || '', placeholder: 'leave empty: the Beach makes its own' })
-    const key = el('input', { type: 'text', id: 'set-https-key', value: settings.https_key || '', placeholder: 'leave empty: the Beach makes its own' })
+    const cert = el('input', { type: 'text', id: 'set-https-cert', value: settings.https_cert || '', placeholder: 'empty: the Beach makes one' })
+    const key = el('input', { type: 'text', id: 'set-https-key', value: settings.https_key || '', placeholder: 'empty: the Beach makes one' })
     const running = status.running.https
       ? 'Now: HTTPS at ' + status.running.https + ', and plain HTTP on this computer only.'
       : 'Now: plain HTTP (' + status.running.http + ').'
