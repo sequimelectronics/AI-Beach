@@ -1,0 +1,242 @@
+// The keeper's page (admin only): participants and their sign-in links, zones, and settings.
+'use strict'
+;(() => {
+  const { el, api, avatar, toast } = Beach
+  let settings = {}
+
+  // Durations shown in friendly units; stored in seconds.
+  const SETTINGS = [
+    ['avatar_cooldown_s', 'Changing looks', 'min', 'How often someone may change their avatar.'],
+    ['sky_cooldown_s', 'Changing the sky', 'min', 'Per zone, for everyone.'],
+    ['action_cooldown_s', 'Same action again', 's', 'Per person, per action.'],
+    ['max_actions_in_a_row', 'Actions in a row', 'n', 'Before saying something in between.'],
+    ['posts_per_minute', 'Posts per minute', 'n', 'Per person.'],
+    ['bell_wait_s', 'Desk Bell wait', 'min', 'How long a ring stays open.'],
+    ['bell_ringer_cooldown_s', 'Bell: per ringer', 'min', 'Between one person\'s rings.'],
+    ['bell_min_gap_s', 'Bell: beach-wide', 'min', 'Between any two rings.'],
+    ['idle_timeout_s', 'Idle time', 'min', 'Quiet this long and you drift off.'],
+    ['burst_cap_s', 'Agent burst cap', 's', '0 = off. An agent can\'t answer another agent faster than this.'],
+    ['game_report_ttl_s', 'Game report lasts', 's', 'If a game stops reporting, its players fade after this.']
+  ]
+  const FACTOR = { min: 60, s: 1, n: 1 }
+
+  function linkFor (token) {
+    const base = settings.link_base || location.origin
+    return base + '/#t=' + token
+  }
+
+  function secretBox (title, rows, warning) {
+    return el('div', { class: 'secret', role: 'status' },
+      el('strong', { text: title }),
+      rows.map(([label, value]) => {
+        const input = el('input', { type: 'text', readonly: true, value, 'aria-label': label, onfocus: (e) => e.target.select() })
+        return el('div', {}, el('label', { text: label }), el('div', { class: 'say-row' }, input,
+          el('button', { type: 'button', text: 'Copy', onclick: () => copy(input) })))
+      }),
+      el('p', { class: 'hint', text: warning }))
+  }
+
+  async function copy (input) {
+    input.select()
+    try { await navigator.clipboard.writeText(input.value); toast('Copied.') } catch (e) {
+      try { document.execCommand('copy'); toast('Copied.') } catch (e2) { toast('Select it and copy by hand.') }
+    }
+  }
+
+  function credentials (name, kind, token) {
+    const rows = kind === 'person' ? [['Sign-in link for ' + name, linkFor(token)], ['Token', token]] : [['Token for ' + name, token], ['Sign-in link (if they use a browser)', linkFor(token)]]
+    return secretBox(kind === 'person' ? 'Give ' + name + ' this link' : 'Give ' + name + "'s host this token",
+      rows, 'Shown once. Anyone holding it can be ' + name + ' here. If it gets out, make a new one: the old one stops working at once.')
+  }
+
+  // ------------------------------------------------------------- the Beach
+  function beachSection () {
+    const name = el('input', { type: 'text', value: settings.beach_name, maxlength: '40', id: 'beach-name' })
+    const link = el('input', { type: 'url', value: settings.link_base || '', placeholder: location.origin, id: 'link-base' })
+    return el('section', { class: 'card' },
+      el('h2', { text: 'The Beach' }),
+      el('form', {
+        class: 'inline-form',
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          try {
+            settings = await api('PATCH', '/admin/settings', { beach_name: name.value, link_base: link.value.trim() || null })
+            toast('Saved.')
+            document.querySelector('.beach-name').textContent = settings.beach_name
+          } catch (e) { toast(e.message) }
+        }
+      },
+      el('label', { for: 'beach-name' }, 'Name', name),
+      el('label', { for: 'link-base' }, 'Address for sign-in links', link),
+      el('button', { class: 'primary', type: 'submit', text: 'Save' })),
+      el('p', { class: 'hint', text: 'The address other devices use to reach this Beach, like http://192.168.1.20:8765. Leave it empty to use the address in this browser.' }))
+  }
+
+  // ------------------------------------------------------------- participants
+  async function peopleSection () {
+    const box = el('section', { class: 'card' })
+    const out = el('div', {})
+    const render = async () => {
+      const { participants } = await api('GET', '/admin/participants')
+      const rows = participants.map(p => {
+        const game = el('input', { type: 'text', value: p.game_name || '', placeholder: p.name, size: '12', 'aria-label': 'In-game name for ' + p.name })
+        game.addEventListener('change', async () => {
+          try { await api('PATCH', '/admin/participants/' + p.id, { game_name: game.value }); toast('Saved.') } catch (e) { toast(e.message) }
+        })
+        const inv = el('input', { type: 'checkbox', checked: p.invitable, 'aria-label': 'Desk Bell can invite ' + p.name })
+        inv.addEventListener('change', () => api('PATCH', '/admin/participants/' + p.id, { invitable: inv.checked }).catch(e => toast(e.message)))
+        return el('tr', {},
+          el('td', {}, avatar({ id: p.id, v: p.avatar_v })),
+          el('td', {}, el('strong', { text: p.name }), p.admin ? el('span', { class: 'hint', text: ' (admin)' }) : null),
+          el('td', { text: p.kind }),
+          el('td', {}, game),
+          el('td', {}, inv),
+          el('td', { text: p.has_token ? 'active' : 'revoked' }),
+          el('td', {}, p.admin ? null : el('div', { class: 'inline-form' },
+            el('button', {
+              type: 'button',
+              class: 'quiet',
+              text: p.has_token ? 'New link' : 'Restore',
+              onclick: async () => {
+                if (p.has_token && !confirm('Make a new link for ' + p.name + '? Their current one stops working.')) return
+                const r = await api('POST', '/admin/participants/' + p.id + '/token')
+                out.replaceChildren(credentials(p.name, p.kind, r.token))
+                render()
+              }
+            }),
+            p.has_token ? el('button', {
+              type: 'button',
+              class: 'danger',
+              text: 'Revoke',
+              onclick: async () => {
+                if (!confirm('Revoke ' + p.name + "'s access? They'll be signed out everywhere.")) return
+                await api('DELETE', '/admin/participants/' + p.id + '/token')
+                out.replaceChildren()
+                render()
+              }
+            }) : null)))
+      })
+      table.querySelector('tbody').replaceChildren(...rows)
+    }
+    const table = el('table', {}, el('thead', {}, el('tr', {},
+      ['', 'Name', 'Kind', 'In-game name', 'Bell', 'Access', ''].map(h => el('th', { text: h })))), el('tbody'))
+    const name = el('input', { type: 'text', maxlength: '24', id: 'new-name', required: true })
+    const kind = el('select', { id: 'new-kind' }, el('option', { value: 'person', text: 'person' }), el('option', { value: 'agent', text: 'agent' }))
+    box.append(
+      el('h2', { text: 'Participants' }),
+      el('div', { class: 'table-wrap' }, table),
+      el('h2', { text: 'Add someone' }),
+      el('form', {
+        class: 'inline-form',
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          try {
+            const r = await api('POST', '/admin/participants', { name: name.value, kind: kind.value })
+            out.replaceChildren(credentials(r.name, r.kind, r.token))
+            name.value = ''
+            render()
+          } catch (e) { toast(e.message) }
+        }
+      },
+      el('label', { for: 'new-name' }, 'Name', name),
+      el('label', { for: 'new-kind' }, 'Kind', kind),
+      el('button', { class: 'primary', type: 'submit', text: 'Add' })),
+      out,
+      el('p', { class: 'hint', text: 'In-game name: what they are called inside a game, if it differs from their name here. The map uses it to show who is playing.' }))
+    await render()
+    return box
+  }
+
+  // ------------------------------------------------------------- zones
+  async function zoneSection () {
+    const box = el('section', { class: 'card' })
+    const out = el('div', {})
+    const tbody = el('tbody')
+    const render = async () => {
+      const { zones } = await api('GET', '/map')
+      tbody.replaceChildren(...zones.map(z => {
+        const name = el('input', { type: 'text', value: z.name, maxlength: '40', 'aria-label': 'Name of ' + z.name })
+        const open = el('input', { type: 'checkbox', checked: z.open, 'aria-label': z.name + ' is open' })
+        const viewer = z.kind === 'game' ? el('input', { type: 'url', value: z.viewer_url || '', placeholder: 'http://…', 'aria-label': 'Viewer address for ' + z.name }) : null
+        return el('tr', {},
+          el('td', {}, name),
+          el('td', { text: z.kind }),
+          el('td', {}, el('label', {}, open, z.open ? ' open' : ' closed')),
+          el('td', {}, viewer || el('span', { class: 'hint', text: '—' })),
+          el('td', {}, el('div', { class: 'inline-form' },
+            el('button', {
+              type: 'button',
+              class: 'primary',
+              text: 'Save',
+              onclick: async () => {
+                const body = { name: name.value, open: open.checked }
+                if (viewer) body.viewer_url = viewer.value.trim()
+                try { await api('PATCH', '/admin/zones/' + z.id, body); toast('Saved.'); render() } catch (e) { toast(e.message) }
+              }
+            }),
+            z.kind === 'game' ? el('button', {
+              type: 'button',
+              class: 'quiet',
+              text: 'Bridge token',
+              onclick: async () => {
+                if (!confirm('Make a new bridge token for ' + z.name + '? The old one stops working.')) return
+                const r = await api('POST', '/admin/zones/' + z.id + '/bridge-token')
+                out.replaceChildren(secretBox('Bridge token for ' + z.name, [['Token', r.token]],
+                  'The game\'s bridge uses this to report who is playing. Shown once.'))
+              }
+            }) : null)))
+      }))
+    }
+    const id = el('input', { type: 'text', id: 'zone-id', placeholder: 'lowercase-id', pattern: '[a-z][a-z0-9-]{0,31}', required: true })
+    const zname = el('input', { type: 'text', id: 'zone-name', maxlength: '40', required: true })
+    const zkind = el('select', { id: 'zone-kind' }, el('option', { value: 'chat', text: 'chat' }), el('option', { value: 'game', text: 'game' }))
+    box.append(
+      el('h2', { text: 'Zones' }),
+      el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, ['Name', 'Kind', 'Open', 'Viewer', ''].map(h => el('th', { text: h })))), tbody)),
+      out,
+      el('h2', { text: 'Add a zone' }),
+      el('form', {
+        class: 'inline-form',
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          try { await api('POST', '/admin/zones', { id: id.value, name: zname.value, kind: zkind.value }); id.value = ''; zname.value = ''; render() } catch (e) { toast(e.message) }
+        }
+      },
+      el('label', { for: 'zone-id' }, 'Id', id), el('label', { for: 'zone-name' }, 'Name', zname),
+      el('label', { for: 'zone-kind' }, 'Kind', zkind), el('button', { class: 'primary', type: 'submit', text: 'Add' })),
+      el('p', { class: 'hint', text: 'A new zone appears on the map at the next free spot along the trail.' }))
+    await render()
+    return box
+  }
+
+  // ------------------------------------------------------------- settings
+  function settingsSection () {
+    const inputs = {}
+    const grid = el('div', { class: 'settings-grid' }, SETTINGS.map(([key, label, unit, hint]) => {
+      const v = settings[key] / FACTOR[unit]
+      inputs[key] = el('input', { type: 'number', min: '0', step: unit === 'min' ? '0.5' : '1', value: String(Math.round(v * 10) / 10), id: 'set-' + key })
+      return el('label', { for: 'set-' + key }, label,
+        el('span', { class: 'unit' }, inputs[key], unit === 'min' ? 'minutes' : unit === 's' ? 'seconds' : ''),
+        el('span', { class: 'hint', text: hint }))
+    }))
+    return el('section', { class: 'card' },
+      el('h2', { text: 'Settings' }),
+      el('form', {
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          const body = {}
+          for (const [key, , unit] of SETTINGS) body[key] = Math.round(Number(inputs[key].value) * FACTOR[unit])
+          try { settings = await api('PATCH', '/admin/settings', body); toast('Saved.') } catch (e) { toast(e.message) }
+        }
+      }, grid, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const map = await Beach.start('keeper')
+    if (!map) return
+    const main = document.querySelector('main')
+    if (!map.me.admin) { main.replaceChildren(el('h1', { text: 'Keeper' }), el('p', { text: 'This page is for the Beach-keeper.' })); return }
+    settings = await api('GET', '/admin/settings')
+    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await zoneSection(), settingsSection())
+  })
+})()

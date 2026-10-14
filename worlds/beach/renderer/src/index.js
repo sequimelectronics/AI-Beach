@@ -2,7 +2,9 @@
 // (MIT, Copyright (c) 2026 nacloos; see LICENSE.clawblox and NOTICE.md in this folder).
 // Changes: beach roles (sand, sea floor, goal posts, plot markers, balls, sand pieces),
 // simple named capsules for players instead of a GLB model, and a banner for world announcements.
-import * as THREE from 'https://esm.sh/three@0.160.0'
+// three.js is vendored next to the world (static/vendor/three, MIT) and bundled in, so the viewer
+// never fetches it from the internet.
+import * as THREE from '../../static/vendor/three/build/three.module.min.js'
 
 const COLLIDER_DEBUG_FILL_MATERIAL = new THREE.MeshBasicMaterial({
   color: 0x00d8ff,
@@ -296,6 +298,40 @@ function nameColor(name) {
   return new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.55)
 }
 
+// Beach looks: the Beach bridge writes static/tints.json ({players: {name: {outfit, hair, ...}}}),
+// so each character wears its participant's colours. Guests and players without a look keep the
+// colour picked from their name. Read from this same server, never pushed.
+const playerVisuals = new Map() // name -> {body, hair}
+let tints = {}
+let tintTimer = null
+
+function applyTint(name) {
+  const v = playerVisuals.get(name)
+  if (!v) return
+  const t = tints[name]
+  const base = nameColor(name)
+  v.body.material.color.set(t && t.outfit ? t.outfit : base)
+  v.hair.material.color.set(t && t.hair ? t.hair : base.clone().multiplyScalar(0.7))
+}
+
+async function refreshTints() {
+  try {
+    const url = new URL('static/tints.json', document.baseURI)
+    url.searchParams.set('t', String(Date.now()))
+    const r = await fetch(url, { cache: 'no-store' })
+    tints = r.ok ? ((await r.json()).players || {}) : {}
+  } catch (_) {
+    tints = {}
+  }
+  for (const name of playerVisuals.keys()) applyTint(name)
+}
+
+function startTints() {
+  if (tintTimer) return
+  refreshTints()
+  tintTimer = setInterval(refreshTints, 10000)
+}
+
 function makeLabelSprite(text) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
@@ -464,12 +500,23 @@ function createEntityVisual(entity) {
 
   if (attrs.PlayerName) {
     const group = new THREE.Group()
+    const name = String(attrs.PlayerName)
     const body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.9, size[1] - 1.8, 8, 16),
-      new THREE.MeshStandardMaterial({ color: nameColor(String(attrs.PlayerName)), roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({ color: nameColor(name), roughness: 0.6 }),
     )
     body.castShadow = true
     group.add(body)
+    // A cap of "hair" on top, so the look's two main colours both show.
+    const hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.97, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.2),
+      new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 }),
+    )
+    hair.position.y = (size[1] - 1.8) / 2
+    group.add(hair)
+    playerVisuals.set(name, { body, hair })
+    applyTint(name)
+    startTints()
     const label = makeLabelSprite(String(attrs.PlayerName))
     label.position.set(0, size[1] / 2 + 0.9, 0)
     group.add(label)

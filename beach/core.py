@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
 import secrets
@@ -22,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from . import avatar as avatar_mod
 from .db import Database
 
 SANDCHAT = "sandchat"
@@ -46,6 +48,8 @@ DEFAULT_SETTINGS: dict = {
     "quiet_with_play": "The beach is quiet, but you hear sounds of play from {zones}.",
     "quiet": "The beach is quiet.",
     "notify_hook": None,             # {"command": [...]} or {"url": "http://127.0.0.1:.../..."}
+    "avatar_cooldown_s": 3600,       # how often a participant may change their look (first change free)
+    "link_base": None,               # address sign-in links use, e.g. "http://192.168.1.20:8765"
 }
 
 DEFAULT_ACTIONS: dict[str, tuple[bool, list[str]]] = {
@@ -114,6 +118,9 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN occupied_since REAL")
         if "bridge_token_hash" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN bridge_token_hash TEXT")
+        pcols = {r["name"] for r in self.db.q("PRAGMA table_info(participants)")}
+        if "game_name" not in pcols:
+            self.db.run("ALTER TABLE participants ADD COLUMN game_name TEXT")
         mcols = {r["name"] for r in self.db.q("PRAGMA table_info(messages)")}
         if "action_key" not in mcols:
             self.db.run("ALTER TABLE messages ADD COLUMN action_key TEXT")
@@ -154,6 +161,14 @@ class Beach:
             if k == "notify_hook" and v is not None:
                 from .hooks import validate_hook
                 validate_hook(v)
+            if k == "link_base" and v is not None:
+                if not isinstance(v, str) or not re.match(r"^https?://[^\s/?#]+/?$", v.strip()):
+                    raise BeachError("invalid", "link_base is an address like http://192.168.1.20:8765")
+                v = v.strip().rstrip("/")
+            if k in ("beach_name", "sandchat_name"):
+                v = self._display_name(v)
+            if k.endswith("_s") and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):
+                raise BeachError("invalid", f"{k} is a number of seconds, 0 or more")
             self.db.run("INSERT OR REPLACE INTO settings VALUES (?, ?)", (k, json.dumps(v)))
             if k == "sandchat_name":
                 self.db.run("UPDATE zones SET name = ? WHERE id = ?", (v, SANDCHAT))
@@ -191,7 +206,8 @@ class Beach:
 
     def participants(self) -> list[dict]:
         return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "admin": bool(r["is_admin"]),
-                 "invitable": bool(r["invitable"]), "has_token": r["token_hash"] is not None}
+                 "invitable": bool(r["invitable"]), "has_token": r["token_hash"] is not None,
+                 "game_name": r["game_name"], "avatar_v": self.avatar_version(r["id"])}
                 for r in self.db.q("SELECT * FROM participants ORDER BY id")]
 
     def authenticate(self, token: str | None) -> Participant | None:
@@ -212,10 +228,95 @@ class Beach:
         self.db.run("UPDATE participants SET token_hash = ? WHERE id = ?", (_hash(token), pid))
         return token
 
-    def update_participant(self, pid: int, invitable: bool | None = None) -> Participant:
+    def update_participant(self, pid: int, invitable: bool | None = None,
+                           game_name: str | None = None) -> Participant:
+        self.participant(pid)
         if invitable is not None:
             self.db.run("UPDATE participants SET invitable = ? WHERE id = ?", (int(invitable), pid))
+        if game_name is not None:
+            g = game_name.strip()
+            if g and not re.match(r"^[A-Za-z0-9 _.-]{1,40}$", g):
+                raise BeachError("invalid", "an in-game name is 1-40 letters, digits, spaces, '.', '_' or '-'")
+            self.db.run("UPDATE participants SET game_name = ? WHERE id = ?", (g or None, pid))
         return self.participant(pid)
+
+    @staticmethod
+    def _display_name(v) -> str:
+        v = " ".join(str(v or "").split())
+        if not 1 <= len(v) <= 40:
+            raise BeachError("invalid", "names are 1-40 characters")
+        return v
+
+    # ---------------------------------------------------------------- avatars
+
+    def avatar(self, pid: int) -> dict:
+        """A participant's look: {record, set_at (None = never chosen), describe}."""
+        self.participant(pid)
+        row = self.db.one("SELECT record, set_at FROM avatars WHERE participant_id = ?", (pid,))
+        rec = json.loads(row["record"]) if row else avatar_mod.default_record(pid)
+        return {"avatar": rec, "chosen": row is not None, "set_at": row["set_at"] if row else None,
+                "describe": avatar_mod.describe(rec), "next_change_in": self._avatar_wait(pid)}
+
+    def avatar_record(self, pid: int) -> dict:
+        row = self.db.one("SELECT record FROM avatars WHERE participant_id = ?", (pid,))
+        return json.loads(row["record"]) if row else avatar_mod.default_record(pid)
+
+    def avatar_version(self, pid: int) -> int:
+        row = self.db.one("SELECT set_at FROM avatars WHERE participant_id = ?", (pid,))
+        return int(row["set_at"] * 1000) if row else 0
+
+    def _avatar_wait(self, pid: int) -> float:
+        """Seconds until this participant may change their own look again (0 = now)."""
+        row = self.db.one("SELECT set_at, set_by_admin FROM avatars WHERE participant_id = ?", (pid,))
+        if not row or row["set_by_admin"]:
+            return 0
+        left = self.setting("avatar_cooldown_s") - (self.now() - row["set_at"])
+        return round(left, 1) if left > 0 else 0
+
+    def set_avatar(self, pid: int, changes: dict, by_admin: bool = False) -> dict:
+        """Change a look. Participants: first change free, then once per avatar_cooldown_s.
+        The keeper (admin) can set anyone's look without waiting."""
+        current = self.avatar_record(pid)
+        try:
+            rec = avatar_mod.validate(changes, current)
+        except avatar_mod.AvatarError as e:
+            raise BeachError("invalid", str(e)) from None
+        if not by_admin:
+            wait = self._avatar_wait(pid)
+            if wait > 0:
+                raise BeachError("cooldown", f"looks can change once per {self.setting('avatar_cooldown_s') // 60} "
+                                 f"min so people can tell who's who; try again in about {math.ceil(wait / 60)} min",
+                                 retry_after=wait)
+        self.db.run("INSERT OR REPLACE INTO avatars VALUES (?, ?, ?, ?)",
+                    (pid, json.dumps(rec), self.now(), int(by_admin)))
+        return self.avatar(pid)
+
+    def who_in(self, zid: str) -> list[dict]:
+        """Who is in a zone, for the map: participants present (chat) or matched players (game).
+
+        A game reports in-game names; each is matched to a participant by their in-game name,
+        or else their Beach name (ignoring case). Unmatched players are shown as guests.
+        """
+        z = self.zone(zid)
+        if z["kind"] == "chat":
+            return [{"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id)}
+                    for p in self.present(zid)]
+        out = []
+        for n in self.players_in(zid):
+            row = self.db.one("SELECT * FROM participants WHERE game_name = ? COLLATE NOCASE", (n,)) or \
+                self.db.one("SELECT * FROM participants WHERE name = ? AND (game_name IS NULL OR game_name = '')",
+                            (n,))
+            if row:
+                out.append({"id": row["id"], "name": row["name"], "kind": row["kind"], "game_name": n,
+                            "v": self.avatar_version(row["id"])})
+            else:
+                out.append({"id": None, "name": n, "kind": "guest", "game_name": n, "v": 0})
+        return out
+
+    def game_looks(self, zid: str) -> dict:
+        """In-game name -> colours, for a game that tints characters with their owner's look."""
+        return {w["game_name"]: avatar_mod.hexes(self.avatar_record(w["id"]))
+                for w in self.who_in(zid) if w["id"] is not None}
 
     # ------------------------------------------------------------------ zones
 
@@ -232,6 +333,7 @@ class Beach:
             raise BeachError("invalid", "kind must be 'chat' or 'game'")
         if self.db.one("SELECT 1 FROM zones WHERE id = ?", (zid,)):
             raise BeachError("conflict", f"zone '{zid}' already exists")
+        name = self._display_name(name)
         self.db.run("INSERT INTO zones (id, name, kind, open, viewer_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                     (zid, name, kind, int(open), viewer_url, self.now()))
         return self.zone(zid)
@@ -240,6 +342,7 @@ class Beach:
                     viewer_url: str | None = None):
         self.zone(zid)
         if name is not None:
+            name = self._display_name(name)
             self.db.run("UPDATE zones SET name = ? WHERE id = ?", (name, zid))
             if zid == SANDCHAT:
                 self.db.run("INSERT OR REPLACE INTO settings VALUES ('sandchat_name', ?)", (json.dumps(name),))
@@ -686,8 +789,10 @@ class Beach:
 
     def bell_invites(self, pid: int) -> list[dict]:
         """A participant's own invitations (including their own declines), newest first."""
-        return [dict(r) for r in self.db.q(
-            "SELECT i.bell_id, i.status, i.responded_at, b.closes_at, p.name AS rung_by FROM invites i"
+        now = self.now()
+        return [{**dict(r), "open": r["bell_status"] == "open" and r["closes_at"] > now} for r in self.db.q(
+            "SELECT i.bell_id, i.status, i.responded_at, b.closes_at, b.status AS bell_status, b.zone_id AS zone,"
+            " p.name AS rung_by FROM invites i"
             " JOIN bells b ON b.id = i.bell_id JOIN participants p ON p.id = b.ringer_id"
             " WHERE i.participant_id = ? ORDER BY i.bell_id DESC LIMIT 20", (pid,))]
 
@@ -708,7 +813,8 @@ class Beach:
             else:
                 here = len(self.players_in(z["id"]))
             out.append({"id": z["id"], "name": z["name"], "kind": z["kind"], "open": bool(z["open"]),
-                        "here": here, "viewer_url": z["viewer_url"], "sky": z["sky"]})
+                        "here": here, "viewer_url": z["viewer_url"], "sky": z["sky"],
+                        "created_at": z["created_at"]})
         return out
 
     def zone_map_text(self) -> str:

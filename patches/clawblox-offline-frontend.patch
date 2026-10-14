@@ -1,0 +1,105 @@
+Clawblox offline frontend: load three.js and lucide from the world, not from esm.sh
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0.
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch
+changes a few lines of its code and is offered under the same MIT terms.
+Written for AI Beach. Apply in a Clawblox checkout and rebuild:
+
+    git apply /path/to/AI-Beach/patches/clawblox-offline-frontend.patch
+    cargo build --release
+
+What it changes (URLs only, no behaviour):
+- frontend_runtime/dist/index.html: the import map points "three", "three/" and
+  "lucide" at ./static/vendor/... (served by Clawblox from the world's static/ folder)
+  instead of https://esm.sh/.
+- frontend_runtime/dist/main.js: imports "lucide" through the import map instead of
+  a hard-coded esm.sh URL.
+- frontend_runtime/dist/sdk/three.js: loads GLTFLoader and SkeletonUtils through the
+  import map ("three/examples/jsm/...") instead of esm.sh.
+- src/bin/cli.rs: the same import map for the replay view, and drops two modulepreload
+  links to esm.sh.
+
+A world then needs static/vendor/three and static/vendor/lucide (the beach world in
+AI Beach ships them; see worlds/beach/static/vendor/README.md). A world without them
+gets a blank viewer with this patch, as it would offline without it.
+
+Not changed: the starter-renderer template that `clawblox init` writes (cli.rs, the
+renderer_js string) still imports three.js from esm.sh; new worlds should import a
+vendored copy as worlds/beach/renderer/src/index.js does.
+
+diff --git a/frontend_runtime/dist/index.html b/frontend_runtime/dist/index.html
+index ba6412c..0077581 100644
+--- a/frontend_runtime/dist/index.html
++++ b/frontend_runtime/dist/index.html
+@@ -13,9 +13,9 @@
+     <script type="importmap">
+       {
+         "imports": {
+-          "three": "https://esm.sh/three@0.160.0",
+-          "three/": "https://esm.sh/three@0.160.0/",
+-          "lucide": "https://esm.sh/lucide@0.468.0"
++          "three": "./static/vendor/three/build/three.module.min.js",
++          "three/": "./static/vendor/three/",
++          "lucide": "./static/vendor/lucide/lucide.mjs"
+         }
+       }
+     </script>
+diff --git a/frontend_runtime/dist/main.js b/frontend_runtime/dist/main.js
+index 8fc373c..c765a39 100644
+--- a/frontend_runtime/dist/main.js
++++ b/frontend_runtime/dist/main.js
+@@ -5,7 +5,7 @@ import {
+   Wrench,
+   CircleAlert,
+   User,
+-} from "https://esm.sh/lucide@0.468.0"
++} from "lucide"
+ 
+ function icon(iconNode, size = 14) {
+   const el = createLucideElement(iconNode)
+diff --git a/frontend_runtime/dist/sdk/three.js b/frontend_runtime/dist/sdk/three.js
+index 6de62cc..1b836a3 100644
+--- a/frontend_runtime/dist/sdk/three.js
++++ b/frontend_runtime/dist/sdk/three.js
+@@ -1211,7 +1211,7 @@ export function createSharedModelRenderer(THREE, scene, options = {}) {
+   async function ensureModelModules() {
+     if (moduleCache.loader) return moduleCache
+     if (!moduleCache.pending) {
+-      moduleCache.pending = import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js')
++      moduleCache.pending = import('three/examples/jsm/loaders/GLTFLoader.js')
+         .then((loaderMod) => {
+           moduleCache.loader = new loaderMod.GLTFLoader()
+           return moduleCache
+@@ -1609,8 +1609,8 @@ export function createModelEntityController(THREE, options = {}) {
+     if (moduleCache.loader && moduleCache.cloneFn) return moduleCache
+     if (!moduleCache.pending) {
+       moduleCache.pending = Promise.all([
+-        import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
+-        import('https://esm.sh/three@0.160.0/examples/jsm/utils/SkeletonUtils.js'),
++        import('three/examples/jsm/loaders/GLTFLoader.js'),
++        import('three/examples/jsm/utils/SkeletonUtils.js'),
+       ]).then(([loaderMod, skeletonMod]) => {
+         moduleCache.loader = new loaderMod.GLTFLoader()
+         moduleCache.cloneFn = skeletonMod.clone
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+index f0e2b7d..9359819 100644
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -4561,14 +4561,12 @@ fn replay_view_response(base_path: &str) -> axum::response::Response {
+     <script type="importmap">
+       {{
+         "imports": {{
+-          "three": "https://esm.sh/three@0.160.0",
+-          "three/": "https://esm.sh/three@0.160.0/",
+-          "lucide": "https://esm.sh/lucide@0.468.0"
++          "three": "./static/vendor/three/build/three.module.min.js",
++          "three/": "./static/vendor/three/",
++          "lucide": "./static/vendor/lucide/lucide.mjs"
+         }}
+       }}
+     </script>
+-    <link rel="modulepreload" crossorigin href="https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js" />
+-    <link rel="modulepreload" crossorigin href="https://esm.sh/three@0.160.0/examples/jsm/utils/SkeletonUtils.js" />
+     <style>
+       html, body, #app, .stage-wrap {{
+         width: 100%;

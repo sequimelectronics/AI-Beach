@@ -7,7 +7,7 @@ commit `8be90a0`:
 
 | File | Derived from | What changed |
 |---|---|---|
-| `renderer/src/index.js` | `worlds/mesa-island/renderer/src/index.js` | Beach visuals (sand, sea floor, goal posts, plot markers, balls, sand pieces with a flag shape), named capsules for players instead of a GLB model, and a banner for world announcements. Mesa-island's code paths are otherwise kept. |
+| `renderer/src/index.js` | `worlds/mesa-island/renderer/src/index.js` | Beach visuals (sand, sea floor, goal posts, plot markers, balls, sand pieces with a flag shape), named capsules for players instead of a GLB model (tinted with each player's Beach look when the bridge provides `static/tints.json`), a banner for world announcements, and three.js imported from the vendored copy instead of esm.sh. Mesa-island's code paths are otherwise kept. |
 | `renderer/package.json` | `worlds/mesa-island/renderer/package.json` | Package name only. |
 
 `main.lua` is new; its Pickup / Place / Throw handlers follow the same pattern as
@@ -15,3 +15,6 @@ mesa-island's `main.lua`.
 
 Clawblox's licence text is in `renderer/LICENSE.clawblox`. No Clawblox assets
 (e.g. `player.glb`) are included.
+
+`static/vendor/` holds unchanged (or bundled) copies of three.js 0.160.0 (MIT) and
+lucide 0.468.0 (ISC), each with its licence; see `static/vendor/README.md`.

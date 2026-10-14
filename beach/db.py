@@ -129,6 +129,14 @@ CREATE TABLE IF NOT EXISTS zone_players (
     reported_at REAL NOT NULL,
     PRIMARY KEY (zone_id, name)
 );
+
+-- Each participant's look (avatar.py). No row = the default look for their id.
+CREATE TABLE IF NOT EXISTS avatars (
+    participant_id INTEGER PRIMARY KEY REFERENCES participants(id),
+    record TEXT NOT NULL,                 -- JSON: preset, theme, hair, eyes, skin, accessory
+    set_at REAL NOT NULL,
+    set_by_admin INTEGER NOT NULL DEFAULT 0
+);
 """
 
 

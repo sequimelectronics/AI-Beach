@@ -8,15 +8,29 @@ A game zone's bridge reports its players with that zone's bridge token.
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from . import agent
-from .core import SANDCHAT, Beach, BeachError, Participant
+from . import avatar as avatar_mod
+from .core import SANDCHAT, SKIES, Beach, BeachError, Participant
 from .tokens import make_counter
+
+WEB = Path(__file__).parent / "web"
+PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html"}
+# The pages load nothing from anywhere else, and nothing else may frame them.
+WEB_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
+                               "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-cache",
+}
 
 STATUS = {"invalid": 400, "not_present": 409, "closed": 409, "conflict": 409, "forbidden": 403,
           "not_found": 404, "rate_limited": 429, "cooldown": 429}
@@ -80,10 +94,30 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     def health():
         return {"ok": True}
 
-    @app.get("/", response_class=PlainTextResponse)
-    def index():
-        return (f"{beach.setting('beach_name')}\n\nThis is the Beach's door. Present your token as "
-                "'Authorization: Bearer <token>'. Start with GET /zones and GET /agent/turn.\n")
+    def page(name: str):
+        return FileResponse(WEB / name, media_type="text/html", headers=WEB_HEADERS)
+
+    @app.get("/")
+    def index(request: Request):
+        # Browsers get the zone map; everything else gets a line about the door.
+        if "text/html" in request.headers.get("accept", ""):
+            return page("index.html")
+        return PlainTextResponse(
+            f"{beach.setting('beach_name')}\n\nThis is the Beach's door. Present your token as "
+            "'Authorization: Bearer <token>'. Start with GET /zones and GET /agent/turn.\n")
+
+    for route, name in PAGES.items():
+        if route != "/":
+            app.add_api_route(route, (lambda n: lambda: page(n))(name), methods=["GET"],
+                              include_in_schema=False)
+
+    class _Static(StaticFiles):
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            resp.headers.update(WEB_HEADERS)
+            return resp
+
+    app.mount("/web", _Static(directory=WEB), name="web")
 
     # ----------------------------------------------------------- everyone
     @app.get("/me")
@@ -138,6 +172,80 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
     def respond(bid: int, body: dict = Body(...), p: Participant = Depends(who)):
         return beach.respond_bell(p.id, bid, str(body.get("answer", "")))
 
+    @app.get("/map")
+    def zone_map(p: Participant = Depends(who)):
+        """The zone map for the browser: zones with who is in each."""
+        zones = []
+        for z in beach.zone_map():
+            zones.append({**z, "who": beach.who_in(z["id"]) if z["open"] else []})
+        return {"beach": beach.setting("beach_name"), "zones": zones, "skies": list(SKIES),
+                "me": {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
+                       "v": beach.avatar_version(p.id)}}
+
+    @app.get("/zones/{zid}/here")
+    def here(zid: str, _: Participant = Depends(who)):
+        z = beach.zone(zid)
+        return {"zone": zid, "name": z["name"], "kind": z["kind"], "open": bool(z["open"]), "sky": z["sky"],
+                "here": beach.who_in(zid)}
+
+    @app.get("/actions")
+    def action_names(_: Participant = Depends(who)):
+        return {"actions": [{"name": k, "targeted": v["targeted"]} for k, v in beach.action_templates().items()]}
+
+    # ----------------------------------------------------------- avatars
+    @app.get("/avatar/card")
+    def avatar_card(_: Participant = Depends(who)):
+        text = avatar_mod.card(beach.setting("avatar_cooldown_s"))
+        return {"text": text, "tokens": counter(text), "token_method": counter.method}
+
+    @app.get("/avatar/options")
+    def avatar_options(_: Participant = Depends(who)):
+        return avatar_mod.options()
+
+    @app.post("/avatar/preview")
+    def avatar_preview(body: dict = Body(...), p: Participant = Depends(who)):
+        """Draw a look without saving it (for the builder). Validates like a real change."""
+        try:
+            rec = avatar_mod.validate(body, beach.avatar_record(p.id))
+        except avatar_mod.AvatarError as e:
+            raise BeachError("invalid", str(e)) from None
+        return {"avatar": rec, "describe": avatar_mod.describe(rec), "svg": avatar_mod.svg(rec),
+                "colours": avatar_mod.hexes(rec)}
+
+    @app.get("/me/avatar")
+    def my_avatar(p: Participant = Depends(who)):
+        return beach.avatar(p.id)
+
+    @app.put("/me/avatar")
+    def set_my_avatar(body: dict = Body(...), p: Participant = Depends(who)):
+        return beach.set_avatar(p.id, body)
+
+    @app.get("/me/avatar/describe")
+    def describe_me(p: Participant = Depends(who)):
+        return {"text": beach.avatar(p.id)["describe"]}
+
+    def _image(pid: int, fmt: str, size: int):
+        rec = beach.avatar_record(pid)
+        if fmt == "png":
+            return Response(avatar_mod.png(rec, size), media_type="image/png",
+                            headers={"Cache-Control": "private, max-age=60"})
+        return Response(avatar_mod.svg(rec, size), media_type="image/svg+xml",
+                        headers={"Cache-Control": "private, max-age=60",
+                                 "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"})
+
+    @app.get("/me/avatar.{fmt}")
+    def my_image(fmt: str, size: int = 96, p: Participant = Depends(who)):
+        if fmt not in ("svg", "png"):
+            raise HTTPException(404, "avatar.svg or avatar.png")
+        return _image(p.id, fmt, size)
+
+    @app.get("/avatars/{pid}.{fmt}")
+    def someone_image(pid: int, fmt: str, size: int = 96, _: Participant = Depends(who)):
+        if fmt not in ("svg", "png"):
+            raise HTTPException(404, "<id>.svg or <id>.png")
+        beach.participant(pid)
+        return _image(pid, fmt, size)
+
     @app.get("/agent/turn")
     def turn(zone: str = SANDCHAT, p: Participant = Depends(who)):
         return agent.turn_bundle(beach, p.id, zone, counter=counter)
@@ -152,7 +260,9 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
         names = body.get("players", [])
         if not isinstance(names, list):
             raise HTTPException(400, "players must be a list of names")
-        return {"zone": zid, "playing": beach.report_players(zid, names)}
+        n = beach.report_players(zid, names)
+        # The colours of each matched player's look, for a game that tints its characters.
+        return {"zone": zid, "playing": n, "looks": beach.game_looks(zid)}
 
     # ----------------------------------------------------------- keeper (admin)
     @app.get("/admin/participants")
@@ -167,8 +277,14 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
 
     @app.patch("/admin/participants/{pid}")
     def patch_participant(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
-        p = beach.update_participant(pid, invitable=body.get("invitable"))
+        g = body.get("game_name")
+        p = beach.update_participant(pid, invitable=body.get("invitable"),
+                                     game_name=None if g is None else str(g))
         return {"id": p.id, "name": p.name, "invitable": p.invitable}
+
+    @app.put("/admin/participants/{pid}/avatar")
+    def keeper_sets_avatar(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
+        return beach.set_avatar(pid, body, by_admin=True)
 
     @app.post("/admin/participants/{pid}/token")
     def new_token(pid: int, _: Participant = Depends(admin)):
@@ -195,7 +311,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0) -> FastAPI:
 
     @app.patch("/admin/zones/{zid}")
     def patch_zone(zid: str, body: dict = Body(...), _: Participant = Depends(admin)):
-        z = beach.update_zone(zid, body.get("name"), body.get("open"), body.get("viewer_url"))
+        o = body.get("open")
+        z = beach.update_zone(zid, body.get("name"), None if o is None else bool(o), body.get("viewer_url"))
         return {k: z[k] for k in ("id", "name", "kind", "open", "viewer_url")}
 
     @app.post("/admin/zones/{zid}/bridge-token")
