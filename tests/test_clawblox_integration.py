@@ -104,5 +104,63 @@ class LiveAdapterTest(unittest.TestCase):
         self.assertEqual(len(a.history().splitlines()), 3)
 
 
+BEACH_DIR = Path(__file__).resolve().parents[1] / "worlds" / "beach"
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveBeachTest(unittest.TestCase):
+    """Starts worlds/beach from this repo on a temp copy and plays a short round."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="beach-it-")
+        world = Path(cls.tmp) / "beach"
+        shutil.copytree(BEACH_DIR, world, ignore=shutil.ignore_patterns(".clawblox", "dist", ".build.lock"))
+        port = _free_port()
+        cls.url = f"http://127.0.0.1:{port}"
+        cls.proc = subprocess.Popen([BIN, "run", str(world), "--port", str(port)],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(120):
+            try:
+                urllib.request.urlopen(cls.url + "/api.md", timeout=1).read()
+                break
+            except OSError:
+                time.sleep(0.5)
+        else:
+            cls.tearDownClass()
+            raise unittest.SkipTest("beach server did not start")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.proc.terminate()
+        cls.proc.wait(timeout=10)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_beach_round(self):
+        a = ClawbloxAdapter(self.url, "Sandy")
+        b = ClawbloxAdapter(self.url, "Pebble")
+        b.look()  # adapters join lazily: bring Pebble onto the beach first
+        self.assertIn("castle plots", a.map_card())
+        self.assertEqual(a.rules.world, "beach")
+        self.assertIn("Pebble", a.look())  # named even if Pebble is behind Sandy
+        # Kick the soccer ball from just south of it.
+        self.assertIn("arrived", a.act("MoveTo", {"position": [0, 0, -2.2]}))
+        res = a.act("Kick", {"direction": [0, 0, 1], "power": 0.5})
+        self.assertTrue(res.startswith("Kicked the soccer ball N"), res)
+        # Build two blocks in plot 2 and see the castle summary.
+        a.act("MoveTo", {"position": [-6.5, 0, -6]})
+        for y in (0.55, 1.55):
+            self.assertTrue(a.act("Mold", {"shape": "block"}).startswith("Molded"))
+            res = a.act("Place", {"position": [-9.5, y, -6]})
+            self.assertTrue(res.startswith("Placed"), res)
+        time.sleep(1.0)
+        self.assertRegex(a.look(), r"sandcastle in plot 2 .*: 2 pieces, 2 high")
+        # Chat both ways.
+        a.say("hello Pebble")
+        self.assertIn("Sandy: hello Pebble", b.hear())
+        bundle = a.turn_bundle()
+        self.assertLess(bundle["total_tokens"], 8000)
+
+
 if __name__ == "__main__":
     unittest.main()

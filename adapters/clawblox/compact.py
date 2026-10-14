@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 
 from .world import (
-    MESA_RULES, Entity, Player, Rules, Snapshot, direction_to, dist3, fmt_vec,
+    MESA_RULES, Entity, Player, Rules, Snapshot, beach_layout, direction_to, dist3, fmt_vec,
     held_object, r1, resting_on, standing_on,
 )
 
@@ -44,6 +44,10 @@ def players_in_radius(snap: Snapshot, names_by_entity: dict[int, str]) -> list[P
     for e in snap.entities:
         if not e.is_character or e is mine or e.id in seen_entities:
             continue
+        # Worlds that label characters (the beach sets PlayerName) are always named.
+        label = e.attrs.get("PlayerName")
+        if isinstance(label, str) and label:
+            names_by_entity[e.id] = label
         out.append(Player(name=names_by_entity.get(e.id, "unknown player"), pos=e.pos,
                           in_view=False, entity_id=e.id))
     out.sort(key=lambda p: dist3(p.pos, snap.me))
@@ -63,6 +67,10 @@ def _object_row(e: Entity, snap: Snapshot, statics: list[Entity]) -> dict:
         "on": on.name if on else None,
         "on_top": r1(on.top) if on else None,
     }
+
+
+def _plural(kind: str) -> str:
+    return kind if kind.endswith("s") else kind + "s"
 
 
 def summarize_rest(rows: list[dict]) -> str:
@@ -91,17 +99,64 @@ def summarize_rest(rows: list[dict]) -> str:
             lo, hi = min(ds), max(ds)
             span = f"{lo:.0f}" if round(lo) == round(hi) else f"{lo:.0f}-{hi:.0f}"
             spans.append(f"{len(ds)} {d} {span}")
-        parts.append(f"{len(group)} {kind}s ({', '.join(spans)})")
+        parts.append(f"{len(group)} {_plural(kind)} ({', '.join(spans)})")
     return "; ".join(parts)
+
+
+def castles_from(snap: Snapshot, layout: dict | None) -> list[dict]:
+    """One entry per plot that has pieces in it, from the world's plot folders."""
+    plots = {p["id"]: p for p in (layout or {}).get("plots", [])}
+    out = []
+    for f in snap.folders.values():
+        a = f.attrs
+        if "Plot" not in a or not a.get("Pieces"):
+            continue
+        pid = int(a["Plot"])
+        p = plots.get(pid)
+        pos = (p["x"], 0.0, p["z"]) if p else None
+        out.append({
+            "plot": pid,
+            "pos": [r1(v) for v in pos] if pos else None,
+            "dist": r1(dist3(pos, snap.me)) if pos else None,
+            "dir": direction_to(snap.me, pos) if pos else None,
+            "pieces": int(a.get("Pieces", 0)),
+            "height": int(a.get("Height", 0)),
+            "flag": bool(a.get("HasFlag")),
+            "standing": bool(a.get("Settled", True)),
+            "falls": int(a.get("Falls", 0)),
+        })
+    out.sort(key=lambda c: c["plot"])
+    return out
 
 
 def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[int, str],
                  rules: Rules = MESA_RULES, near: int = NEAR_COUNT) -> dict:
-    """The compact view as a plain dict (encoded as text or JSON below)."""
+    """The compact view as a plain dict (encoded as text or JSON below).
+
+    Pieces of a castle standing in a plot are described once, as the castle;
+    they are listed one by one only when they are within your reach.
+    """
     held = held_object(snap, rules)
-    objs = [e for e in snap.objects if held is None or e.id != held.id]
-    rows = sorted((_object_row(e, snap, statics) for e in objs), key=lambda r: r["dist"])
+    layout = beach_layout(snap)
+    shore = (layout or {}).get("shore_x")
+    objs = []
+    for e in snap.objects:
+        if held is not None and e.id == held.id:
+            continue
+        in_plot = e.attrs.get("InPlot")
+        if in_plot is not None and dist3(e.pos, snap.me) > rules.pickup_reach:
+            continue  # part of a castle, described below
+        objs.append(e)
+    rows = []
+    for e in objs:
+        r = _object_row(e, snap, statics)
+        r["sea"] = shore is not None and e.pos[0] > shore
+        plot = e.attrs.get("InPlot")
+        r["plot"] = int(plot) if isinstance(plot, (int, float)) else None
+        rows.append(r)
+    rows.sort(key=lambda r: r["dist"])
     on = standing_on(snap, statics, rules)
+    score = snap.folders.get("Score")
     return {
         "tick": snap.tick,
         "me": [r1(v) for v in snap.me],
@@ -111,12 +166,25 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
         "near": rows[:near],
         "rest": summarize_rest(rows[near:]) if len(rows) > near else "",
         "rest_count": max(0, len(rows) - near),
+        "castles": castles_from(snap, layout),
+        "score": ({k.lower(): int(v) for k, v in score.attrs.items()} if score else None),
         "players": [
             {"name": p.name, "dist": r1(dist3(p.pos, snap.me)), "dir": direction_to(snap.me, p.pos),
              "in_view": p.in_view}
             for p in players_in_radius(snap, names_by_entity)
         ],
     }
+
+
+def castle_text(c: dict) -> str:
+    where = f" {fmt_vec(c['pos'])} {c['dist']:g} {c['dir']}" if c["pos"] else ""
+    bits = [f"{c['pieces']} piece{'s' if c['pieces'] != 1 else ''}", f"{c['height']} high"]
+    if c["flag"]:
+        bits.append("with a flag")
+    bits.append("standing" if c["standing"] else "still moving")
+    if c["falls"]:
+        bits.append(f"has fallen {c['falls']} time{'s' if c['falls'] != 1 else ''}")
+    return f"sandcastle in plot {c['plot']}{where}: {', '.join(bits)}"
 
 
 def view_text(v: dict) -> str:
@@ -132,11 +200,19 @@ def view_text(v: dict) -> str:
         lines.append(f"objects (nearest {len(v['near'])} of {total}; name kind pos dist dir):")
         for r in v["near"]:
             on = f" on {r['on']} (top {r['on_top']:g})" if r["on"] else ""
+            if r.get("sea"):
+                on += " in the sea"
+            if r.get("plot") is not None:
+                on += f" in plot {r['plot']}"
             lines.append(f"{r['name']} {r['kind']} {fmt_vec(r['pos'])} {r['dist']:g} {r['dir']}{on}")
     else:
         lines.append("objects: none in range")
     if v["rest"]:
         lines.append(f"farther: {v['rest']}")
+    for c in v.get("castles") or []:
+        lines.append(castle_text(c))
+    if v.get("score"):
+        lines.append("score: " + ", ".join(f"{k} {n}" for k, n in sorted(v["score"].items())))
     if v["players"]:
         ps = []
         for p in v["players"]:
@@ -155,6 +231,9 @@ def view_json(v: dict) -> str:
         "near": [[r["name"], r["kind"], r["pos"], r["dist"], r["dir"]] + ([r["on"]] if r["on"] else [])
                  for r in v["near"]],
         "farther": v["rest"],
+        "castles": [[c["plot"], c["pos"], c["dist"], c["dir"], c["pieces"], c["height"], c["flag"],
+                     c["standing"], c["falls"]] for c in v.get("castles") or []],
+        "score": v.get("score"),
         "players": [[p["name"], p["dist"], p["dir"], p["in_view"]] for p in v["players"]],
     }
     return json.dumps(doc, separators=(",", ":"))
@@ -228,4 +307,35 @@ def map_card_text(snap: Snapshot, rules: Rules = MESA_RULES) -> str:
             things.append(f"{c[0].name} ({c[0].kind}){where} at {r1(cx):g},{r1(cz):g}")
     if things:
         lines.append("movable things at the start: " + "; ".join(things))
+    return "\n".join(lines)
+
+
+def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
+    """Map card for worlds that publish their layout (the beach)."""
+    sand = layout["sand"]
+    walls = layout.get("walls", {})
+    lines = ["MAP (beach; x = east, z = north, y = up; distances in studs)"]
+    lines.append(f"sand: flat, y={sand['top_y']:g}, x {sand['x'][0]:g}..{sand['x'][1]:g}, "
+                 f"z {sand['z'][0]:g}..{sand['z'][1]:g}")
+    lines.append(f"sea: east of x={layout['shore_x']:g} is shallow water; balls that go in drift back "
+                 f"to the sand after a few seconds. Invisible walls at x={walls.get('x', ['?', '?'])[0]}"
+                 f" and x={walls.get('x', ['?', '?'])[1]}, z=+/-{walls.get('z', ['?', 32])[1]}")
+    goals = layout.get("goals", [])
+    if goals:
+        g = goals[0]
+        lines.append("goals: " + "; ".join(
+            f"{x['name']} goal line z={x['line_z']:g} between posts x={x['x'][0]:g}..{x['x'][1]:g}"
+            for x in goals) + f" (bar {g['height']:g} high). A ball over the line between the posts "
+            f"scores; it returns to the centre {fmt_vec((layout['centre'][0], 0, layout['centre'][1]))}")
+    plots = layout.get("plots", [])
+    if plots:
+        size = plots[0]["half"] * 2
+        lines.append(f"castle plots ({size:g}x{size:g}; a castle only counts inside one): " + "; ".join(
+            f"{p['id']} at {r1(p['x']):g},{r1(p['z']):g}" for p in plots))
+    spawns = layout.get("spawns", [])
+    if spawns:
+        lines.append("spawn points: " + " ".join(f"{s[0]:g},{s[1]:g}" for s in spawns))
+    balls = [e for e in snap.objects if e.attrs.get("IsBall")]
+    if balls:
+        lines.append("balls now: " + "; ".join(f"{b.kind} {fmt_vec(b.pos)}" for b in balls))
     return "\n".join(lines)

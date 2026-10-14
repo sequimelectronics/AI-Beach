@@ -1,0 +1,21 @@
+name = "Beach"
+description = "A small beach: kick balls about, play beach soccer, build sandcastles that fall if built badly."
+max_players = 8
+afk_timeout = 300
+
+[scripts]
+main = "main.lua"
+api = "API.md"
+
+[renderer]
+name = "Beach Renderer"
+mode = "module"
+api_version = 1
+entry = "dist/renderer.bundle.js"
+capabilities = ["three-sdk"]
+
+[observation]
+radius = 80
+
+[speech]
+mode = "global"

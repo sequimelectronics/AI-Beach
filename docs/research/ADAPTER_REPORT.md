@@ -64,7 +64,7 @@ How the adapter deals with each problem job 01 found:
 | Held state is hidden | Inferred from the object pinned at your position + (0, 3.5, 0); shown as `holding Block_4`. |
 | Sticky `LastActionResult` | Read only for Pickup/Place/Throw (which set it in the same tick), and only when its prefix matches the action. MoveTo, Jump and Stop are judged from positions. A mismatch is reported as "the world reported no result". |
 | MoveTo has no arrival or blocked signal | MoveTo polls until arrived, stopped (no progress for ~1 s), fell, or timed out. When stopped it says why: `stuck at a ledge 2 high (SmallPlateau, top 2) - retry the same MoveTo with "jump": true`, or "invisible wall", or "too high to jump". |
-| `other_players` depends on facing | Every character within the radius is listed. Names are learned from the server's in-view list and remembered by entity id, so a player behind you shows as `Bob 11.7 W (not in view)`. |
+| `other_players` depends on facing | Every character within the radius is listed. Names are learned from the server's in-view list and remembered by entity id, so a player behind you shows as `Drift 11.7 W (not in view)`. |
 | Chat `after=` drops same-second messages | `hear()` polls without `after`, dedupes by message id and orders by the numeric id. A test covers six messages sent in the same second. |
 
 ## Budget table (Gemma 4 E4B tokens)

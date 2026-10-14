@@ -35,7 +35,7 @@ def main() -> int:
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
 
-    a = ClawbloxAdapter(args.base, "Alice")
+    a = ClawbloxAdapter(args.base, "Coral")
     save("spawn.json", a.full_look())
     a.act("MoveTo", {"position": [12.6, 0, -1.3]})
     save("at_pile.json", a.full_look())
@@ -54,9 +54,9 @@ def main() -> int:
     print(a.act("Throw", {"direction": [1, -0.3, 0], "speed": 10}))
     save("after_rock_throw.json", a.full_look())
 
-    # Two players: Bob joins at spawn; Alice walks to spawn and faces him,
-    # then walks past so he is behind her (outside the server's view cone).
-    b = ClawbloxAdapter(args.base, "Bob")
+    # Two players: Drift joins at spawn; Coral walks to spawn and faces Drift,
+    # then walks past so Drift is behind Coral (outside the server's view cone).
+    b = ClawbloxAdapter(args.base, "Drift")
     b.look()
     print(a.act("MoveTo", {"position": [8, 0, 0]}))
     print(a.act("MoveTo", {"position": [4, 0, 0]}))
@@ -66,8 +66,8 @@ def main() -> int:
 
     # Chat: several messages, some in the same second.
     for i in range(3):
-        a.say(f"alice message {i}")
-        b.say(f"bob message {i}")
+        a.say(f"coral message {i}")
+        b.say(f"drift message {i}")
     status, text = a.t.request("GET", "/chat/messages?limit=100", None, a.session)
     save("chat_messages.json", text)
     return 0

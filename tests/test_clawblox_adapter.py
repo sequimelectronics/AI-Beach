@@ -63,7 +63,7 @@ class FakeTransport:
 
 
 def adapter_for(transport) -> ClawbloxAdapter:
-    return ClawbloxAdapter(transport=transport, name="Alice", sleep=lambda s: None,
+    return ClawbloxAdapter(transport=transport, name="Coral", sleep=lambda s: None,
                            counter=approx_counter(), session="s")
 
 
@@ -192,16 +192,16 @@ class PlayerTests(unittest.TestCase):
     def test_player_in_view_is_named(self):
         s = snap("two_players_in_view.json")
         players = players_in_radius(s, {})
-        self.assertEqual([(p.name, p.in_view) for p in players], [("Bob", True)])
+        self.assertEqual([(p.name, p.in_view) for p in players], [("Drift", True)])
 
     def test_player_behind_is_still_listed(self):
         names: dict[int, str] = {}
-        players_in_radius(snap("two_players_in_view.json"), names)  # learn Bob's entity id
+        players_in_radius(snap("two_players_in_view.json"), names)  # learn Drift's entity id
         s = snap("two_players_behind.json")
         self.assertEqual(s.named_players, [])  # the server's list is empty here
         players = players_in_radius(s, names)
-        self.assertEqual([(p.name, p.in_view) for p in players], [("Bob", False)])
-        self.assertIn("Bob 11.7 W (not in view)", view_text(compact_view(s, s.statics, names)))
+        self.assertEqual([(p.name, p.in_view) for p in players], [("Drift", False)])
+        self.assertIn("Drift 11.7 W (not in view)", view_text(compact_view(s, s.statics, names)))
 
     def test_never_seen_player_is_unknown(self):
         players = players_in_radius(snap("two_players_behind.json"), {})
@@ -217,15 +217,15 @@ class ChatTests(unittest.TestCase):
         a = adapter_for(FakeTransport([load("spawn.json")], chat=chat))
         first = a.hear().splitlines()
         self.assertEqual(len(first), 6)  # all six share one created_at second
-        self.assertEqual(first[0], "Alice: alice message 0")
-        self.assertEqual(first[1], "Bob: bob message 0")
+        self.assertEqual(first[0], "Coral: coral message 0")
+        self.assertEqual(first[1], "Drift: drift message 0")
         self.assertEqual(a.hear(), "(no new chat)")
 
     def test_hear_orders_by_numeric_id(self):
         chat = load("chat_messages.json")
         chat["messages"] = list(reversed(chat["messages"]))
         a = adapter_for(FakeTransport([load("spawn.json")], chat=chat))
-        self.assertTrue(a.hear().startswith("Alice: alice message 0"))
+        self.assertTrue(a.hear().startswith("Coral: coral message 0"))
 
     def test_say_validates_length(self):
         a = adapter_for(FakeTransport([load("spawn.json")]))
@@ -297,7 +297,7 @@ class ActTests(unittest.TestCase):
     def test_place_failures(self):
         raw = load("holding_block.json")
         a_raw = copy.deepcopy(raw)
-        for code, expect in (("PlaceFailed:Occupied", "y = surface top + 0.6"),
+        for code, expect in (("PlaceFailed:Occupied", "half the object's height + 0.6"),
                              ("PlaceFailed:OutOfRange", "reach is 7"),
                              ("PlaceFailed:EmptyHands", "not holding anything")):
             t = FakeTransport([a_raw], on_input=lambda b, c=code: with_result(raw, c))

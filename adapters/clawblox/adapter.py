@@ -14,29 +14,35 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
-from .compact import compact_view, map_card_text, view_text
+from .compact import beach_map_card_text, compact_view, map_card_text, view_text
 from .tokens import TokenCounter, approx_counter
 from .transport import HttpError, HttpTransport, join_path
 from .world import (
-    MESA_RULES, Entity, Rules, Snapshot, direction_to, dist3, fmt_vec, hdist,
-    held_object, obstacle_ahead, parse_observation, r1, standing_on,
+    MESA_RULES, Entity, Rules, Snapshot, announcements, beach_layout, detect_rules, direction_to,
+    dist3, fmt_vec, hdist, held_object, obstacle_ahead, parse_observation, r1, standing_on,
 )
 
-ACTIONS = ("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw")
+ACTIONS = MESA_RULES.actions  # mesa-island's; each world's list lives in its Rules
 CHAT_MAX = 500
 UPRIGHT = {"yaw": 0, "pitch": 0, "roll": 0}
-PLAY_CARD_PATH = Path(__file__).with_name("PLAY_CARD.md")
+PACKAGE_DIR = Path(__file__).parent
+PLAY_CARD_PATH = PACKAGE_DIR / MESA_RULES.play_card
 
-# Tool definitions the host can hand to the model (game-side only).
-ACTION_DEFINITIONS = [
-    {"name": "look", "args": {}, "returns": "compact view of you, nearby objects and players"},
-    {"name": "act", "args": {"type": "|".join(ACTIONS), "data": "object; see the card"},
-     "returns": "one line"},
-    {"name": "say", "args": {"text": f"string, 1-{CHAT_MAX} chars"}, "returns": "one line"},
-    {"name": "hear", "args": {}, "returns": "new chat lines 'name: text'"},
-    {"name": "history", "args": {"n": "int, default 20"}, "returns": "your last n actions and results"},
-    {"name": "full_look", "args": {}, "returns": "the raw observation JSON (large)"},
-]
+
+def action_definitions(rules: Rules = MESA_RULES) -> list[dict]:
+    """Tool definitions the host can hand to the model (game-side only)."""
+    return [
+        {"name": "look", "args": {}, "returns": "compact view of you, nearby objects and players"},
+        {"name": "act", "args": {"type": "|".join(rules.actions), "data": "object; see the card"},
+         "returns": "one line"},
+        {"name": "say", "args": {"text": f"string, 1-{CHAT_MAX} chars"}, "returns": "one line"},
+        {"name": "hear", "args": {}, "returns": "new chat lines 'name: text' (World: = the world)"},
+        {"name": "history", "args": {"n": "int, default 20"}, "returns": "your last n actions and results"},
+        {"name": "full_look", "args": {}, "returns": "the raw observation JSON (large)"},
+    ]
+
+
+ACTION_DEFINITIONS = action_definitions(MESA_RULES)
 
 
 def _vec(v) -> tuple | None:
@@ -66,7 +72,7 @@ class HistoryEntry:
 
 class ClawbloxAdapter:
     def __init__(self, base_url: str | None = None, name: str = "agent", *,
-                 transport=None, rules: Rules = MESA_RULES,
+                 transport=None, rules: Rules | None = None,
                  counter: TokenCounter | None = None, sleep=time.sleep,
                  poll_interval: float = 0.25, session: str | None = None):
         if transport is None:
@@ -75,7 +81,8 @@ class ClawbloxAdapter:
             transport = HttpTransport(base_url)
         self.t = transport
         self.name = name
-        self.rules = rules
+        self._rules_fixed = rules is not None
+        self.rules = rules or MESA_RULES  # detected from the first observation unless given
         self.counter = counter or approx_counter()
         self.sleep = sleep
         self.poll = poll_interval
@@ -87,9 +94,12 @@ class ClawbloxAdapter:
         self._map_card: str | None = None
         self._history: deque[HistoryEntry] = deque(maxlen=200)
         self._chat_seen: set[str] = set()
-        self._chat_log: deque[str] = deque(maxlen=200)
+        self._chat_log: list[tuple[str, bool]] = []  # (line, said by me), oldest first
+        self._hear_cursor = 0  # hear() returns lines after this index
         self._bundles = 0
         self.last_snapshot: Snapshot | None = None
+        self._events_seen: set[int] = set()
+        self._world_lines: list[str] = []  # every world announcement seen, oldest first
 
     # --- plumbing -------------------------------------------------------------
 
@@ -120,9 +130,25 @@ class ClawbloxAdapter:
         self.last_snapshot = snap
         for e in snap.statics:
             self._statics[e.name] = e
-        if self._first_snap is None:
+        first = self._first_snap is None
+        if first:
             self._first_snap = snap
+            if not self._rules_fixed:
+                self.rules = detect_rules(snap)
+        # World announcements (goals, falls) travel as replicated events; older
+        # ones from before you arrived are skipped.
+        for eid, text in announcements(snap):
+            if eid in self._events_seen:
+                continue
+            self._events_seen.add(eid)
+            if not first:
+                line = f"World: {text}"
+                self._world_lines.append(line)
+                self._chat_log.append((line, False))
         return snap
+
+    def _new_world_lines(self, since: int) -> list[str]:
+        return [line[len("World: "):] for line in self._world_lines[since:]]
 
     def _observe(self) -> Snapshot:
         self.join()
@@ -157,7 +183,11 @@ class ClawbloxAdapter:
         if self._map_card is None:
             if self._first_snap is None:
                 self._observe()
-            self._map_card = map_card_text(self._first_snap, self.rules)
+            layout = beach_layout(self._first_snap)
+            if layout:
+                self._map_card = beach_map_card_text(self._first_snap, layout, self.rules)
+            else:
+                self._map_card = map_card_text(self._first_snap, self.rules)
         return self._map_card
 
     def history(self, n: int = 20) -> str:
@@ -177,11 +207,11 @@ class ClawbloxAdapter:
         msg_id = json.loads(body).get("id")
         if msg_id:
             self._chat_seen.add(msg_id)
-        self._chat_log.append(f"{self.name}: {text}")
+        self._chat_log.append((f"{self.name}: {text}", True))
         return f"said: {text}"
 
-    def hear(self) -> str:
-        """New chat lines since the last hear(), oldest first, deduped by id.
+    def _poll_chat(self) -> None:
+        """Fetch chat into the running log, deduped by message id.
 
         Polls without the server's `after=` cursor: it compares 1-second
         timestamps with a strict '>' and drops same-second messages.
@@ -189,22 +219,31 @@ class ClawbloxAdapter:
         self.join()
         text = self._call("GET", "/chat/messages?limit=100")
         msgs = sorted(json.loads(text).get("messages") or [], key=lambda m: _num_id(m.get("id")))
-        new = []
         for m in msgs:
             mid = m.get("id")
             if mid in self._chat_seen:
                 continue
             self._chat_seen.add(mid)
-            line = f"{m.get('agent_name', '?')}: {m.get('content', '')}"
-            self._chat_log.append(line)
-            new.append(line)
+            self._chat_log.append((f"{m.get('agent_name', '?')}: {m.get('content', '')}", False))
+
+    def hear(self) -> str:
+        """Chat lines (and "World:" announcements) since your last hear(), oldest first.
+
+        Your own messages are not repeated back. turn_bundle() reads the same
+        log but does not move this cursor.
+        """
+        self._poll_chat()
+        new = [line for line, mine in self._chat_log[self._hear_cursor:] if not mine]
+        self._hear_cursor = len(self._chat_log)
         return "\n".join(new) if new else "(no new chat)"
 
     def act(self, type: str, data: dict | None = None) -> str:
         data = dict(data or {})
         label = f"{type} {json.dumps(data, separators=(',', ':'))}" if data else type
-        if type not in ACTIONS:
-            return self._record(label, f"unknown action '{type}'; use one of {', '.join(ACTIONS)}")
+        if self._first_snap is None:
+            self._observe()  # learn which world this is before validating
+        if type not in self.rules.actions:
+            return self._record(label, f"unknown action '{type}'; use one of {', '.join(self.rules.actions)}")
         handler = getattr(self, f"_act_{type.lower()}")
         try:
             result = handler(data)
@@ -215,8 +254,11 @@ class ClawbloxAdapter:
     # --- turn bundle ------------------------------------------------------------
 
     def tools_text(self) -> str:
-        card = PLAY_CARD_PATH.read_text() if PLAY_CARD_PATH.exists() else ""
-        defs = json.dumps(ACTION_DEFINITIONS, separators=(",", ":"))
+        if self._first_snap is None:
+            self._observe()
+        path = PACKAGE_DIR / self.rules.play_card
+        card = path.read_text() if path.exists() else ""
+        defs = json.dumps(action_definitions(self.rules), separators=(",", ":"))
         return f"{card.strip()}\n\nTOOLS {defs}"
 
     def turn_bundle(self, n_actions: int = 8, n_chat: int = 6, include_map: bool | None = None) -> dict:
@@ -232,9 +274,9 @@ class ClawbloxAdapter:
             include_map = first
         view = self.look()
         state = f"{self.map_card()}\n\nNOW\n{view}" if include_map else f"NOW\n{view}"
-        self.hear()
+        self._poll_chat()
         acts = list(self._history)[-n_actions:]
-        chat = list(self._chat_log)[-n_chat:]
+        chat = [line for line, _ in self._chat_log[-n_chat:]]
         recent = "RECENT ACTIONS\n" + ("\n".join(h.line() for h in acts) if acts else "none yet")
         recent += "\nRECENT CHAT\n" + ("\n".join(chat) if chat else "none")
         pieces = {"tools": self.tools_text(), "state": state, "recent": recent}
@@ -379,7 +421,7 @@ class ClawbloxAdapter:
             d = dist3(pre.me, target)
             return (f"Pickup failed: {what} is {r1(d):g} away, reach is {self.rules.pickup_reach:g} "
                     f"- move closer")
-        if code == "PickupFailed:NoBlock":
+        if code in ("PickupFailed:NoBlock", "PickupFailed:NoObject"):
             if cand is None:
                 return "Pickup failed: there is nothing to pick up nearby"
             return (f"Pickup failed: nothing within {self.rules.pickup_match:g} of {fmt_vec(target)}; "
@@ -420,7 +462,8 @@ class ClawbloxAdapter:
                     f"reach is {self.rules.place_reach:g}")
         if code == "PlaceFailed:Occupied":
             return (f"Place failed: something already fills {fmt_vec(target)}; "
-                    f"try 1-2 away, and y = surface top + {self.rules.place_clearance:g} for a block")
+                    f"try 1-2 away, with y = the surface's top + half the object's height"
+                    f" + {self.rules.place_clearance:g}")
         if code == "PlaceFailed:InvalidRotation":
             return 'Place failed: "rotation" must be {"yaw": deg, "pitch": deg, "roll": deg}'
         return f"Place failed: {code.split(':', 1)[-1]}"
@@ -483,6 +526,100 @@ class ClawbloxAdapter:
         if new:
             made = f"; {len(new)} new block{'s' if len(new) != 1 else ''} appeared ({_span_names(new)})"
         return f"Threw {name} {heading} at speed {eff:g}{capped}{landed}{made}"
+
+
+    # --- beach actions ----------------------------------------------------------
+
+    def _follow(self, name: str, max_wait: float) -> tuple[Entity | None, Snapshot, bool]:
+        """Watch an object until it stops (or max_wait). Returns (obj, snap, still_moving)."""
+        last, still, waited = None, 0, 0.0
+        snap = self.last_snapshot
+        obj = None
+        while waited < max_wait:
+            self.sleep(self.poll)
+            waited += self.poll
+            snap = self._observe()
+            obj = snap.object(name)
+            if obj is None:
+                return None, snap, False
+            if last is not None and dist3(obj.pos, last) < 0.05:
+                still += 1
+                if still >= 2:
+                    return obj, snap, False
+            else:
+                still = 0
+            last = obj.pos
+        return obj, snap, True
+
+    def _act_kick(self, data: dict) -> str:
+        direction = _vec(data.get("direction"))
+        if direction is None or math.hypot(direction[0], direction[2]) < 1e-3:
+            return 'Kick rejected: "direction" must be [x, y, z] with some x or z (y lifts the ball)'
+        try:
+            power = float(data.get("power", 0.5))
+        except (TypeError, ValueError):
+            return 'Kick rejected: "power" must be a number from 0 to 1'
+        clipped = ""
+        if not 0 <= power <= 1:
+            clipped = f" (power {power:g} clipped to {min(max(power, 0), 1):g})"
+            power = min(max(power, 0.0), 1.0)
+        pre = self._observe()
+        snap = self._send("Kick", {"direction": list(direction), "power": power})
+        code = snap.last_action_result or ""
+        if not code.startswith("Kick"):
+            return f"Kick: the world reported no result (still '{code}'); look to check"
+        if code == "KickFailed:NoBallInReach":
+            ballz = [e for e in pre.objects if e.attrs.get("IsBall")]
+            near = min(ballz, key=lambda e: hdist(e.pos, pre.me), default=None)
+            if near is None:
+                return "Kick failed: there is no ball nearby"
+            return (f"Kick failed: no ball within {self.rules.kick_reach:g} of you; nearest is the {near.kind} "
+                    f"{r1(hdist(near.pos, pre.me)):g} {direction_to(pre.me, near.pos)} at {fmt_vec(near.pos)} "
+                    f"- walk up to it first")
+        if code != "KickSuccess":
+            return f"Kick failed: {code.split(':', 1)[-1]}"
+        name = snap.raw.get("player", {}).get("attributes", {}).get("LastKicked")
+        ball = pre.object(name) if name else None
+        kind = ball.kind if ball else "ball"
+        mark = len(self._world_lines)
+        heading = direction_to((0, 0, 0), direction)
+        obj, snap, moving = self._follow(name, 4.0) if name else (None, snap, False)
+        tail = ""
+        news = self._new_world_lines(mark)
+        scored = any("Goal" in n for n in news)
+        if obj is not None and ball is not None and not scored:
+            layout = beach_layout(snap) or {}
+            shore = layout.get("shore_x")
+            where = "is still rolling" if moving else "stopped"
+            tail = f"; it {where} {r1(hdist(obj.pos, ball.pos)):g} away at {fmt_vec(obj.pos)}"
+            if shore is not None and obj.pos[0] > shore:
+                tail += " in the sea (it will drift back)"
+        if news:
+            tail += "; " + " ".join(news)
+            if scored:
+                tail += " The ball goes back to the centre."
+        return f"Kicked the {kind} {heading} (power {power:g}){clipped}{tail}"
+
+    def _act_mold(self, data: dict) -> str:
+        shape = str(data.get("shape", "")).lower()
+        if shape not in self.rules.piece_shapes:
+            return f'Mold rejected: "shape" must be one of {", ".join(self.rules.piece_shapes)}'
+        pre = self._observe()
+        snap = self._send("Mold", {"shape": shape})
+        code = snap.last_action_result or ""
+        if not code.startswith("Mold"):
+            return f"Mold: the world reported no result (still '{code}'); look to check"
+        if code == "MoldSuccess":
+            name = snap.raw.get("player", {}).get("attributes", {}).get("LastMolded", "")
+            return f"Molded a {shape} piece {name} (now holding it)".replace("  ", " ")
+        if code == "MoldFailed:HandsFull":
+            held = held_object(pre, self.rules)
+            what = held.name if held else "something"
+            return f"Mold failed: already holding {what} - Place or Throw it first"
+        if code == "MoldFailed:TooManyPieces":
+            return (f"Mold failed: the beach already has {self.rules.max_pieces} sand pieces; "
+                    f"pick one up and reuse it")
+        return f"Mold failed: {code.split(':', 1)[-1]}"
 
 
 def _natural(name: str):

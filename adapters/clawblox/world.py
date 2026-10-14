@@ -26,26 +26,52 @@ CHARACTER_PART = "HumanoidRootPart"
 
 @dataclass(frozen=True)
 class Rules:
-    """World constants the model would otherwise only learn by failing.
+    """Per-world constants the model would otherwise only learn by failing.
 
-    Values are mesa-island's, read from worlds/mesa-island/main.lua at
-    Clawblox 8be90a0 and measured in AI-Beach job 01/02.
+    One Rules object per world; nothing else in the adapter hard-codes them.
+    Defaults are mesa-island's (read from worlds/mesa-island/main.lua at
+    Clawblox 8be90a0 and measured in AI-Beach jobs 01/02).
     """
 
-    pickup_reach: float = 6.0        # PICKUP_RANGE, from your centre
-    place_reach: float = 7.0         # PLACE_RANGE
+    world: str = "mesa-island"
+    actions: tuple = ("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw")
+    play_card: str = "PLAY_CARD.md"  # relative to adapters/clawblox/
+    pickup_reach: float = 6.0        # from your centre
+    place_reach: float = 7.0
     pickup_match: float = 1.5        # target point must be this close to the object
-    hold_offset_y: float = 3.5       # HOLD_OFFSET: held object floats above your centre
-    throw_speed_cap: float = 10.0    # MAX_THROW_SPEED (silently clamped)
+    hold_offset_y: float = 3.5       # held object floats this far above your centre
+    throw_speed_cap: float = 10.0    # silently clamped by the world
     half_height: float = 2.5         # character root part is 2 x 5 x 2
     radius: float = 1.0
-    jump_rise: float = 6.5           # measured: y 2.55 -> 9.05
+    jump_rise: float = 6.5           # measured on mesa-island: y 2.55 -> 9.05
     climb_runup: float = 4.0         # measured: jump+move works from 3-5 back, fails from 7
     arrive_tolerance: float = 2.0
-    place_clearance: float = 0.6     # block half-size 0.375 + margin; tumbled blocks need more (adapter places upright)
+    place_clearance: float = 0.6     # mesa: block half-size 0.375 + margin (adapter places upright)
+    kick_reach: float = 0.0          # 0 = no Kick action in this world
+    piece_shapes: tuple = ()         # shapes Mold accepts ("" = no Mold action)
+    max_pieces: int = 0
 
 
 MESA_RULES = Rules()
+
+# worlds/beach/main.lua (CONFIG, BALLS, PIECES). Keep in step with that file.
+BEACH_RULES = Rules(
+    world="beach",
+    actions=("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw", "Kick", "Mold"),
+    play_card="beach/PLAY_CARD.md",
+    pickup_reach=6.0,
+    place_reach=7.0,
+    pickup_match=1.5,
+    hold_offset_y=3.5,
+    throw_speed_cap=10.0,
+    jump_rise=2.2,                   # measured on the beach (gravity 35): y 2.55 -> 4.77; nothing needs climbing
+    place_clearance=0.05,            # the beach checks overlap with a 90% probe: rest a piece exactly on what's below
+    kick_reach=3.0,
+    piece_shapes=("block", "tower", "wall", "flag"),
+    max_pieces=40,
+)
+
+RULES_BY_WORLD = {r.world: r for r in (MESA_RULES, BEACH_RULES)}
 
 
 def r1(v: float) -> float:
@@ -87,12 +113,17 @@ class Entity:
     attrs: dict
     shape: str | None = None
     transparency: float | None = None
+    entity_type: str | None = None
     aabb_min: tuple | None = None
     aabb_max: tuple | None = None
 
     @property
     def role(self) -> str | None:
         return self.attrs.get("RenderRole")
+
+    @property
+    def is_folder(self) -> bool:
+        return self.entity_type == "folder"
 
     @property
     def is_character(self) -> bool:
@@ -104,14 +135,16 @@ class Entity:
 
     @property
     def is_movable(self) -> bool:
-        return not self.is_character and (self.is_pickup or not self.anchored)
+        return not self.is_folder and not self.is_character and (self.is_pickup or not self.anchored)
 
     @property
     def is_static(self) -> bool:
-        return not self.is_character and not self.is_movable
+        return not self.is_folder and not self.is_character and not self.is_movable
 
     @property
     def kind(self) -> str:
+        if isinstance(self.attrs.get("Kind"), str):
+            return self.attrs["Kind"]  # the world names it (e.g. "soccer ball")
         if self.role in KIND_BY_ROLE:
             return KIND_BY_ROLE[self.role]
         if self.role:
@@ -149,6 +182,7 @@ def parse_entity(raw: dict) -> Entity:
         attrs=raw.get("attributes") or {},
         shape=raw.get("shape"),
         transparency=raw.get("transparency"),
+        entity_type=raw.get("entity_type"),
         aabb_min=tuple(aabb["min"]) if "min" in aabb else None,
         aabb_max=tuple(aabb["max"]) if "max" in aabb else None,
     )
@@ -173,6 +207,11 @@ class Snapshot:
     entities: list[Entity]
     named_players: list[dict]  # raw other_players (view-cone filtered by the server)
     raw: dict = field(repr=False, default_factory=dict)
+    events: list[dict] = field(repr=False, default_factory=list)  # recent replicated events
+
+    @property
+    def folders(self) -> dict[str, Entity]:
+        return {e.name: e for e in self.entities if e.is_folder}
 
     @property
     def objects(self) -> list[Entity]:
@@ -213,7 +252,42 @@ def parse_observation(raw: dict) -> Snapshot:
         entities=[parse_entity(e) for e in (raw.get("world") or {}).get("entities") or []],
         named_players=list(raw.get("other_players") or []),
         raw=raw,
+        events=list(raw.get("recent_events") or []),
     )
+
+
+def detect_rules(snap: Snapshot) -> Rules:
+    """Pick the Rules for the world this observation came from."""
+    layout = beach_layout(snap)
+    if layout and layout.get("world") in RULES_BY_WORLD:
+        return RULES_BY_WORLD[layout["world"]]
+    return MESA_RULES
+
+
+def beach_layout(snap: Snapshot) -> dict | None:
+    """The beach world publishes its (Static, hidden) scenery as JSON on a folder."""
+    import json
+    f = snap.folders.get("BeachMap")
+    if f is None or not isinstance(f.attrs.get("Layout"), str):
+        return None
+    try:
+        return json.loads(f.attrs["Layout"])
+    except ValueError:
+        return None
+
+
+def announcements(snap: Snapshot) -> list[tuple[int, str]]:
+    """World messages (goals, falling castles) as (event id, text)."""
+    out = []
+    for ev in snap.events:
+        if ev.get("name") != "Announce":
+            continue
+        payload = ev.get("payload")
+        if isinstance(payload, list) and payload:
+            payload = payload[0]
+        if isinstance(payload, dict) and payload.get("text"):
+            out.append((int(ev.get("id", 0)), str(payload["text"])))
+    return out
 
 
 # --- inferences -------------------------------------------------------------

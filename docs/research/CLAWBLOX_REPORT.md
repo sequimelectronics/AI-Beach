@@ -239,9 +239,9 @@ turns off `/observe` entirely, so it isn't usable for a text-only model.
 
 A copy of mesa-island with `max_players = 4`. Nothing else changed.
 
-- Two clients (`Alice`, `Bob`) joined. Each saw the other in `other_players` (by name and
-  id), and Alice's entity list had 37 entries (36 plus Bob's `HumanoidRootPart`).
-- Chat went both ways: Alice and Bob each read `[("Alice","hi Bob, it's Alice"), ("Bob","hi Alice, Bob here")]`.
+- Two clients (`Coral`, `Drift`) joined. Each saw the other in `other_players` (by name and
+  id), and Coral's entity list had 37 entries (36 plus Drift's `HumanoidRootPart`).
+- Chat went both ways: Coral and Drift each read `[("Coral","hi Drift, it's Coral"), ("Drift","hi Coral, Drift here")]`.
 - Both players spawn on the exact same point, `(0, 5, 0)`; `main.lua` has one spawn position.
 
 Caveats found:

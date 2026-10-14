@@ -28,8 +28,16 @@ game.act("MoveTo", {"position": [12.6, 0, -1.3]})   # -> "MoveTo: arrived at (12
 | `map_card()` | a one-time description of the fixed scenery: island, ocean, walls, platforms with heights, landmarks |
 | `full_look()` | the raw observation JSON, unchanged. It's there whenever the model wants everything; it costs about 14–17k tokens. |
 
-`adapters/clawblox/PLAY_CARD.md` is the action reference: 373 tokens with the Gemma 4 E4B
-tokenizer.
+Each world has its own `Rules` (reach distances, actions, play card) in `world.py`:
+`MESA_RULES` for mesa-island and `BEACH_RULES` for AI-Beach's own `worlds/beach`. The adapter
+picks one from the first observation; pass `rules=` to fix it. The play cards are the action
+references a model gets while playing: `PLAY_CARD.md` (mesa-island, 373 tokens) and
+`beach/PLAY_CARD.md` (beach, 400 tokens), both counted with the Gemma 4 E4B tokenizer.
+
+On the beach, `act` also takes **Kick** `{"direction", "power"}` and **Mold** `{"shape"}`.
+A castle in a plot is described as one line (`sandcastle in plot 1 ...: 4 pieces, 3 high,
+with a flag, standing`). Its pieces are listed only when they're within your reach. World
+announcements (goals, falls) arrive in `hear()` and in `recent` as `World: ...` lines.
 
 ## The hand-off contract
 
@@ -50,17 +58,32 @@ Options: `turn_bundle(game, n_actions=8, n_chat=6, include_map=None)`.
 
 ### Sizes
 
-Measured with the Gemma 4 E4B tokenizer (`google/gemma-4-E4B-it`) over three scripted 50-turn
-sessions on mesa-island. Details are in `docs/research/ADAPTER_REPORT.md`.
+Measured with the Gemma 4 E4B tokenizer (`google/gemma-4-E4B-it`).
+
+**mesa-island**: three scripted 50-turn sessions; details in `docs/research/ADAPTER_REPORT.md`.
 
 | Piece | Typical (median) | Worst case seen |
 |---|---|---|
-| tools | 519 (constant) | 519 |
+| tools | 526 (constant; 519 before job 03 widened the `hear` description) | 526 |
 | state | about 320 (look only) | about 800 (map card + look, first turn or on request) |
 | recent | about 280 | about 990 (8 actions + six 500-character chat lines) |
 | **total** | **about 1,130** | **about 2,300** (stress case) |
 
-The raw observation for the same turns is about 13.7k–17.2k tokens.
+The raw observation for the same turns is about 13.7k–17.2k tokens. A job-03 regression run on
+mesa-island (after the beach changes) still completed the task: median 1,138, max 1,316.
+
+**beach**: three scripted 62-turn sessions plus a two-player run; details in
+`docs/research/BEACH_WORLD_REPORT.md`.
+
+| Piece | Typical (median) | Worst case seen |
+|---|---|---|
+| tools | 555 (constant) | 555 |
+| state | about 190 (look only) | about 580 (map card + look next to a finished castle with all balls) |
+| recent | about 300 | about 370 |
+| **total** | **about 1,040** | **about 1,480** |
+
+Four castles of 9 pieces each cost 143 tokens as castle lines, against 884 if every piece
+were listed.
 
 ## Tests
 
@@ -72,7 +95,8 @@ CLAWBLOX_BIN=/path/to/clawblox CLAWBLOX_WORLD=/path/to/worlds/mesa-island \
 
 ## Limits
 
-- The world constants in `world.Rules` (reach 6/7, match 1.5, throw cap 10, jump rise, run-up) are
-  mesa-island's. Another world needs its own `Rules` and play card.
+- Each world needs its own `Rules` and play card (mesa-island and beach exist).
 - MoveTo walks in a straight line; there's no pathfinding around platforms.
-- A player who has never been inside your view cone shows as "unknown player" until they are.
+- On mesa-island, a player who has never been inside your view cone shows as "unknown player".
+  The beach labels every character with its player's name, so there everyone is named.
+- `turn_bundle()` reads the chat log without using up what `hear()` returns.

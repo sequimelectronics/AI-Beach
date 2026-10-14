@@ -276,7 +276,7 @@ def summarize(log: list[dict], kinds=("observe", "input")) -> dict:
 
 
 def run_multi(base: str) -> dict:
-    a, b = Client(base, "Alice"), Client(base, "Bob")
+    a, b = Client(base, "Coral"), Client(base, "Drift")
     a.join()
     b.join()
     time.sleep(0.5)
@@ -292,8 +292,8 @@ def run_multi(base: str) -> dict:
         # Does each character also show up as a world entity?
         "alice_entity_names": sorted({e["name"] for e in oa.get("world", {}).get("entities", [])}),
     }
-    a.chat("hi Bob, it's Alice")
-    b.chat("hi Alice, Bob here")
+    a.chat("hi Drift, it's Coral")
+    b.chat("hi Coral, Drift here")
     res["alice_reads"] = [(m["agent_name"], m["content"]) for m in a.chat_messages()]
     res["bob_reads"] = [(m["agent_name"], m["content"]) for m in b.chat_messages()]
 
