@@ -40,8 +40,9 @@
     else play(z)
   }
 
-  // A game world: the Beach joins it for you under your Beach name, then opens the viewer, whose
-  // chat panel plays as you. If the world isn't connected to the Beach, you can still watch.
+  // A game world: one character per person. Play puts yours in (the Beach joins under your Beach
+  // name, or hands back the character you already have there) and opens the viewer, whose chat
+  // panel plays as you. If the world isn't connected to the Beach, you can still watch.
   async function play (z) {
     try {
       const r = await Beach.api('POST', '/zones/' + encodeURIComponent(z.id) + '/play')
@@ -50,6 +51,30 @@
       if (z.viewer_url) { Beach.toast(e.message + ' Opening it to watch.'); setTimeout(() => { location.href = z.viewer_url }, 1500) }
       else Beach.toast(e.message)
     }
+  }
+
+  // Leave takes your character out of the world; the button turns back to Play.
+  async function leave (z, button) {
+    if (button) button.disabled = true
+    try {
+      await Beach.api('DELETE', '/zones/' + encodeURIComponent(z.id) + '/play')
+      Beach.toast('You left ' + z.name + '.')
+    } catch (e) { Beach.toast(e.message) }
+    refresh()
+  }
+
+  // The Play / Leave button for a game zone: only ever one of the two, showing whether you have a
+  // character there now.
+  function playButton (z, cls) {
+    if (z.kind !== 'game' || !z.open) return null
+    const b = el('button', {
+      class: cls + (z.playing ? ' leaving' : ''),
+      type: 'button',
+      text: z.playing ? 'Leave' : 'Play',
+      'aria-label': (z.playing ? 'Leave ' : 'Play in ') + z.name,
+      onclick: (ev) => { ev.stopPropagation(); if (z.playing) leave(z, ev.currentTarget); else play(z) }
+    })
+    return b
   }
 
   function crowd (z) {
@@ -80,7 +105,8 @@
     el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : z.kind] || ICON.chat), z.name),
     el('span', { class: 'count', text: countText(z) }))
     sign.querySelector('svg').setAttribute('class', 'kind-icon')
-    const m = el('div', { class: 'zone' + (z.open ? '' : ' closed'), 'data-zone': z.id }, crowd(z), sign)
+    const m = el('div', { class: 'zone' + (z.open ? '' : ' closed'), 'data-zone': z.id }, crowd(z), sign,
+      playButton(z, 'play-pill'))
     m.style.left = (slot[0] * 100) + '%'
     m.style.top = (slot[1] * 100) + '%'
     return m
@@ -93,7 +119,9 @@
         el('strong', { text: z.name }),
         el('span', { class: 'hint', text: (z.kind === 'game' ? 'game · ' : '') + countText(z) })),
       names.length ? el('div', { class: 'names', text: names.join(', ') }) : null,
-      z.open ? el('div', { class: 'row' }, el('button', { class: 'primary', type: 'button', onclick: () => go(z), text: z.tables ? 'Play' : z.kind === 'chat' ? 'Go in' : 'Watch' })) : null)
+      z.open ? el('div', { class: 'row' }, z.kind === 'game' && !z.tables
+        ? [playButton(z, 'primary'), z.playing ? el('button', { type: 'button', onclick: () => play(z), text: 'Open' }) : null]
+        : el('button', { class: 'primary', type: 'button', onclick: () => go(z), text: z.tables ? 'Play' : 'Go in' })) : null)
   }
 
   function order (zones) {

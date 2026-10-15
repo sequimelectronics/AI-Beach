@@ -178,7 +178,8 @@ class Bridge:
         items: dict[str, object] = {"policy": {"guests": bool(door.get("guests"))}}
         for g in door.get("grants", []):
             items[f"grant:{int(g['user_id'])}"] = {"claims": [
-                {"name": c["name"], "joined_as": c["joined_as"], "revoked": bool(c.get("revoked"))}
+                {"name": c["name"], "joined_as": c["joined_as"], "revoked": bool(c.get("revoked")),
+                 "left": bool(c.get("left"))}
                 for c in g.get("claims", [])]}
         sig = json.dumps([game_id, items], sort_keys=True)
         if sig != self.last_door:
@@ -215,7 +216,7 @@ class Bridge:
         if report != self.last_report:
             self.log(f"playing: {res.get('names') or 'nobody'}")
             self.last_report = report
-        self.write_tints(res.get("looks") or {})
+        self.write_tints(res.get("looks") or {}, res.get("guest_face"))
         return res
 
     def leaving(self) -> None:
@@ -226,14 +227,16 @@ class Bridge:
         except (urllib.error.URLError, OSError, ValueError):
             pass
 
-    def write_tints(self, looks: dict) -> None:
-        if not self.tints_path or looks == self.last_tints:
+    def write_tints(self, looks: dict, guest_face: str | None = None) -> None:
+        """Write the players' looks (and the plain guest face) where the world's renderer reads them."""
+        data = {"players": looks, **({"guest_face": guest_face} if guest_face else {})}
+        if not self.tints_path or data == self.last_tints:
             return
         self.tints_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.tints_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"players": looks}, indent=0, sort_keys=True))
+        tmp.write_text(json.dumps(data, indent=0, sort_keys=True))
         os.replace(tmp, self.tints_path)
-        self.last_tints = looks
+        self.last_tints = data
 
 
 def main(argv: list[str] | None = None) -> int:

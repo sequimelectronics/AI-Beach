@@ -52,7 +52,7 @@ class LiveAdapterTest(unittest.TestCase):
         port = _free_port()
         cls.url = f"http://127.0.0.1:{port}"
         cls.proc = subprocess.Popen([BIN, "run", str(world), "--port", str(port)],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(120):
             try:
                 urllib.request.urlopen(cls.url + "/api.md", timeout=1).read()
@@ -119,7 +119,7 @@ class LiveBeachTest(unittest.TestCase):
         port = _free_port()
         cls.url = f"http://127.0.0.1:{port}"
         cls.proc = subprocess.Popen([BIN, "run", str(world), "--port", str(port)],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(120):
             try:
                 urllib.request.urlopen(cls.url + "/api.md", timeout=1).read()

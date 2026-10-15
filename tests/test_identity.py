@@ -299,7 +299,7 @@ class WorldStoreTests(unittest.TestCase):
         c.commit()
         c.close()
         self.assertEqual(ws.game_id(), "this-run")
-        ws.write("this-run", {"grant:42": {"claims": [{"name": "Sandy", "joined_as": "Sandy", "revoked": False}]}})
+        ws.write("this-run", {"grant:42": {"claims": [{"name": "Sandy", "joined_as": "Sandy", "revoked": False, "left": False}]}})
         ws.write("this-run", {"grant:42": {"claims": [{"name": "Sam", "joined_as": "Sandy", "revoked": False}]}})
         self.assertEqual(ws.read("this-run", "grant:42")["claims"][0]["name"], "Sam")
 
@@ -365,7 +365,7 @@ class BridgeDoorTests(unittest.TestCase):
                            headers={"Authorization": f"Bearer {self.tok['Sandy']}"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(b.sync_door(), 1)
-        self.assertEqual(self.grant(agent)["claims"], [{"name": "Sandy", "joined_as": "Sandy", "revoked": False}])
+        self.assertEqual(self.grant(agent)["claims"], [{"name": "Sandy", "joined_as": "Sandy", "revoked": False, "left": False}])
         # The world's door admitted Sandy; an impostor "Sandy" is still waiting (then kicked).
         self.players = [{"id": agent, "name": "Sandy", "attributes": {"BeachDoor": "ok", "BeachName": "Sandy"}},
                         {"id": str(uuid.uuid4()), "name": "Sandy", "attributes": {"BeachDoor": "pending"}}]

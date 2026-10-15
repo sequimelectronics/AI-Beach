@@ -125,6 +125,14 @@ h2 { font-size: 1.25rem; margin: 1.2em 0 .5em; }
 .zone.closed { filter: grayscale(1); opacity: .7; }
 .zone.closed .sign { cursor: not-allowed; background: #e6e6e6; }
 .zone .kind-icon { width: 1.3em; height: 1.3em; vertical-align: -.25em; margin-right: .2em; }
+.zone .play-pill {
+  margin-top: .3em; min-height: 0; padding: .15em 1.1em; border-radius: 999px; font-weight: 800;
+  font-size: clamp(.75rem, 1.4vw, 1rem); background: var(--sea); color: #fff; border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.zone .play-pill.leaving { background: var(--paper); color: var(--ink); }
+.zone .play-pill:hover { transform: translateY(-1px); }
+.zone-list .row button + button { margin-left: .4em; }
 
 .zone-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8em; padding: 0;
   list-style: none; }

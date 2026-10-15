@@ -13,6 +13,7 @@ The only network call the Beach makes here goes to the world's own address on TH
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -43,6 +44,21 @@ def join_world(world_url: str, name: str, join_key: str | None = None, timeout: 
     with _OPENER.open(req, timeout=timeout) as r:
         data = json.loads(r.read() or b"{}")
     return {"session": data["session"], "agent_id": data["agent_id"]}
+
+
+def session_alive(world_url: str, session: str, timeout: float = 3.0) -> bool:
+    """Is this session's character still in the world (on this machine)? Asks the world itself
+    (GET /observe with the session): no answer, or a refusal, means it's gone, e.g. after the world
+    restarted or its door removed the character."""
+    base = local_world_url(world_url)
+    if not base or not session:
+        return False
+    req = urllib.request.Request(f"{base}/observe", headers={"X-Session": session})
+    try:
+        with _OPENER.open(req, timeout=timeout) as r:
+            return 200 <= r.status < 300
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
 
 
 def viewer_link(viewer_url: str, spectator_token: str | None, session: str, player: str) -> str:

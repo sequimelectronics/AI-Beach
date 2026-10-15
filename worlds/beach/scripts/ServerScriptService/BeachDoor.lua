@@ -17,7 +17,7 @@ local store = DataStoreService:GetDataStore("BeachDoor")
 
 local WAIT_S = 15        -- how long a new join has to be vouched for
 local POLL_S = 0.5
-local REFRESH_S = 2      -- how often admitted players' names (and revocations) are re-read
+local REFRESH_S = 1      -- how often admitted players' names, revocations and leaves are re-read
 
 local admitted = {}      -- UserId -> current Beach name
 local guestCount = 0
@@ -57,7 +57,7 @@ local function admit(player)
             return
         end
         local claim = matchingClaim(player)
-        if claim and not claim.revoked then
+        if claim and not claim.revoked and not claim.left then
             admitted[player.UserId] = claim.name
             player:SetAttribute("BeachDoor", "ok")
             setLabel(player, claim.name)
@@ -93,7 +93,12 @@ task.spawn(function()
             local current = admitted[player.UserId]
             if current then
                 local claim = matchingClaim(player)
-                if not claim or claim.revoked then
+                if claim and claim.left then
+                    -- They pressed Leave on the Beach (or played again from elsewhere): one
+                    -- character per person, so this one goes.
+                    admitted[player.UserId] = nil
+                    player:Kick("You left this world. See you on the beach!")
+                elseif not claim or claim.revoked then
                     admitted[player.UserId] = nil
                     player:Kick("Your access to this Beach was withdrawn.")
                 elseif claim.name ~= current then

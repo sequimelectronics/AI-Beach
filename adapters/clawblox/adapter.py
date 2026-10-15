@@ -88,7 +88,7 @@ class ClawbloxAdapter:
                  transport=None, rules: Rules | None = None,
                  counter: TokenCounter | None = None, sleep=time.sleep,
                  poll_interval: float = 0.25, session: str | None = None,
-                 vouch=None, join_via=None):
+                 vouch=None, join_via=None, leave_via=None):
         if transport is None:
             if base_url is None:
                 raise ValueError("give base_url or transport")
@@ -107,6 +107,8 @@ class ClawbloxAdapter:
         # join_via(name) -> {"session", "agent_id"}: someone else makes the join for us (a Beach,
         # for a world that only accepts joins carrying its key; see front_door.beach_joiner).
         self.join_via = join_via
+        # leave_via(): someone else takes the character out (a Beach; see front_door.beach_leaver).
+        self.leave_via = leave_via
         self._names_by_agent: dict[str, str] = {}   # agent id -> name its world shows now
         self._names_by_user: dict[int, str] = {}    # UserId -> its character's label (PlayerName)
         self.agent_id: str | None = None
@@ -154,6 +156,14 @@ class ClawbloxAdapter:
             if waited >= 1.0 and last is not None and dist3(me, last) < 0.05:
                 break
             last = me
+
+    def leave(self) -> None:
+        """Leave the world (through whoever joined for us; worlds without one keep the character
+        until they drop it). Joining again afterwards makes a new character."""
+        if self.leave_via and self.session:
+            self.leave_via()
+        self.session = None
+        self.agent_id = None
 
     def _wait_for_door(self, timeout: float = 20.0) -> None:
         """Wait until the world's door has let us in (its BeachDoor attribute says "ok")."""

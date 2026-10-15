@@ -51,6 +51,7 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
         if z["viewer_url"]:
             lines.append(f"watch: {z['viewer_url']}")
         lines.append("To play, use that world's own play card (its adapter provides one).")
+        lines.append(f"One character each: POST /zones/{zid}/play again gives back yours; DELETE it to leave.")
         return "\n".join(lines)
     if z["tables"]:
         from .games import GAMES

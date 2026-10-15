@@ -46,3 +46,18 @@ def beach_joiner(beach_url: str, token: str, zone: str, timeout: float = 15.0):
             data = json.loads(r.read() or b"{}")
         return {"session": data["session"], "agent_id": data["agent_id"], "name": data.get("name", name)}
     return join
+
+
+def beach_leaver(beach_url: str, token: str, zone: str, timeout: float = 10.0):
+    """The other half of beach_joiner: takes your character out of the world (one character per
+    participant per world; joining again through the Beach gives back the one you have).
+
+        a = ClawbloxAdapter(world_url, name="Sandy", join_via=beach_joiner(...), leave_via=beach_leaver(...))
+        a.leave()
+    """
+    def leave() -> dict:
+        req = urllib.request.Request(f"{beach_url.rstrip('/')}/zones/{zone}/play", method="DELETE",
+                                     headers={"Authorization": f"Bearer {token}"})
+        with _OPENER.open(req, timeout=timeout) as r:
+            return json.loads(r.read() or b"{}")
+    return leave

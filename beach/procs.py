@@ -98,6 +98,10 @@ class TiedChild:
     def __init__(self, cmd: list[str], **popen):
         self.guard = None
         self._job = None
+        # All three standard handles explicit: the child never inherits (and Windows never has to
+        # duplicate) this process's own, which may be missing or invalid (no console, a test runner).
+        for std in ("stdin", "stdout", "stderr"):
+            popen.setdefault(std, subprocess.DEVNULL)
         if WINDOWS:
             self._job = _kill_on_close_job()
             # Joining the job ourselves first means the child is in it from its first instruction,

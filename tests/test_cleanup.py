@@ -403,16 +403,41 @@ class FakeBeach:
         self.srv.server_close()
 
 
+def _free_port() -> int:
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 class LauncherTests(unittest.TestCase):
-    """Run on Windows and POSIX alike: the stand-in engine is a Python script."""
+    """Run on Windows and POSIX alike: the stand-in engine is a Python script.
+
+    Every process here gets all three standard handles explicitly (no inherited console or pipe),
+    its output goes to a file (no pipe to drain), each test has its own free port, and tearDown ends
+    and reaps anything a test started, so nothing carries over to later tests in any order."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="launcher-"))
         self.beach = FakeBeach()
+        self.procs = []
+        self.logs = []
 
     def tearDown(self):
+        for proc in self.procs:
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+        for f in self.logs:
+            f.close()
         self.beach.close()
         shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def output(self) -> str:
+        return (self.tmp / "launcher.log").read_text(errors="replace")
 
     def launch(self, port: int) -> subprocess.Popen:
         fake = self.tmp / "fake_clawblox.py"
@@ -423,12 +448,16 @@ class LauncherTests(unittest.TestCase):
         (self.tmp / "bt").write_text("bridge-token")
         env = dict(os.environ, FAKE_OUT=str(self.tmp / "out"), PYTHONPATH=str(ROOT))
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0   # for CTRL_BREAK below
-        return subprocess.Popen([sys.executable, "-m", "beach.world", "--world", str(world), "--zone", "beachblox",
+        log = open(self.tmp / "launcher.log", "wb")
+        self.logs.append(log)
+        proc = subprocess.Popen([sys.executable, "-m", "beach.world", "--world", str(world), "--zone", "beachblox",
                                  "--port", str(port), "--bridge-token-file", str(self.tmp / "bt"),
                                  "--beach", self.beach.url, "--clawblox", str(fake),
                                  "--run-dir", str(self.tmp / "run"), "--every", "2"],
-                                cwd=str(ROOT), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, creationflags=flags)
+                                cwd=str(ROOT), env=env, stdin=subprocess.DEVNULL, stdout=log,
+                                stderr=subprocess.STDOUT, creationflags=flags)
+        self.procs.append(proc)
+        return proc
 
     def wait_for_report(self):
         end = time.time() + 30
@@ -452,44 +481,34 @@ class LauncherTests(unittest.TestCase):
             prepare(ROOT / "worlds" / "beach", self.tmp / "x", in_place=True)   # the repo's own world
 
     def test_starts_both_and_stops_both(self):
-        port = 18000 + os.getpid() % 1000
+        port = _free_port()
         proc = self.launch(port)
-        try:
-            self.wait_for_report()
-            key = (self.tmp / "out.key").read_text()
-            self.assertGreater(len(key), 20)                         # the world got a fresh join key...
-            reports = self.beach.reports
-            self.assertEqual([r["join_key"] for r in reports if "join_key" in r][0], key)   # ...and the Beach too
-            self.assertEqual(reports[0]["spectator_token"], "spec-123")
-            # Ctrl+C (Ctrl+Break is what one process can send another on Windows)
-            proc.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
-            out, _ = proc.communicate(timeout=20)
-            self.assertEqual(proc.returncode, 0, out)
-            self.assertEqual(reports[-1], {"players": [], "join_key": None})   # the Beach hears it stopped
-            self.assertFalse(_answers(port))                                     # ...and the world is gone
-        finally:
-            if proc.poll() is None:
-                proc.kill()
+        self.wait_for_report()
+        key = (self.tmp / "out.key").read_text()
+        self.assertGreater(len(key), 20)                         # the world got a fresh join key...
+        reports = self.beach.reports
+        self.assertEqual([r["join_key"] for r in reports if "join_key" in r][0], key)   # ...and the Beach too
+        self.assertEqual(reports[0]["spectator_token"], "spec-123")
+        # Ctrl+C (Ctrl+Break is what one process can send another on Windows)
+        proc.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
+        proc.wait(timeout=20)
+        self.assertEqual(proc.returncode, 0, self.output())
+        self.assertEqual(reports[-1], {"players": [], "join_key": None})   # the Beach hears it stopped
+        self.assertFalse(_answers(port))                                     # ...and the world is gone
 
     def test_killing_the_launcher_outright_ends_the_world(self):
         # As if its window were closed: no signal handler, no finally. TerminateProcess on Windows,
         # SIGKILL elsewhere.
-        port = 19000 + os.getpid() % 1000
+        port = _free_port()
         proc = self.launch(port)
-        try:
-            self.wait_for_report()
-            self.assertTrue(_answers(port))
-            proc.kill()
-            proc.wait(timeout=10)
-            end = time.time() + 15
-            while time.time() < end and _answers(port):
-                time.sleep(0.2)
-            self.assertFalse(_answers(port), "the world kept running after its launcher was killed")
-        finally:
-            if proc.poll() is None:
-                proc.kill()
-            if proc.stdout:
-                proc.stdout.close()
+        self.wait_for_report()
+        self.assertTrue(_answers(port), self.output())
+        proc.kill()
+        proc.wait(timeout=10)
+        end = time.time() + 15
+        while time.time() < end and _answers(port):
+            time.sleep(0.2)
+        self.assertFalse(_answers(port), "the world kept running after its launcher was killed")
 
     def test_job_object_layout(self):
         # The Windows structure must match JOBOBJECT_EXTENDED_LIMIT_INFORMATION (144 bytes on 64-bit,
@@ -497,6 +516,38 @@ class LauncherTests(unittest.TestCase):
         import ctypes
         from beach.procs import _ExtendedLimits
         self.assertEqual(ctypes.sizeof(_ExtendedLimits), 144 if ctypes.sizeof(ctypes.c_void_p) == 8 else 112)
+
+
+class SubprocessHandleTests(unittest.TestCase):
+    """Every process the code or the tests start gets all three standard handles explicitly.
+    On Windows, Popen otherwise duplicates the parent's own handles, and if those are missing or
+    invalid (no console, some test runners) it fails with "[WinError 6] The handle is invalid"."""
+
+    def test_no_subprocess_inherits_standard_handles(self):
+        import ast
+        problems = []
+        files = [f for d in ("beach", "adapters", "scripts", "tests") for f in (ROOT / d).rglob("*.py")]
+        for f in files:
+            tree = ast.parse(f.read_text(), str(f))
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess"
+                        and node.func.attr in ("Popen", "run", "call", "check_call", "check_output")):
+                    continue
+                names = {k.arg for k in node.keywords}
+                if None in names:   # **popen: the callee fills in the defaults (beach/procs.py)
+                    continue
+                given = {"stdin": bool(names & {"stdin", "input"}),
+                         "stdout": bool(names & {"stdout", "capture_output"}),
+                         "stderr": bool(names & {"stderr", "capture_output"})}
+                missing = [k for k, ok in given.items() if not ok]
+                if missing:
+                    problems.append(f"{f.relative_to(ROOT)}:{node.lineno} missing {', '.join(missing)}")
+        self.assertEqual(problems, [])
+
+    def test_the_launchers_child_gets_explicit_handles(self):
+        src = (ROOT / "beach" / "procs.py").read_text()
+        self.assertIn('for std in ("stdin", "stdout", "stderr"):', src)
 
 
 # 7 ----------------------------------------------------------------------- Desk Bell retries

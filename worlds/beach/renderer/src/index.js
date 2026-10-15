@@ -301,10 +301,12 @@ function nameColor(name) {
 }
 
 // Beach looks: the Beach bridge writes static/tints.json ({players: {name: {preset, hair, eyes,
-// skin, outfit, trim, accessory}}}), so each character is its participant's chibi in their own
-// colours. Guests and players without a look get a plain chibi in a colour picked from their name.
+// skin, outfit, trim, accessory, face}}, guest_face}), so each character is its participant's chibi
+// in their own colours, wearing their own 2D face. Guests and players without a look get a plain
+// chibi in a colour picked from their name, with the Beach's plain guest face.
 // Read from this same server, never pushed.
 let tints = {}
+let guestFace = null
 let tintsVersion = 0
 let tintTimer = null
 
@@ -314,7 +316,9 @@ async function refreshTints() {
     const url = new URL('static/tints.json', document.baseURI)
     url.searchParams.set('t', String(Date.now()))
     const r = await fetch(url, { cache: 'no-store' })
-    next = r.ok ? ((await r.json()).players || {}) : {}
+    const data = r.ok ? await r.json() : {}
+    next = data.players || {}
+    guestFace = data.guest_face || null
   } catch (_) {
     next = {}
   }
@@ -331,7 +335,7 @@ function startTints() {
 }
 
 function lookFor(name) {
-  return tints[name] || guestLook('#' + nameColor(name).getHexString())
+  return tints[name] || guestLook('#' + nameColor(name).getHexString(), guestFace)
 }
 
 // Build (or rebuild) a player's chibi and name label when their name or look changes.

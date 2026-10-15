@@ -125,9 +125,16 @@ def hexes(rec: dict) -> dict:
             "skin": SKINS[rec["skin"]], "outfit": outfit, "trim": trim}
 
 
+def guest_face_svg() -> str:
+    """The face for a game-world player who isn't a Beach participant: the same face, plain brown
+    eyes, no fringe (their hair colour is picked by the world from their name)."""
+    return face_svg({**default_record(0), "eyes": "#5c4a42"}, hair=False)
+
+
 def game_look(rec: dict) -> dict:
-    """What a game world needs to draw the chibi in 3D: the colours, the hairstyle, the accessory."""
-    return {**hexes(rec), "preset": rec["preset"], "accessory": rec["accessory"]}
+    """What a game world needs to draw the chibi in 3D: the colours, the hairstyle, the accessory,
+    and the face itself, as the 2D avatar draws it (an SVG the renderer paints onto the head)."""
+    return {**hexes(rec), "preset": rec["preset"], "accessory": rec["accessory"], "face": face_svg(rec)}
 
 
 def _a(phrase: str) -> str:
@@ -198,6 +205,65 @@ def _star(cx, cy, r1, r2, n=5):
     return pts
 
 
+def _happy_eye(cx, cy, rx, ry, fill, line=True, flat=0.62):
+    """An eye whose lower edge is pushed up and flattened a little, as if by a smiling cheek."""
+    pts = _arc(cx, cy, rx, ry, 0, 360, 28)
+    return _P([(x, min(y, cy + ry * flat)) for x, y in pts], fill, line)
+
+
+def _fringe(preset: str, zig: list) -> list:
+    """The lower edge of the front hair, right to left. Not everyone's bangs are spiky (a note from
+    Kellan N.): short hair keeps the zigzag, a bob has a straight blunt fringe, long hair a curved
+    fringe swept to one side, and a bun soft rounded scallops."""
+    if preset == "bob":
+        return [(79.5, 46), (77.5, 40.5), (72, 39), (28, 39), (22.5, 40.5), (20.5, 46)]
+    if preset == "long":
+        return ([(79.5, 46)] + _quad((77, 36), (66, 30.5), (55, 35.5), 6)
+                + _quad((55, 35.5), (40, 42.5), (20.5, 46), 8)[1:])
+    if preset == "bun":
+        pts = [(79.5, 46)]
+        for x0, x1 in ((79.5, 64.5), (64.5, 50), (50, 35.5), (35.5, 20.5)):
+            pts += _quad((x0, 43 if x0 in (79.5, 20.5) else 40), ((x0 + x1) / 2, 32.5),
+                         (x1, 43 if x1 in (79.5, 20.5) else 40), 5)[1:]
+        return pts + [(20.5, 46)]
+    return zig
+
+
+def face_layers(c: dict) -> list[tuple[str, list]]:
+    """The face: eyes, cheeks and mouth. The 2D avatar draws these, and the 3D chibi in BeachBlox
+    wears the very same drawing (face_svg), so the two faces can't drift apart.
+
+    The cheerful touches follow Kellan N.'s reference sketch (docs/art/cheerful-face-sketch.png):
+    one big round shine on the same side of both eyes, the lower edge of each eye lifted by its
+    cheek, blush that overlaps the eye's lower outer edge, and an open smile. Toned down from the
+    sketch, which is deliberately extra cheerful."""
+    eyes = []
+    for x in (39, 61):
+        eyes += [_happy_eye(x, 52.4, 5.4, 7.3, "#2b2233", False, 0.74),
+                 _happy_eye(x, 53.4, 4.2, 5.9, c["eyes"], False, 0.66),
+                 _happy_eye(x, 54.6, 2.3, 3.2, "#1a1420", False, 0.6),
+                 _E(x - 1.6, 50.2, 2.3, 2.4, "#ffffff", False), _E(x + 1.8, 55.0, 0.75, 0.75, "#ffffff", False)]
+    cheeks = [_E(31.5, 59.6, 5.2, 2.9, "#ff6f7f", False, 0.42), _E(68.5, 59.6, 5.2, 2.9, "#ff6f7f", False, 0.42)]
+    # An open smile: nearly flat on top with the corners curling up, rounded underneath.
+    top = _quad((45, 61.8), (50, 63.1), (55, 61.8), 8)
+    bottom = _quad((55, 61.8), (54.2, 67.6), (50, 67.4), 6)[1:] + _quad((50, 67.4), (45.8, 67.6), (45, 61.8), 6)[1:-1]
+    mouth = [_P(top + bottom, "#7a3333"), _E(50, 65.9, 2.4, 1.2, "#ff8a8a", False)]
+    return [("eyes", eyes), ("cheeks", cheeks), ("mouth", mouth)]
+
+
+FACE_BOX = (21, 21, 58, 54)   # the head's front in the 100 x 120 drawing: x, y, width, height
+
+
+def face_svg(rec: dict, hair: bool = True) -> str:
+    """The front of the head as drawn in 2D (front hair, eyes, cheeks, mouth) on a transparent
+    background, cropped to FACE_BOX: what the 3D chibi's head wears, so its face is the 2D face.
+    `hair=False` leaves out the fringe (the plain face guests wear)."""
+    keep = {"hair", "eyes", "cheeks", "mouth"} if hair else {"eyes", "cheeks", "mouth"}
+    x, y, w, h = FACE_BOX
+    full = svg(rec, only=keep)
+    return full.replace('viewBox="0 0 100 120"', f'viewBox="{x} {y} {w} {h}" width="512" height="{round(512 * h / w)}"', 1)
+
+
 def layers(rec: dict) -> list[tuple[str, list]]:
     """The avatar as named layers of shapes, back to front."""
     c = hexes(rec)
@@ -240,15 +306,8 @@ def layers(rec: dict) -> list[tuple[str, list]]:
     out.append(("head", [
         _E(21, 53, 4, 5.5, skin), _E(79, 53, 4, 5.5, skin),
         _E(50, 48, 29, 27, skin),
-        _E(32, 61, 4.2, 2.3, "#ff6f7f", False, 0.35), _E(68, 61, 4.2, 2.3, "#ff6f7f", False, 0.35),
-        _P(_quad((46, 63), (50, 66), (54, 63)) + _quad((54, 63), (50, 69), (46, 63))[1:-1], "#7a3333"),
     ]))
-    eyes = []
-    for x in (39, 61):
-        eyes += [_E(x, 53, 5.3, 6.8, "#2b2233", False), _E(x, 54, 4.1, 5.4, c["eyes"], False),
-                 _E(x, 55.6, 2.2, 3.0, "#1a1420", False),
-                 _E(x - 1.7, 51.2, 1.6, 1.6, "#ffffff", False), _E(x + 1.5, 57.2, 0.8, 0.8, "#ffffff", False)]
-    out.append(("eyes", eyes))
+    out += face_layers(c)
 
     front = []
     zig = [(79.5, 46), (73, 35), (67, 42), (59, 32), (50, 40), (41, 32), (33, 42), (27, 35), (20.5, 46)]
@@ -260,7 +319,7 @@ def layers(rec: dict) -> list[tuple[str, list]]:
             r = math.radians(a)
             front.append(_E(50 + 25 * math.cos(r), 40 + 20 * math.sin(r), 8.5, 8, hair))
     else:
-        front.append(_P(_arc(50, 47, 30, 30, 180, 360, 16) + zig, hair))
+        front.append(_P(_arc(50, 47, 30, 30, 180, 360, 16) + _fringe(preset, zig), hair))
         if preset == "long":
             front += [_P([(21, 44), (18, 72), (24, 76), (28, 50)], hair),
                       _P([(79, 44), (82, 72), (76, 76), (72, 50)], hair)]
@@ -308,14 +367,16 @@ def _n(v: float) -> str:
     return s[:-2] if s.endswith(".0") else s
 
 
-def svg(rec: dict, size: int | None = None, title: str | None = None) -> str:
-    """Layered SVG. Each layer is a <g> so a recolour touches one group."""
+def svg(rec: dict, size: int | None = None, title: str | None = None, only: set | None = None) -> str:
+    """Layered SVG. Each layer is a <g> so a recolour touches one group. `only`: just those layers."""
     dims = f' width="{size}" height="{int(size * 1.2)}"' if size else ""
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120"{dims} role="img">']
     if title:
         esc = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         parts.append(f"<title>{esc}</title>")
     for name, shapes in layers(rec):
+        if only is not None and name not in only:
+            continue
         parts.append(f'<g class="av-{name}" stroke="{INK}" stroke-width="{STROKE}" stroke-linejoin="round">')
         for kind, geo, fill, line, alpha in shapes:
             extra = "" if line else ' stroke="none"'

@@ -18,6 +18,7 @@ import math
 import random
 import re
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -128,6 +129,8 @@ class Beach:
         self.now = clock
         self.rng = rng or random.Random()
         self.sender: Callable[[dict], bool] | None = None  # set by hooks.install()
+        self._play_locks: dict[tuple[int, str], threading.Lock] = {}
+        self._play_locks_guard = threading.Lock()
         self._migrate()
         self._seed()
         from .boardwalk import Boardwalk
@@ -163,6 +166,10 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
         if "world_url" not in cols:   # a game world's address on this machine, from its bridge
             self.db.run("ALTER TABLE zones ADD COLUMN world_url TEXT")
+        gcols = {r["name"] for r in self.db.q("PRAGMA table_info(game_grants)")}
+        if "session" not in gcols:   # job 10: one character per participant per world
+            self.db.run("ALTER TABLE game_grants ADD COLUMN session TEXT")      # the session the Beach made (/play)
+            self.db.run("ALTER TABLE game_grants ADD COLUMN left_at REAL")      # set when they leave (or rejoin)
         if "detail" not in {r["name"] for r in self.db.q("PRAGMA table_info(audit)")}:
             self.db.run("ALTER TABLE audit ADD COLUMN detail TEXT")   # job 09: e.g. what a retention sweep did
         ocols = {r["name"] for r in self.db.q("PRAGMA table_info(outbox)")}
@@ -521,8 +528,14 @@ class Beach:
             raise BeachError("invalid", f"join the world as {p.name}, exactly: your Beach name is your name there too")
         # Several participants may claim the same join; the world honours only the claim whose
         # name matches the name the join used, which only its rightful owner can make.
-        self.db.run("INSERT OR REPLACE INTO game_grants VALUES (?, ?, ?, ?, ?, ?)",
-                    (str(agent_id), uid, zid, pid, joined_as, self.now()))
+        # One character per participant per world: vouching for a new join retires any older one
+        # (the world's door then removes it).
+        with self.db.tx() as db:
+            db.conn.execute("INSERT OR REPLACE INTO game_grants (agent_id, user_id, zone_id, participant_id,"
+                            " joined_as, granted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                            (str(agent_id), uid, zid, pid, joined_as, self.now()))
+            db.conn.execute("UPDATE game_grants SET left_at = ? WHERE participant_id = ? AND zone_id = ?"
+                            " AND agent_id != ? AND left_at IS NULL", (self.now(), pid, zid, str(agent_id)))
         return {"zone": zid, "user_id": uid, "name": p.name}
 
     def set_watch_token(self, zid: str, token: str) -> None:
@@ -537,10 +550,22 @@ class Beach:
         if base:
             self.db.run("UPDATE zones SET world_url = ? WHERE id = ?", (base, zid))
 
-    def play(self, pid: int, zid: str, joiner=None) -> dict:
-        """Join a game world for a participant (a person from the map, or an agent through its
-        adapter): the Beach joins under their Beach name, with the world's join key if it has
-        one, and vouches for the join. Returns the session, and a viewer link for people."""
+    def _play_lock(self, pid: int, zid: str) -> threading.Lock:
+        with self._play_locks_guard:
+            return self._play_locks.setdefault((pid, zid), threading.Lock())
+
+    def _current_join(self, pid: int, zid: str):
+        """The participant's character in this world, if they haven't left: their latest grant."""
+        return self.db.one("SELECT * FROM game_grants WHERE participant_id = ? AND zone_id = ? AND left_at IS NULL"
+                           " ORDER BY granted_at DESC LIMIT 1", (pid, zid))
+
+    def play(self, pid: int, zid: str, joiner=None, alive=None) -> dict:
+        """Put a participant in a game world (a person from the map, or an agent through its
+        adapter): one character per participant per world. If their character from an earlier
+        play is still in the world, its session comes back ("existing": true); otherwise the Beach
+        joins under their Beach name, with the world's join key if it has one, and vouches for the
+        join. Returns the session, and a viewer link for people.
+        `alive(world_url, session)` says whether a session is still in the world (default: ask it)."""
         from . import front_door
         z = self.zone(zid)
         if z["kind"] != "game":
@@ -550,14 +575,48 @@ class Beach:
         if not z["world_url"]:
             raise BeachError("conflict", f"{z['name']} isn't connected to the Beach yet (its bridge isn't running)")
         p = self.participant(pid)
-        try:
-            j = (joiner or front_door.join_world)(z["world_url"], p.name, z["join_key"])
-        except Exception as e:  # the world is down, or refused
-            raise BeachError("conflict", f"couldn't reach {z['name']} ({e})") from None
-        self.vouch(pid, zid, j["agent_id"], p.name)
         viewer = z["viewer_url"] or z["world_url"] + "/"
-        return {"zone": zid, "name": p.name, "session": j["session"], "agent_id": j["agent_id"],
-                "viewer": front_door.viewer_link(viewer, z["watch_token"], j["session"], p.name)}
+
+        def answer(session, agent_id, existing):
+            return {"zone": zid, "name": p.name, "session": session, "agent_id": agent_id, "existing": existing,
+                    "viewer": front_door.viewer_link(viewer, z["watch_token"], session, p.name)}
+        # One at a time per participant and world, so a double click or two tabs can't both join.
+        with self._play_lock(pid, zid):
+            g = self._current_join(pid, zid)
+            if g and g["session"] and (alive or front_door.session_alive)(z["world_url"], g["session"]):
+                return answer(g["session"], g["agent_id"], True)
+            try:
+                j = (joiner or front_door.join_world)(z["world_url"], p.name, z["join_key"])
+            except Exception as e:  # the world is down, or refused
+                raise BeachError("conflict", f"couldn't reach {z['name']} ({e})") from None
+            self.vouch(pid, zid, j["agent_id"], p.name)     # also retires any older character
+            self.db.run("UPDATE game_grants SET session = ? WHERE agent_id = ? AND participant_id = ?",
+                        (j["session"], str(j["agent_id"]), pid))
+            return answer(j["session"], j["agent_id"], False)
+
+    def leave_world(self, pid: int, zid: str) -> dict:
+        """Take a participant's character out of a game world. The Beach stops counting them at
+        once; the world's door (BeachDoor) removes the character within a couple of seconds."""
+        z = self.zone(zid)
+        if z["kind"] != "game":
+            raise BeachError("invalid", "only game zones have worlds to leave")
+        with self._play_lock(pid, zid), self.db.tx() as db:
+            n = db.conn.execute("UPDATE game_grants SET left_at = ? WHERE participant_id = ? AND zone_id = ?"
+                                " AND left_at IS NULL", (self.now(), pid, zid)).rowcount
+            db.conn.execute("DELETE FROM zone_players WHERE zone_id = ? AND name = ?", (zid, f"p:{pid}"))
+        return {"zone": zid, "left": n > 0, "playing": False}
+
+    def playing(self, pid: int, zid: str) -> bool:
+        """Has this participant a character in this world now? (What the map's Play/Leave button
+        shows.) Yes if they haven't left and the world's bridge still reports them, or they only
+        just joined (the next report may not have them yet). After a world restart their old
+        character is gone from the reports, so this turns false and the button says Play again."""
+        g = self._current_join(pid, zid)
+        if not g:
+            return False
+        if self.now() - g["granted_at"] < 20:
+            return True
+        return f"p:{pid}" in self.players_in(zid)
 
     def world_info(self, zid: str, pid: int) -> dict:
         """For a participant: how to join this world as themselves, and a viewer link."""
@@ -586,7 +645,7 @@ class Beach:
                            " ORDER BY g.granted_at", (zid, keep)):
             grants.setdefault(r["user_id"], []).append(
                 {"name": r["name"], "joined_as": r["joined_as"], "revoked": bool(r["signed_out"]),
-                 "participant": r["participant_id"]})
+                 "left": r["left_at"] is not None, "participant": r["participant_id"]})
         return {"zone": zid, "guests": bool(self.setting("game_guests")),
                 "grants": [{"user_id": uid, "claims": claims} for uid, claims in grants.items()]}
 
@@ -653,9 +712,12 @@ class Beach:
         for e in players:
             if isinstance(e, dict) and e.get("user_id") is not None:
                 # A vouched join: the claim whose name matches the name the player joined under.
+                # A character its participant has left (or replaced) isn't counted, even while
+                # the world's door is still removing it.
                 g = self.db.one("SELECT g.participant_id FROM game_grants g JOIN participants p"
                                 " ON p.id = g.participant_id WHERE g.zone_id = ? AND g.user_id = ?"
-                                " AND g.joined_as = ?", (zid, int(e["user_id"]), str(e.get("joined_as", ""))))
+                                " AND g.joined_as = ? AND g.left_at IS NULL",
+                                (zid, int(e["user_id"]), str(e.get("joined_as", ""))))
                 if g and self.is_active(g["participant_id"]):
                     keys.add(f"p:{g['participant_id']}")
             else:

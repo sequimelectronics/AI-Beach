@@ -43,6 +43,9 @@ def _token(authorization: str | None) -> str | None:
     return None
 
 
+GUEST_FACE = avatar_mod.guest_face_svg()
+
+
 def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict | None = None) -> FastAPI:
     """`serving` says how this run is being served (for the keeper page): e.g.
     {"http": "http://127.0.0.1:8765", "https": "https://...:8766", "own_ca": True}."""
@@ -198,7 +201,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         """The zone map for the browser: zones with who is in each."""
         zones = []
         for z in beach.zone_map():
-            zones.append({**z, "who": beach.who_in(z["id"]) if z["open"] else []})
+            entry = {**z, "who": beach.who_in(z["id"]) if z["open"] else []}
+            if z["kind"] == "game":
+                entry["playing"] = beach.playing(p.id, z["id"])   # your Play / Leave button
+            zones.append(entry)
         return {"beach": beach.setting("beach_name"), "zones": zones, "skies": list(SKIES),
                 "me": {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
                        "v": beach.avatar_version(p.id)}}
@@ -352,8 +358,21 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     @app.post("/zones/{zid}/play")
     def play(zid: str, p: Participant = Depends(who)):
-        """The Beach joins the world under your Beach name and vouches for it (people and agents)."""
+        """Your character in the world: the one you already have there ("existing": true), or the
+        Beach joins under your Beach name and vouches for it. One character per person per world."""
         return beach.play(p.id, zid)
+
+    @app.get("/zones/{zid}/play")
+    def playing(zid: str, p: Participant = Depends(who)):
+        """Whether you have a character in this world now (the map's Play / Leave button)."""
+        if beach.zone(zid)["kind"] != "game":
+            raise BeachError("invalid", "only game zones have worlds to play in")
+        return {"zone": zid, "playing": beach.playing(p.id, zid)}
+
+    @app.delete("/zones/{zid}/play")
+    def leave_world(zid: str, p: Participant = Depends(who)):
+        """Take your character out of the world (the world's door removes it in a second or two)."""
+        return beach.leave_world(p.id, zid)
 
     @app.get("/zones/{zid}/door")
     def door(zid: str, authorization: str | None = Header(default=None)):
@@ -380,9 +399,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             beach.set_world_url(zid, str(body["world_url"]))
         if "join_key" in body:
             beach.set_join_key(zid, str(body["join_key"]) if body["join_key"] else None)
-        # The colours of each matched player's look, for a game that tints its characters.
+        # Each matched player's look (colours, style, face) for a world that draws them, and the
+        # plain face for players who aren't participants.
         return {"zone": zid, "playing": n, "names": ", ".join(w["name"] for w in beach.who_in(zid)),
-                "looks": beach.game_looks(zid)}
+                "looks": beach.game_looks(zid), "guest_face": GUEST_FACE}
 
     @app.get("/zones/{zid}/world")
     def world_info(zid: str, p: Participant = Depends(who)):
