@@ -82,11 +82,12 @@
     const who = z.who || []
     for (const w of who.slice(0, MAX_SHOWN)) {
       const label = w.kind === 'guest' ? w.name + ' (guest)' : w.name
+      const full = label + (w.badge ? ', wearing today\'s ' + w.badge.words : '')
       const b = el('button', {
         class: 'who',
         type: 'button',
-        title: label,
-        'aria-label': label,
+        title: full,
+        'aria-label': full,
         onclick: (ev) => { ev.currentTarget.classList.toggle('show') }
       }, avatar(w, { twitch: true }), el('span', { class: 'name-tag', text: label }))
       box.append(b)
@@ -128,7 +129,27 @@
     return zones.slice().sort((a, b) => (a.kind === 'chat' && a.id === 'sandchat' ? -1 : b.kind === 'chat' && b.id === 'sandchat' ? 1 : a.created_at - b.created_at))
   }
 
-  let mapBox, listBox, arrival
+  let mapBox, listBox, arrival, badgesBox
+  let badgesKey = ''
+
+  // Today's badges: yours to wear (one at a time), gone at the Beach's daily reset.
+  async function renderBadges () {
+    let mine
+    try { mine = await api('GET', '/me/badges') } catch (e) { return }
+    const key = JSON.stringify(mine)
+    if (key === badgesKey) return
+    badgesKey = key
+    if (!mine.today.length) { badgesBox.replaceChildren(); badgesBox.hidden = true; return }
+    badgesBox.hidden = false
+    const wear = async (w) => { try { await api('PUT', '/me/badges', { wear: w }); badgesKey = ''; renderBadges(); refresh() } catch (e) { Beach.toast(e.message) } }
+    badgesBox.replaceChildren(
+      el('h2', { text: 'Your badges today' }),
+      el('p', { class: 'hint', text: 'For things you did today. Wear one on your avatar; they\'re gone tomorrow.' }),
+      el('ul', {}, mine.today.map(b => el('li', {}, el('button', {
+        type: 'button', class: 'quiet', 'aria-pressed': String(mine.wearing === b.id), title: b.for, onclick: () => wear(b.id)
+      }, Beach.badgeIcon(b.id), el('span', { text: b.words + (mine.wearing === b.id ? ' (wearing)' : '') })))),
+      el('li', {}, el('button', { type: 'button', class: 'quiet', 'aria-pressed': String(!mine.wearing), onclick: () => wear(null), text: mine.wearing ? 'Wear none' : 'Wearing none' }))))
+  }
   function render (data) {
     const zones = order(data.zones)
     const sky = (zones.find(z => z.kind === 'chat') || {}).sky
@@ -152,6 +173,7 @@
       render(data)
       const zs = await api('GET', '/zones')
       arrival.textContent = zs.arrival || ''
+      renderBadges()
     } catch (e) { /* keep the last picture; try again shortly */ }
   }
 
@@ -165,7 +187,8 @@
       el('div', { class: 'map-title', role: 'heading', 'aria-level': '1' }))
     listBox = el('ul', { class: 'zone-list', 'aria-label': 'Zones' })
     arrival = el('p', { class: 'arrival' })
-    main.replaceChildren(mapBox, arrival, el('h2', { text: "Who's where" }), listBox)
+    badgesBox = el('section', { class: 'card my-badges', hidden: true, 'aria-label': 'Your badges today' })
+    main.replaceChildren(mapBox, arrival, badgesBox, el('h2', { text: "Who's where" }), listBox)
     render(data)
     let last = data
     refresh()

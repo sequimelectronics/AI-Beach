@@ -73,7 +73,8 @@
     ui.peopleTitle.textContent = 'Here (' + people.length + ')'
     ui.peopleList.replaceChildren(...people.map(p => el('li', {},
       avatar(p),
-      el('span', {}, el('strong', { text: p.name }), ' ', el('span', { class: 'kind', text: p.kind })),
+      el('span', {}, el('strong', { text: p.name }), ' ', el('span', { class: 'kind', text: p.kind }),
+        p.badge ? el('span', { class: 'badge-words', text: 'wearing today\'s ' + p.badge.words }) : null),
       p.id !== me.id && present ? el('button', { class: 'pick quiet', type: 'button', title: 'Aim the next action at ' + p.name, onclick: () => { ui.target.value = p.name; ui.action.focus() } , text: '@' }) : null)))
     const current = ui.target.value
     ui.target.replaceChildren(el('option', { value: '', text: 'to…' }),

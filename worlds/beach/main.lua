@@ -43,6 +43,11 @@ local CONFIG = {
     sand_roll_drag = 1.2,         -- 1/s: a rolling ball loses ~70% of its speed per second on sand
     water = { drag = 2.5, wash_after = 3, wash_speed = 4 },
     max_pieces = 40,
+    -- Badges for the day (the Beach gives them; the world only reports what happened):
+    -- a goal counts for whoever kicked the ball last, within kick_memory seconds;
+    -- a sandcastle is castle_pieces or more resting in a plot; it "stood tall" at
+    -- tall_height or more, standing still for stand_s seconds.
+    badges = { kick_memory = 10, castle_pieces = 3, tall_height = 4, stand_s = 3, again_s = 600 },
 }
 
 local BALLS = {
@@ -113,6 +118,32 @@ announceEvent.Parent = ReplicatedStorage
 local function announce(text)
     print("[announce] " .. text)
     announceEvent:FireAllClients({ text = text, from = "Beach" })
+end
+
+-- Events for the Beach's badges for the day. A world script can't reach the network, so they
+-- go into this world's own DataStore (the same store the BeachDoor script uses), where the
+-- Beach's bridge picks them up. Each names only the join (UserId and the name joined under):
+-- the Beach decides who that is. The rows are a ring of 64 keys, so the store never grows.
+local eventStore = game:GetService("DataStoreService"):GetDataStore("BeachDoor")
+local eventSeq = 0
+local lastEvent = {}   -- "kind:UserId" -> os.clock() of the last report
+local function inGame(player)
+    for _, q in ipairs(Players:GetPlayers()) do
+        if q == player then return true end
+    end
+    return false
+end
+local function beachEvent(kind, player)
+    if not player or not inGame(player) then return end
+    local key = kind .. ":" .. tostring(player.UserId)
+    local now = os.clock()
+    if lastEvent[key] and now - lastEvent[key] < CONFIG.badges.again_s and kind ~= "goal" then return end
+    lastEvent[key] = now
+    eventSeq = eventSeq + 1
+    local row = { seq = eventSeq, kind = kind, user_id = player.UserId, joined_as = player.Name }
+    task.spawn(function()
+        pcall(function() eventStore:SetAsync("event:" .. tostring(row.seq % 64), row) end)
+    end)
 end
 
 local state = child(ServerStorage, "BeachState") or Instance.new("Folder")
@@ -295,7 +326,9 @@ end
 -- PLAYERS
 --------------------------------------------------------------------------------
 local held = {}        -- player -> part
-local placing = {}     -- { part, from, to, t, dur }
+local placing = {}     -- { part, from, to, t, dur, by }
+local placedBy = {}    -- piece -> the player who last put it down
+local lastKick = {}    -- ball -> { player, at }
 local thrown = {}      -- part -> grace end time
 
 local function hrpOf(player)
@@ -448,7 +481,7 @@ local function doPlace(player, data)
     held[player] = nil
     part.Anchored = true
     part.CanCollide = false
-    table.insert(placing, { part = part, from = part.CFrame, to = cf, t = 0, dur = 0.3 })
+    table.insert(placing, { part = part, from = part.CFrame, to = cf, t = 0, dur = 0.3, by = player })
     result(player, "PlaceSuccess")
 end
 
@@ -499,6 +532,7 @@ local function doKick(player, data)
     best.AssemblyLinearVelocity = v
     best:SetAttribute("InWaterSince", nil)
     player:SetAttribute("LastKicked", best.Name)
+    lastKick[best] = { player = player, at = os.clock() }
     result(player, "KickSuccess")
 end
 
@@ -591,7 +625,7 @@ local function evaluatePlots(dt)
     if evalTimer < 0.25 then return end
     evalTimer = 0
     local per = {}
-    for id in pairs(plotFolders) do per[id] = { n = 0, top = 0, flag = false, moving = false } end
+    for id in pairs(plotFolders) do per[id] = { n = 0, top = 0, flag = false, moving = false, builders = {} } end
     local now = os.clock()
     for _, inst in ipairs(Workspace:GetChildren()) do
         local kind = inst:GetAttribute("PieceKind")
@@ -616,6 +650,7 @@ local function evaluatePlots(dt)
             if id then
                 local p = per[id]
                 p.n = p.n + 1
+                if placedBy[inst] then p.builders[placedBy[inst]] = true end
                 if kind == "flag" then
                     p.flag = true -- decoration: a flag does not add to the castle's height
                 else
@@ -627,12 +662,27 @@ local function evaluatePlots(dt)
             pieceRest[inst] = nil -- held or being placed: forget its old resting height
         end
     end
+    local B = CONFIG.badges
     for id, f in pairs(plotFolders) do
         local p = per[id]
+        local height = math.floor(p.top + 0.3)
         f:SetAttribute("Pieces", p.n)
-        f:SetAttribute("Height", math.floor(p.top + 0.3))
+        f:SetAttribute("Height", height)
         f:SetAttribute("HasFlag", p.flag)
         f:SetAttribute("Settled", not p.moving)
+        -- Badges: everyone who put a piece of a standing castle down built it.
+        local st = plotState[id]
+        if p.n >= B.castle_pieces and not p.moving then
+            for player in pairs(p.builders) do beachEvent("castle", player) end
+        end
+        if height >= B.tall_height and not p.moving then
+            st.tallSince = st.tallSince or now
+            if now - st.tallSince >= B.stand_s then
+                for player in pairs(p.builders) do beachEvent("tall_castle", player) end
+            end
+        else
+            st.tallSince = nil
+        end
     end
 end
 
@@ -674,6 +724,7 @@ RunService.Heartbeat:Connect(function(dt)
                 -- Where it was put down counts as its resting height: if it then
                 -- topples straight away, that is a fall too.
                 pieceRest[p.part] = bottomOf(p.part)
+                placedBy[p.part] = p.by
             end
             table.remove(placing, i)
         else
@@ -707,6 +758,8 @@ RunService.Heartbeat:Connect(function(dt)
                         score:SetAttribute(key, (score:GetAttribute(key) or 0) + 1)
                         announce(string.format("Goal at the %s end! (%s)", g.name, cfg.kind))
                         goalReturns[b] = now + G.return_after
+                        local k = lastKick[b]
+                        if k and now - k.at <= CONFIG.badges.kick_memory then beachEvent("goal", k.player) end
                     end
                 end
             end

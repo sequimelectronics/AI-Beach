@@ -15,6 +15,9 @@ import * as THREE from '../../static/vendor/three/build/three.module.min.js'
 const H = 1.2                   // head radius
 const HEAD_Y = 1.25             // head centre (the box runs from -2.5 to 2.5)
 const HAIR_R = H * 1.06
+// Spiky and bun hair are short at the sides: their painted face reaches this far round (degrees),
+// and the side hair meets its edge.
+const SHORT_SIDES = { spiky: 130, bun: 130 }
 
 // Shared geometry: one of each shape for every character (sized per use with mesh.scale).
 const GEO = {}
@@ -89,8 +92,12 @@ export function faceTexture (svg) {
 
 // The front half of the head, with the 2D face box laid straight onto it (a front-on projection:
 // seen from the front, the face is exactly the 2D drawing).
-const faceShell = () => geo('face-shell', () => {
-  const g = new THREE.SphereGeometry(1, 32, 24, Math.PI, Math.PI, 0, Math.PI)
+// `span` (degrees) is how far round the head it reaches: the whole front by default. Where the
+// drawing's outer edge would wrap onto the side of the head it's stretched thin; a narrower span
+// leaves that edge off (SHORT_SIDES: hairstyles whose painted hair reaches the drawing's edge).
+const faceShell = (span = 180) => geo('face-shell-' + span, () => {
+  const a = span * Math.PI / 180
+  const g = new THREE.SphereGeometry(1, 32, 24, Math.PI + (Math.PI - a) / 2, a, 0, Math.PI)
   const p = g.attributes.position
   const uv = g.attributes.uv
   // Seen from the front the character's -x side is on the viewer's right, as the drawing's right is.
@@ -163,7 +170,7 @@ export function buildChibi (look, opts = {}) {
   // The face, as drawn in 2D, on a shell just outside the head's front.
   const tex = L.face ? (opts.faceTexture || faceTexture)(L.face) : null
   if (tex) {
-    const face = new THREE.Mesh(faceShell(), new THREE.MeshBasicMaterial({
+    const face = new THREE.Mesh(faceShell(SHORT_SIDES[L.preset] || 180), new THREE.MeshBasicMaterial({
       map: tex, transparent: true, depthWrite: false, toneMapped: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }))
     face.scale.set(H * 1.004, H * 0.95 * 1.004, H * 0.97 * 1.004)
@@ -287,6 +294,12 @@ function addHair (g, preset, hair, hairDark, painted) {
   }
   // Under the cap (a smaller radius), so the two never fight over the same pixels.
   const backShell = (theta, colour = hairDark, gap = 120) => part(shell(theta, gap), colour, HAIR_R * 0.965, [0, HEAD_Y, 0])
+  // Short at the sides: hair down to the top of the ears beside the painted face (whose edge it
+  // meets), and lower only behind the ears, so nothing hangs in front of an ear.
+  const shortSides = () => {
+    g.add(backShell(Math.PI * 0.42, hair, painted ? SHORT_SIDES[preset] : 120))
+    g.add(backShell(Math.PI * 0.55, hair, 200))
+  }
   switch (preset) {
     case 'bob':          // to the jaw all round, a straight fringe
       g.add(capFront(Math.PI * 0.5, 0.42))
@@ -301,12 +314,12 @@ function addHair (g, preset, hair, hairDark, painted) {
       break
     case 'bun':          // pulled back, a round bun on top
       g.add(capFront(Math.PI * 0.55, 0.45))
-      g.add(backShell(Math.PI * 0.55, hair, 160))        // covers the temples, its edge behind the ears
+      shortSides()
       g.add(part(sphere(), hair, 0.52, [0, HEAD_Y + 1.32, 0.25]))
       break
     case 'spiky':        // short, with spikes standing up
       g.add(capFront(Math.PI * 0.5, 0.38))
-      g.add(backShell(Math.PI * 0.55, hair, 160))        // covers the temples, its edge behind the ears
+      shortSides()
       for (const [theta, phi] of [[0.05, 0], [0.28, 0.2], [0.28, 1.4], [0.28, 2.6], [0.28, 3.8], [0.28, 5.0],
         [0.48, 0.9], [0.48, 2.3], [0.48, 3.9], [0.48, 5.3]]) {
         const dir = new THREE.Vector3().setFromSphericalCoords(1, theta * Math.PI, phi)

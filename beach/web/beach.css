@@ -378,3 +378,18 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
   .stack .pcard, .pile .pcard { width: 66px; }
   .middle { gap: 1.4em; }
 }
+
+/* ---------------------------------------------------------------- badges for the day */
+.avatar { position: relative; }
+.avatar-badge { position: absolute; right: -10%; bottom: -2%; width: 46%; max-width: 26px; min-width: 15px; aspect-ratio: 1; line-height: 0; }
+.avatar-badge .badge-icon, .badge-icon svg { width: 100%; height: 100%; display: block; }
+.badge-icon { display: inline-block; width: 1.4em; height: 1.4em; vertical-align: -.35em; line-height: 0; }
+.people .badge-words { display: block; font-size: .8rem; color: var(--sea-dark); }
+.my-badges { margin: .8em 0; }
+.my-badges h2 { margin: 0 0 .2em; font-size: 1.1rem; }
+.my-badges ul { list-style: none; padding: 0; margin: .4em 0; display: flex; flex-wrap: wrap; gap: .4em; }
+.my-badges li button { display: inline-flex; align-items: center; gap: .4em; padding: .3em .7em .3em .4em; }
+.my-badges li button .badge-icon { width: 30px; height: 30px; }
+.my-badges li button[aria-pressed="true"] { border-color: var(--ok); background: #eef8ea; font-weight: 800; }
+.badge-toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .3em .8em; margin: .4em 0 .8em; }
+.badge-toggles label { display: flex; align-items: center; gap: .3em; flex-wrap: wrap; }

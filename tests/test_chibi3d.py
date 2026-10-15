@@ -165,7 +165,7 @@ const faceTexture = (svg) => { const t = new THREE.Texture(); t.userData.svg = s
 const out = looks.map((L) => {
   const g = buildChibi(L, { faceTexture })
   const colours = new Set(), shapes = []
-  let face = null, outline = 0, lit = 0, toneMapped = 0
+  let face = null, outline = 0, lit = 0, toneMapped = 0, earFront = 0
   g.traverse((m) => {
     if (!m.isMesh) return
     if (!m.material.isMeshBasicMaterial) lit++
@@ -183,6 +183,15 @@ const out = looks.map((L) => {
     }
     if (m.material.side === THREE.BackSide) { outline++; colours.add('outline:#' + m.material.color.getHexString()); return }
     colours.add('#' + m.material.color.getHexString())
+    if ('#' + m.material.color.getHexString() === L.hair.toLowerCase()) {
+      // Hair beside the face at ear height, in front of the ear (the ears sit at x = +-1.17, z = 0).
+      const p = m.geometry.attributes.position, v = new THREE.Vector3()
+      m.updateMatrixWorld(true)
+      for (let i = 0; i < p.count; i++) {
+        v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld)
+        if (Math.abs(v.x) > 0.95 && v.y > 1.25 - 0.35 && v.y < 1.25 + 0.1 && v.z < -0.08) earFront++
+      }
+    }
     m.geometry.computeBoundingBox()
     const bb = m.geometry.boundingBox
     shapes.push(m.material.color.getHexString() + ':' + m.geometry.attributes.position.count + ':' +
@@ -190,7 +199,7 @@ const out = looks.map((L) => {
   })
   let meshes = 0; g.traverse((m) => { if (m.isMesh) meshes++ })
   return { preset: L.preset, accessory: L.accessory, triangles: triangles(g), meshes, colours: [...colours],
-           shapes: shapes.sort().join('|'), face, outline, lit, toneMapped }
+           shapes: shapes.sort().join('|'), face, outline, lit, toneMapped, earFront }
 })
 const guest = buildChibi({ hair: '#336699', outfit: '#3366cc' }, { faceTexture })
 let guestFace = 0; guest.traverse((m) => { if (m.isMesh && m.userData.face) guestFace++ })
@@ -232,6 +241,14 @@ console.log(JSON.stringify({ out, ink: INK, guestFace, shades: shades.map(([h, f
             self.assertEqual(got["outline"], 1)             # one outline mesh per character
             self.assertIn("outline:" + self.result["ink"], got["colours"])
         self.assertEqual(self.result["ink"], avatar.INK)    # the 2D avatar's ink colour
+
+    def test_no_strip_of_hair_in_front_of_an_ear(self):
+        # Job 10's spiky hair (and bun) showed a strip of hair colour by the ear from a turned angle:
+        # the side hair hung down in front of the ear. Now it stops above the ears beside the face.
+        # (Bob and long hair have locks in front of the ears on purpose; curly is a cloud all round.)
+        for got in self.result["out"]:
+            if got["accessory"] == "none" and got["preset"] in ("spiky", "bun", "short"):
+                self.assertEqual(got["earFront"], 0, got["preset"])
 
     def test_guests_without_a_face_drawing_still_build(self):
         self.assertEqual(self.result["guestFace"], 0)

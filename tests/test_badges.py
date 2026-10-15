@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import random
 import shutil
+import sqlite3
 import sys
 import tempfile
 import time
@@ -299,6 +300,77 @@ class BadgeApiTests(unittest.TestCase):
         r = self.http.post("/zones/beachblox/events", json=body, headers=self.bridge)
         self.assertEqual(r.json(), {"zone": "beachblox", "badges_given": 0})
         self.assertEqual(self.http.post("/zones/beachblox/events", json={"events": "x"}, headers=self.bridge).status_code, 400)
+
+
+class BridgeEventTests(unittest.TestCase):
+    """The bridge passes the world's badge events (rows in its DataStore) to the Beach, once each."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="bridge-events-"))
+        self.db = self.dir / "local-8100.db"
+        c = sqlite3.connect(self.db)
+        c.execute("""CREATE TABLE data_stores (game_id TEXT NOT NULL, store_name TEXT NOT NULL, key TEXT NOT NULL,
+                     value TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                     updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (game_id, store_name, key))""")
+        c.execute("INSERT INTO data_stores (game_id, store_name, key, value) VALUES ('run1', 'BeachDoor', 'world', '{}')")
+        c.commit()
+        c.close()
+        self.posted = []
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def world_writes(self, game_id, seq, kind, name="Pebble", uid=77):
+        c = sqlite3.connect(self.db)
+        c.execute("INSERT OR REPLACE INTO data_stores (game_id, store_name, key, value) VALUES (?, 'BeachDoor', ?, ?)",
+                  (game_id, f"event:{seq % 64}", json.dumps({"seq": seq, "kind": kind, "user_id": uid, "joined_as": name})))
+        c.commit()
+        c.close()
+
+    def bridge(self):
+        from beach.bridge import Bridge, WorldStore
+
+        def http(method, url, headers, body=None):
+            self.posted.append((method, url, headers.get("Authorization"), body))
+            return {}
+        return Bridge("http://127.0.0.1:8100", "http://127.0.0.1:8765", "beachblox", "bt", lambda: None,
+                      http=http, log=lambda m: None, store=WorldStore(self.db))
+
+    def test_new_events_once_each_in_order(self):
+        b = self.bridge()
+        self.assertEqual(b.sync_events(), 0)
+        self.world_writes("run1", 1, "castle")
+        self.world_writes("run1", 2, "goal")
+        self.assertEqual(b.sync_events(), 2)
+        method, url, auth, body = self.posted[-1]
+        self.assertEqual((method, url, auth), ("POST", "http://127.0.0.1:8765/zones/beachblox/events", "Bearer bt"))
+        self.assertEqual([e["kind"] for e in body["events"]], ["castle", "goal"])
+        self.assertEqual(body["events"][0], {"kind": "castle", "user_id": 77, "joined_as": "Pebble"})
+        self.assertEqual(b.sync_events(), 0)                   # nothing new: nothing sent
+        self.assertEqual(len(self.posted), 1)
+        self.world_writes("run1", 66, "tall_castle")           # the ring wraps: key event:2 again
+        self.assertEqual(b.sync_events(), 1)
+        self.assertEqual(self.posted[-1][3]["events"][0]["kind"], "tall_castle")
+
+    def test_a_new_world_run_starts_counting_again(self):
+        b = self.bridge()
+        self.world_writes("run1", 5, "goal")
+        b.sync_events()
+        c = sqlite3.connect(self.db)
+        c.execute("INSERT INTO data_stores (game_id, store_name, key, value, updated_at) VALUES"
+                  " ('run2', 'BeachDoor', 'world', '{}', '2999-01-01 00:00:00')")
+        c.commit()
+        c.close()
+        self.world_writes("run2", 1, "castle")
+        self.assertEqual(b.sync_events(), 1)
+        self.assertEqual(self.posted[-1][3]["events"][0]["kind"], "castle")
+
+    def test_world_scripts_report_goals_and_castles(self):
+        lua = (ROOT / "worlds" / "beach" / "main.lua").read_text()
+        for kind in ('"goal"', '"castle"', '"tall_castle"'):
+            self.assertIn(f"beachEvent({kind}", lua)
+        self.assertIn('GetDataStore("BeachDoor")', lua)
+        self.assertNotIn("HttpService:", lua.split("beachEvent")[1][:2000])   # never the network
 
 
 if __name__ == "__main__":

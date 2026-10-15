@@ -1,6 +1,6 @@
 """The game bridge: the Beach's local helper for one running Clawblox world.
 
-Run one per world (BeachBlox, ClawBlox). It does two jobs, both on this machine only:
+Run one per world (BeachBlox, ClawBlox). It does three jobs, all on this machine only:
 
 1. The front door. Every second it fetches from the Beach who it has vouched for (GET
    /zones/<zone>/door) and writes those claims into the world's own DataStore (the SQLite file
@@ -12,6 +12,9 @@ Run one per world (BeachBlox, ClawBlox). It does two jobs, both on this machine 
    them: vouched-for players by their join (the Beach knows whose it is), guests as guests.
    The Beach answers with each player's colours; the bridge writes them to static/tints.json
    for the beach renderer.
+3. Badge events. Every second it reads the events the world wrote into the same DataStore (a
+   goal scored, a sandcastle built; each names only a join) and passes the new ones to the Beach
+   (POST /zones/<zone>/events), which gives badges for the day to the joins it vouched for.
 
 Both addresses must be on this machine. Proxy settings are ignored, so nothing leaves the
 computer. Standard library only.
@@ -120,6 +123,21 @@ class WorldStore:
                           " updated_at = datetime('now')",
                           (game_id, self.STORE, key, json.dumps(value, separators=(",", ":"))))
 
+    def events(self, game_id: str) -> list[dict]:
+        """The world's badge events (rows "event:<n>", a ring the world overwrites), by seq."""
+        with closing(self._conn()) as c, c:
+            rows = c.execute("SELECT value FROM data_stores WHERE game_id = ? AND store_name = ? AND key LIKE 'event:%'",
+                             (game_id, self.STORE)).fetchall()
+        out = []
+        for (value,) in rows:
+            try:
+                e = json.loads(value)
+            except ValueError:
+                continue
+            if isinstance(e, dict) and isinstance(e.get("seq"), int):
+                out.append(e)
+        return sorted(out, key=lambda e: e["seq"])
+
     def read(self, game_id: str, key: str):
         with closing(self._conn()) as c, c:
             row = c.execute("SELECT value FROM data_stores WHERE game_id = ? AND store_name = ? AND key = ?",
@@ -158,6 +176,7 @@ class Bridge:
         self.last_report: list | None = None
         self.last_tints: dict | None = None
         self.last_door: str | None = None
+        self.events_seen: tuple[str, int] | None = None   # (game id, last event seq passed on)
         self.world_ok = True
 
     def _auth(self) -> dict:
@@ -186,6 +205,27 @@ class Bridge:
             self.store.write(game_id, items)
             self.last_door = sig
         return len(items) - 1
+
+    def sync_events(self) -> int | None:
+        """Pass the world's new badge events (a goal, a sandcastle) to the Beach. Returns how many."""
+        if not self.store:
+            return None
+        game_id = self.store.game_id()
+        if not game_id:
+            return None
+        seen = self.events_seen[1] if self.events_seen and self.events_seen[0] == game_id else 0
+        new = [e for e in self.store.events(game_id) if e["seq"] > seen]
+        if not new:
+            return 0
+        events = [{"kind": str(e.get("kind", "")), "user_id": e.get("user_id"), "joined_as": str(e.get("joined_as", ""))}
+                  for e in new]
+        try:
+            self.http("POST", f"{self.beach}/zones/{self.zone}/events", self._auth(), {"events": events})
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            self.log(f"Beach not reachable for events ({e}); will retry")
+            return None
+        self.events_seen = (game_id, new[-1]["seq"])
+        return len(new)
 
     def read_world(self) -> dict | None:
         tok = self.spectator_token() or ""
@@ -279,10 +319,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def run_loop(b: "Bridge", every: float = 10.0, once: bool = False, keep_going=lambda: True) -> None:
-    """Sync the door every second (joins wait on it); report presence every `every` seconds."""
+    """Sync the door every second (joins wait on it), and pass on the world's badge events;
+    report presence every `every` seconds."""
     last_report = 0.0
     while keep_going():
         b.sync_door()
+        b.sync_events()
         if time.monotonic() - last_report >= max(2.0, every):
             b.step()
             last_report = time.monotonic()
