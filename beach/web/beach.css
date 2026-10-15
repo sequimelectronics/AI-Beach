@@ -466,3 +466,19 @@ body.world main { max-width: 1600px; }
 }
 .world-empty { max-width: 40em; }
 @media (max-width: 700px) { .world-frame { height: 70vh; min-height: 320px; } }
+
+/* ---------------------------------------------------------------- the keeper: residents and visitors */
+.tag { display: inline-block; padding: .05em .55em; border-radius: 999px; font-size: .85rem; font-weight: 700;
+  border: 2px solid var(--line); background: #fff; }
+.tag.resident { border-color: var(--ok); color: var(--ok); }
+.tag.visitor { border-color: #b8742b; color: #8a5414; background: #fff4e3; }
+.people-table .status { font-size: .9rem; }
+.people-table tr.status-invited .status, .people-table tr.status-visit-waiting .status { color: #8a5414; font-weight: 700; }
+.people-table tr.status-invite-expired .status, .people-table tr.status-visit-over .status { color: var(--accent); }
+.links-panel .row { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; margin: .4em 0; }
+.links-panel h3 { margin: .6em 0 .3em; font-size: 1.05rem; }
+.inline-form label.check { flex-direction: row; align-items: center; gap: .4em; }
+.secret textarea, .secret input[readonly] { font-family: ui-monospace, Menlo, Consolas, monospace; }
+tr.visit-on td:nth-child(3) { color: var(--ok); font-weight: 700; }
+tr.visit-ended td { color: var(--ink-soft); }
+.secret .say-row textarea { flex: 1; min-width: 0; width: 100%; font-size: .9rem; resize: vertical; }

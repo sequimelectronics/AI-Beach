@@ -137,6 +137,9 @@ class Participant:
     kind: str
     is_admin: bool
     invitable: bool
+    access: str = "resident"         # "resident" or "visitor" (access.py)
+    removed: bool = False            # a former participant: their name, for history only
+    sign_in: int | None = None       # the sign-in link this request came with
 
 
 class Beach:
@@ -156,6 +159,8 @@ class Beach:
         self.tables = Boardwalk(self)
         from .badges import Badges
         self.badges = Badges(self)
+        from .access import Access
+        self.access = Access(self)
 
     # ------------------------------------------------------------------ setup
 
@@ -212,6 +217,13 @@ class Beach:
         if "left_reason" not in gcols:   # why a character left: NULL (they left), 'idle', 'removed'
             self.db.run("ALTER TABLE game_grants ADD COLUMN left_reason TEXT")
             self.db.run("ALTER TABLE game_grants ADD COLUMN told INTEGER NOT NULL DEFAULT 0")
+        pcols = {r["name"] for r in self.db.q("PRAGMA table_info(participants)")}
+        if "access" not in pcols:   # job 13: residents and visitors; removing a participant
+            self.db.run("ALTER TABLE participants ADD COLUMN access TEXT NOT NULL DEFAULT 'resident'")
+            self.db.run("ALTER TABLE participants ADD COLUMN removed_at REAL")
+            self.db.run("ALTER TABLE participants ADD COLUMN former_name TEXT")
+        if "last_ip" not in {r["name"] for r in self.db.q("PRAGMA table_info(sign_ins)")}:
+            self.db.run("ALTER TABLE sign_ins ADD COLUMN last_ip TEXT")   # the address a link was last used from
         if "from_default" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
             # A rename away from a name the Beach gave (the keeper's "Beach-keeper"): no "(was ...)".
             self.db.run("ALTER TABLE name_history ADD COLUMN from_default INTEGER NOT NULL DEFAULT 0")
@@ -299,7 +311,12 @@ class Beach:
     # ----------------------------------------------------------- participants
 
     def _p(self, row) -> Participant:
-        return Participant(row["id"], row["name"], row["kind"], bool(row["is_admin"]), bool(row["invitable"]))
+        keys = row.keys()
+        removed = "removed_at" in keys and row["removed_at"] is not None
+        return Participant(row["id"], row["former_name"] if removed else row["name"], row["kind"],
+                           bool(row["is_admin"]), bool(row["invitable"]),
+                           row["access"] if "access" in keys else "resident", removed,
+                           row["sign_in"] if "sign_in" in keys else None)
 
     def check_name(self, name: str, pid: int | None = None) -> str:
         """A name that may be used: the right shape, and not mistakable for anyone else's name
@@ -341,24 +358,31 @@ class Beach:
         return self._p(row) if row else None
 
     def participants(self) -> list[dict]:
+        """The keeper's list (former participants aren't on it)."""
         return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "admin": bool(r["is_admin"]),
+                 "access": r["access"], "status": self.access.status(r["id"]),
                  "invitable": bool(r["invitable"]), "has_token": self.is_active(r["id"]),
                  "links": self.db.one("SELECT COUNT(*) AS n FROM sign_ins WHERE participant_id = ?"
                                       " AND revoked_at IS NULL", (r["id"],))["n"],
                  "was": self.was_name(r["id"]), "avatar_v": self.avatar_version(r["id"])}
-                for r in self.db.q("SELECT * FROM participants ORDER BY id")]
+                for r in self.db.q("SELECT * FROM participants WHERE removed_at IS NULL ORDER BY id")]
 
-    def authenticate(self, token: str | None) -> Participant | None:
+    def authenticate(self, token: str | None, ip: str | None = None) -> Participant | None:
         if not token:
             return None
-        row = self.db.one("SELECT p.*, s.id AS sign_in, s.last_used_at FROM sign_ins s JOIN participants p"
-                          " ON p.id = s.participant_id WHERE s.token_hash = ? AND s.revoked_at IS NULL",
-                          (_hash(token),))
+        row = self.db.one("SELECT p.*, s.id AS sign_in, s.last_used_at, s.last_ip FROM sign_ins s JOIN participants p"
+                          " ON p.id = s.participant_id WHERE s.token_hash = ? AND s.revoked_at IS NULL"
+                          " AND p.removed_at IS NULL", (_hash(token),))
         if not row:
             return None
+        if row["access"] == "visitor" and not self.access.visit_allows(row["id"]):
+            # The visit is over (or not yet on): end it now, rather than at the next upkeep.
+            self.access.sweep()
+            return None
         now = self.now()
-        if row["last_used_at"] is None or now - row["last_used_at"] > 300:   # don't write on every request
-            self.db.run("UPDATE sign_ins SET last_used_at = ? WHERE id = ?", (now, row["sign_in"]))
+        if row["last_used_at"] is None or now - row["last_used_at"] > 300 or (ip and ip != row["last_ip"]):
+            self.db.run("UPDATE sign_ins SET last_used_at = ?, last_ip = COALESCE(?, last_ip) WHERE id = ?",
+                        (now, ip, row["sign_in"]))
         return self._p(row)
 
     def is_active(self, pid: int) -> bool:
@@ -380,7 +404,7 @@ class Beach:
     def links(self, pid: int) -> list[dict]:
         self.participant(pid)
         return [{"id": r["id"], "label": r["label"], "created_at": r["created_at"], "last_used_at": r["last_used_at"],
-                 "active": r["revoked_at"] is None}
+                 "last_ip": r["last_ip"], "active": r["revoked_at"] is None}
                 for r in self.db.q("SELECT * FROM sign_ins WHERE participant_id = ? ORDER BY id", (pid,))]
 
     def revoke_link(self, pid: int, lid: int) -> None:
@@ -427,6 +451,8 @@ class Beach:
         """Change a participant's name, everywhere, like IRC's /nick. Participants: first rename
         free, then once per rename_cooldown_s; the keeper can rename anyone at any time."""
         p = self.participant(pid)
+        if p.access == "visitor" and not by_admin:
+            raise BeachError("forbidden", "a visitor's name is the one the keeper gave the visit")
         new = self.check_name(new_name, pid)
         if new == p.name:
             raise BeachError("invalid", f"you're already called {new}")
@@ -647,6 +673,8 @@ class Beach:
                     raise BeachError("conflict", self._removed_text(zid, last["left_reason"]) +
                                      " Play again to come back as a new character.", data={"removed": last["left_reason"]})
             self.stop_watching(pid, zid)
+            if p.access == "visitor":
+                self.access.saw(pid, zid)
             try:
                 j = (joiner or front_door.join_world)(z["world_url"], p.name, z["join_key"])
             except Exception as e:  # the world is down, or refused
@@ -684,8 +712,11 @@ class Beach:
         now = self.now()
         self.db.run("INSERT INTO world_watchers VALUES (?, ?, ?, ?) ON CONFLICT (zone_id, participant_id)"
                     " DO UPDATE SET seen_at = excluded.seen_at", (zid, pid, now, now))
-        if self.participant(pid).kind == "person":
+        me = self.participant(pid)
+        if me.kind == "person":
             self.db.run("UPDATE zones SET people_seen_at = ? WHERE id = ?", (now, zid))
+        if me.access == "visitor":
+            self.access.saw(pid, zid)
         from . import front_door
         viewer = z["viewer_url"] or (z["world_url"] + "/" if z["world_url"] else None)
         return {"zone": zid, "watching": True, "playing": False, "lasts_s": WATCH_TTL_S,
@@ -912,6 +943,8 @@ class Beach:
             self.db.run("UPDATE zones SET occupied_since = ? WHERE id = ?", (now, zid))
         self.db.run("INSERT INTO visits (participant_id, zone_id, joined_at, last_active) VALUES (?, ?, ?, ?)",
                     (pid, zid, now, now))
+        if p.access == "visitor":
+            self.access.saw(pid, zid)
         worn = self.badges.worn(pid)
         if worn:
             from .badges import words
@@ -1032,8 +1065,9 @@ class Beach:
         v = self._visit(pid, zid)
         if not v and not all_visits:
             return []
-        sql = ("SELECT m.id, m.kind, m.text, m.created_at, m.author_id, COALESCE(m.author_name, p.name) AS author,"
-               " p.name AS author_now, p.kind AS author_kind"
+        sql = ("SELECT m.id, m.kind, m.text, m.created_at, m.author_id, COALESCE(m.author_name, p.former_name, p.name)"
+               " AS author, COALESCE(p.former_name, p.name) AS author_now, p.kind AS author_kind,"
+               " p.removed_at IS NOT NULL AS author_former"
                " FROM messages m JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                " LEFT JOIN participants p ON p.id = m.author_id"
                " WHERE m.zone_id = ? AND m.deleted = 0 AND m.id > ?"
@@ -1227,6 +1261,9 @@ class Beach:
     def ring_bell(self, pid: int) -> dict:
         """Ring the Gather Bell in SandChat: an invitation, not a summons."""
         p = self.participant(pid)
+        if not self.access.may_ring(pid):
+            raise BeachError("forbidden", "visitors don't ring the Gather Bell (it reaches the household's devices)"
+                                          " unless the keeper allows it for the visit")
         self._require_present(pid, SANDCHAT)
         self.sweep_bells()
         now = self.now()
@@ -1452,6 +1489,7 @@ class Beach:
         """Periodic upkeep: idle auto-leave, closing bells, handing notices to the hook, and (every
         10 minutes) removing messages past their retention."""
         self.sweep_idle()
+        self.access.sweep()
         self.deliver_notices()
         self.tables.sweep()
         self.badges.purge()

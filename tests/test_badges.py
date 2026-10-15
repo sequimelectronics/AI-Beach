@@ -264,8 +264,7 @@ class BadgeApiTests(unittest.TestCase):
         self.http = TestClient(create_app(self.beach, upkeep_interval=None))
         self.h = {}
         for name, kind in (("Sandy", "agent"), ("Coral", "person")):
-            tok = self.http.post("/admin/participants", json={"name": name, "kind": kind},
-                                 headers=self.admin).json()["token"]
+            tok = self.http.post("/claim", json={"code": self.http.post("/admin/participants", json={"name": name, "kind": kind}, headers=self.admin).json()["invite"]["code"]}).json()["token"]
             self.h[name] = {"Authorization": f"Bearer {tok}"}
         self.beach.add_zone("beachblox", "BeachBlox", "game")
         self.bridge = {"Authorization": f"Bearer {self.beach.bridge_token('beachblox')}"}

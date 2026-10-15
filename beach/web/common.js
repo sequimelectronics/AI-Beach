@@ -16,9 +16,37 @@ const Beach = (() => {
   function token () {
     try { return localStorage.getItem(KEY) || window.__beachToken || null } catch (e) { return window.__beachToken || null }
   }
-  function signOut () {
+  // Sign out for real: this device's link stops working (on a shared device, the browser's
+  // history can't sign anyone back in), then this browser forgets it.
+  async function signOut () {
+    try { await api('POST', '/me/sign-out') } catch (e) { /* already gone: forget it anyway */ }
     try { localStorage.removeItem(KEY) } catch (e) {}
+    window.__beachToken = null
     location.href = '/'
+  }
+
+  // An invite link looks like  http://<beach>/#c=<code>. The code works once: claiming it here
+  // makes this browser's own link. The code after '#' never reaches a server log.
+  async function claimFromLink () {
+    const m = location.hash.match(/(?:^#|&)c=([A-Za-z0-9-]{8,40})/)
+    if (!m) return null
+    history.replaceState(null, '', location.pathname + location.search)
+    return claim(m[1])
+  }
+  async function claim (code) {
+    const r = await fetch('/claim', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, label: deviceLabel() })
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) return { error: data.message || 'That code didn\'t work.' }
+    try { localStorage.setItem(KEY, data.token) } catch (e) { window.__beachToken = data.token }
+    return data
+  }
+  function deviceLabel () {
+    const ua = navigator.userAgent
+    const what = /iPhone|Android.*Mobile/.test(ua) ? 'phone' : /iPad|Android/.test(ua) ? 'tablet' : 'computer'
+    return 'browser on a ' + what
   }
 
   class ApiError extends Error {
@@ -37,8 +65,27 @@ const Beach = (() => {
     const type = r.headers.get('content-type') || ''
     if (type.includes('json')) data = await r.json()
     else data = await r.text()
+    if (r.status === 401 && token()) lostAccess()
     if (!r.ok) throw new ApiError(r.status, typeof data === 'object' ? data : { message: data })
     return data
+  }
+
+  // This device's sign-in stopped working while a page was open: a visit ended, or the keeper
+  // signed it out. Say so plainly, forget it, and stop.
+  let lost = false
+  function lostAccess () {
+    if (lost) return
+    lost = true
+    try { localStorage.removeItem(KEY) } catch (e) {}
+    window.__beachToken = null
+    const mainEl = document.querySelector('main')
+    if (!mainEl) return
+    document.querySelectorAll('.topbar, .notice').forEach(n => n.remove())
+    mainEl.replaceChildren(
+      el('h1', { text: 'You\'re signed out' }),
+      el('div', { class: 'card' },
+        el('p', { text: 'This device\'s way in doesn\'t work any more: a visit has ended, or the Beach-keeper signed it out. Nothing from here was kept on this device.' }),
+        el('p', { class: 'hint', text: 'To come back, ask the Beach-keeper for a new invite.' })))
   }
 
   // Build elements without ever parsing names or messages as HTML.
@@ -294,7 +341,21 @@ const Beach = (() => {
     mainEl.replaceChildren(
       el('h1', { text: 'Welcome to the Beach' }),
       el('div', { class: 'card' },
-        el('p', { text: 'To come in, open the link your Beach-keeper gave you. This browser will remember you after that.' }),
+        el('p', { text: 'To come in, open the link your Beach-keeper gave you, or type the code from it. This browser will remember you after that.' }),
+        el('form', {
+          class: 'inline-form',
+          onsubmit: async (ev) => {
+            ev.preventDefault()
+            const v = ev.target.querySelector('input').value.trim()
+            if (!v) return
+            const r = await claim(v)
+            if (r.error) { ev.target.querySelector('.error').textContent = r.error; return }
+            location.reload()
+          }
+        },
+        el('label', {}, 'Invite code', el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'ABCD-EFGH-JKLM-NPQR' })),
+        el('button', { class: 'primary', type: 'submit', text: 'Come in' }),
+        el('p', { class: 'error', 'aria-live': 'polite' })),
         el('details', {},
           el('summary', { text: 'I have a token instead' }),
           el('form', {
@@ -309,10 +370,20 @@ const Beach = (() => {
           el('button', { class: 'primary', type: 'submit', text: 'Sign in' })))))
   }
 
+  // A sign-in or invite link opened in a tab that's already on the Beach: start over with it.
+  window.addEventListener('hashchange', () => { if (/(?:^#|&)[ct]=/.test(location.hash)) location.reload() })
+
   // Every page starts here. Returns the /map data, or null if this browser isn't signed in.
   async function start (current) {
     takeLinkToken()
     const mainEl = document.querySelector('main')
+    const claimed = await claimFromLink()
+    if (claimed && claimed.error) {
+      try { localStorage.removeItem(KEY) } catch (e) {}
+      signedOut(mainEl)
+      mainEl.prepend(el('p', { class: 'error', text: claimed.error }))
+      return null
+    }
     if (!token()) { signedOut(mainEl); return null }
     const map = await topbar(current)
     if (!map) {

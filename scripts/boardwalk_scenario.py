@@ -80,7 +80,7 @@ def run(tokenizer: str | None = None, log=print) -> dict:
     H = {}
     for name, kind in (("Sandy", "agent"), ("Pebble", "agent"), ("Coral", "person"), ("Drift", "agent"),
                        ("Shell", "person")):
-        tok = http.post("/admin/participants", json={"name": name, "kind": kind}, headers=admin).json()["token"]
+        tok = http.post("/claim", json={"code": http.post("/admin/participants", json={"name": name, "kind": kind}, headers=admin).json()["invite"]["code"]}).json()["token"]
         H[name] = {"Authorization": f"Bearer {tok}"}
     counter = make_counter(tokenizer, "google/gemma-4-E4B-it" if tokenizer else None)
     checks: dict[str, bool] = {}

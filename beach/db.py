@@ -211,6 +211,37 @@ CREATE TABLE IF NOT EXISTS game_grants (
     PRIMARY KEY (agent_id, participant_id)
 );
 
+-- Invites (access.py): a one-time code the keeper hands over by any means. The first claim uses it
+-- up and becomes that device's own sign-in link. A resident's invite expires unclaimed; a
+-- visitor's works only inside its visit's window.
+CREATE TABLE IF NOT EXISTS access_invites (
+    id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    code_hash TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,                  -- the device it's for ("first device", "phone", ...)
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,             -- no claims after this
+    claimed_at REAL,
+    sign_in_id INTEGER,                   -- the link the claim made
+    revoked_at REAL                       -- re-sent, kicked, or the visit ended
+);
+
+-- A visit: a visitor's window. When it ends (its end time, or the keeper's End visit), every
+-- credential it made stops working, their characters leave the worlds, they leave every zone.
+CREATE TABLE IF NOT EXISTS access_visits (
+    id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    name TEXT NOT NULL,                   -- the visitor's name, kept for the log
+    starts_at REAL NOT NULL,
+    ends_at REAL NOT NULL,
+    bell INTEGER NOT NULL DEFAULT 0,      -- may ring the Gather Bell (off by default)
+    made_at REAL NOT NULL,
+    first_seen_at REAL,
+    ended_at REAL,
+    end_reason TEXT,                      -- 'window', 'keeper', 'resident' (became a resident)
+    zones TEXT NOT NULL DEFAULT '[]'      -- the zones they went into, for the keeper's log
+);
+
 -- Watching a game world (core.watch_world): a spectator spot at the edge of the world. A
 -- watcher has no character there; their name shows at the spot, and the world announces them.
 -- A watch lasts while it is refreshed (the page does that while it is open).

@@ -19,7 +19,7 @@
   function line (m) {
     const t = el('span', { class: 't', text: hhmm(m.at) })
     if (m.kind === 'say') {
-      return el('p', { class: 'say' }, t, el('span', { class: 'who', text: '<' + (m.author || '?') + '>' }), ' ', m.text)
+      return el('p', { class: 'say' }, t, el('span', { class: 'who', text: '<' + (m.author || '?') + '>' }), m.former ? el('span', { class: 'hint', text: ' (former participant)' }) : null, ' ', m.text)
     }
     if (m.kind === 'action') return el('p', { class: 'action' }, t, '* ' + m.text)
     return el('p', { class: 'sys' }, t, '— ' + m.text)

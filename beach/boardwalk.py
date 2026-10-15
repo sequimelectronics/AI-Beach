@@ -398,7 +398,8 @@ class Boardwalk:
         return out
 
     def history(self, tid: int, limit: int | None = None) -> list[dict]:
-        sql = ("SELECT m.*, p.name FROM table_moves m JOIN participants p ON p.id = m.participant_id"
+        sql = ("SELECT m.*, COALESCE(p.former_name, p.name) AS name FROM table_moves m"
+               " JOIN participants p ON p.id = m.participant_id"
                " WHERE table_id = ? ORDER BY ply DESC")
         rows = self.db.q(sql + (" LIMIT ?" if limit else ""), (tid, limit) if limit else (tid,))
         return [{"ply": r["ply"], "seat": r["seat"], "name": r["name"], "move": r["move"],

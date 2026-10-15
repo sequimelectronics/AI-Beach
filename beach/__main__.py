@@ -1,5 +1,7 @@
 """Run the Beach:  python -m beach
 Print the keeper's sign-in link for a browser:  python -m beach keeper-link
+Keeper locked out (signed out, link revoked)? Make a fresh keeper link:  python -m beach keeper-link --new
+  (only on the machine running the Beach, with access to its data directory; never through the web)
 
 Settings come from the environment:
   AI_BEACH_DATA   data directory (database, admin token). Required; keep it outside the repo.
@@ -38,17 +40,8 @@ def main() -> int:
     host = os.environ.get("AI_BEACH_HOST", "127.0.0.1")
     port = int(os.environ.get("AI_BEACH_PORT", "8765"))
 
-    if sys.argv[1:] == ["keeper-link"]:
-        token_file = data_dir / "admin_token"
-        if not token_file.exists():
-            print("No admin token yet: start the Beach once first.", file=sys.stderr)
-            return 1
-        b = Beach(data_dir)
-        base = b.setting("link_base") or f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}"
-        b.db.close()
-        print(f"{base}/#t={token_file.read_text().strip()}")
-        print("Open it in your browser. It signs you in as the keeper; don't share it.", file=sys.stderr)
-        return 0
+    if sys.argv[1:2] == ["keeper-link"]:
+        return keeper_link(data_dir, host, port, new="--new" in sys.argv[2:])
 
     beach = Beach(data_dir)
     install(beach)
@@ -70,6 +63,43 @@ def main() -> int:
                     log_level="warning", access_log=False)
         return 0
     return serve_https(beach, data_dir, host, port)
+
+
+def keeper_link(data_dir: Path, host: str = "127.0.0.1", port: int = 8765, new: bool = False,
+                out=sys.stdout, err=sys.stderr) -> int:
+    """Print the keeper's sign-in link. With new=True (keeper recovery), make a fresh one: a new
+    sign-in link for the keeper, written straight into the database here. There is no way to do
+    this through the web: it needs this machine and the Beach's data directory."""
+    token_file = data_dir / "admin_token"
+    if not (data_dir / "beach.db").exists():
+        print("No Beach here yet: start it once first.", file=err)
+        return 1
+    b = Beach(data_dir)
+    try:
+        base = b.setting("link_base") or f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}"
+        keeper = b.db.one("SELECT id FROM participants WHERE is_admin = 1 AND removed_at IS NULL ORDER BY id LIMIT 1")
+        if keeper is None:
+            print("This Beach has no keeper yet: start it once first.", file=err)
+            return 1
+        if new:
+            token = b.new_link(keeper["id"], "keeper recovery")["token"]
+            token_file.write_text(token + "\n")
+            try:
+                os.chmod(token_file, 0o600)
+            except OSError:   # Windows: the file is in the keeper's own data directory anyway
+                pass
+            print("A fresh keeper link (the old ones still work until you revoke them on the keeper page):", file=err)
+        else:
+            token = token_file.read_text().strip() if token_file.exists() else ""
+            if not b.authenticate(token):
+                print("The saved keeper link doesn't work any more (signed out or revoked). "
+                      "Make a fresh one:  python -m beach keeper-link --new", file=err)
+                return 1
+        print(f"{base}/#t={token}", file=out)
+        print("Open it in your browser. It signs you in as the keeper; don't share it.", file=err)
+        return 0
+    finally:
+        b.db.close()
 
 
 class _Server(uvicorn.Server):

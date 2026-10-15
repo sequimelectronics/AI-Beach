@@ -324,8 +324,8 @@ class LinkTests(Case):
         admin_tok = self.beach.add_participant("Keeper Two", "person", is_admin=True)[1]
         admin = {"Authorization": f"Bearer {admin_tok}"}
         r = http.post(f"/admin/participants/{self.coral.id}/token", json={"label": "tablet"}, headers=admin).json()
-        tablet = r["token"]
-        self.assertEqual(r["link"]["label"], "tablet")
+        self.assertEqual(r["invite"]["label"], "tablet")          # job 13: an invite, claimed on the tablet
+        tablet = http.post("/claim", json={"code": r["invite"]["code"]}).json()["token"]
         self.assertEqual(http.get("/me", headers={"Authorization": f"Bearer {self.coral_tok}"}).status_code, 200)
         links = http.get(f"/admin/participants/{self.coral.id}/links", headers=admin).json()["links"]
         self.assertEqual(len(links), 2)
