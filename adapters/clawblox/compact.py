@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 
 from .world import (
-    MESA_RULES, Entity, Player, Rules, Snapshot, beach_layout, direction_to, dist3, fmt_vec,
+    MESA_RULES, Entity, Player, Rules, Snapshot, beach_layout, direction_to, dist3, fmt_vec, watchers,
     held_object, r1, resting_on, standing_on,
 )
 
@@ -165,6 +165,7 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
     rows.sort(key=lambda r: r["dist"])
     on = standing_on(snap, statics, rules)
     score = snap.folders.get("Score")
+    spot, watching = watchers(snap)
     return {
         "tick": snap.tick,
         "me": [r1(v) for v in snap.me],
@@ -181,6 +182,7 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
              "in_view": p.in_view}
             for p in players_in_radius(snap, names_by_entity)
         ],
+        "watching": {"spot": spot, "names": watching} if watching else None,
     }
 
 
@@ -229,6 +231,8 @@ def view_text(v: dict) -> str:
         lines.append("players: " + "; ".join(ps))
     else:
         lines.append("players: nobody else nearby")
+    if v.get("watching"):
+        lines.append(f"watching from {v['watching']['spot']}: {', '.join(v['watching']['names'])}")
     return "\n".join(lines)
 
 

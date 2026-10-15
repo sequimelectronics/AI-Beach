@@ -8,8 +8,12 @@ Run one per world (BeachBlox, ClawBlox). It does three jobs, all on this machine
    there: it admits a join only when the Beach vouched for it under the name it joined with,
    labels the player with their current Beach name, and kicks everyone else (or, if the keeper
    allows guests, labels them "Guest N").
+   It also writes who is watching the world (key "watchers"): the world shows their names at
+   its watch spot and announces them. Watchers have no character there.
 2. Presence. Every 10 s it reads the world's players (Clawblox's spectator endpoint) and reports
-   them: vouched-for players by their join (the Beach knows whose it is), guests as guests.
+   them: vouched-for players by their join (the Beach knows whose it is), guests as guests,
+   with whether the world answered, which run of it this is, and its idle limit (afk_timeout in
+   world.toml), so the Beach can tell someone the world took their character out.
    The Beach answers with each player's colours; the bridge writes them to static/tints.json
    for the beach renderer.
 3. Badge events. Every second it reads the events the world wrote into the same DataStore (a
@@ -61,6 +65,18 @@ def spectator_token_from_log(path: str) -> str | None:
         return None
     found = re.findall(r"spectator_token=([A-Za-z0-9_\-]+)", text)
     return found[-1] if found else None
+
+
+def afk_timeout_of(world_dir: str | Path) -> float | None:
+    """The world's idle limit (afk_timeout in its world.toml, seconds; Clawblox's default is 300).
+    0 means the world never removes idle players."""
+    toml = Path(world_dir) / "world.toml"
+    try:
+        text = toml.read_text(errors="replace")
+    except OSError:
+        return None
+    m = re.search(r"^\s*afk_timeout\s*=\s*(\d+)", text, re.M)
+    return float(m.group(1)) if m else 300.0
 
 
 def player_names(spectate: dict) -> list[str]:
@@ -178,6 +194,7 @@ class Bridge:
         self.last_door: str | None = None
         self.events_seen: tuple[str, int] | None = None   # (game id, last event seq passed on)
         self.world_ok = True
+        self.afk_timeout_s = afk_timeout_of(world_dir) if world_dir else None
 
     def _auth(self) -> dict:
         return {"Authorization": f"Bearer {self.bridge_token}"}
@@ -194,7 +211,8 @@ class Bridge:
         except (urllib.error.URLError, OSError, ValueError) as e:
             self.log(f"Beach not reachable for the door ({e}); the world keeps what it has")
             return None
-        items: dict[str, object] = {"policy": {"guests": bool(door.get("guests"))}}
+        items: dict[str, object] = {"policy": {"guests": bool(door.get("guests"))},
+                                    "watchers": {"names": [str(n) for n in door.get("watchers", [])][:50]}}
         for g in door.get("grants", []):
             items[f"grant:{int(g['user_id'])}"] = {"claims": [
                 {"name": c["name"], "joined_as": c["joined_as"], "revoked": bool(c.get("revoked")),
@@ -204,7 +222,7 @@ class Bridge:
         if sig != self.last_door:
             self.store.write(game_id, items)
             self.last_door = sig
-        return len(items) - 1
+        return len(items) - 2
 
     def sync_events(self) -> int | None:
         """Pass the world's new badge events (a goal, a sandcastle) to the Beach. Returns how many."""
@@ -244,7 +262,9 @@ class Bridge:
     def step(self) -> dict | None:
         obs = self.read_world()
         report = door_report(obs) if obs is not None else []
-        body: dict = {"players": report, "world_url": self.world, "join_key": self.join_key}
+        body: dict = {"players": report, "world_url": self.world, "join_key": self.join_key,
+                      "world_up": obs is not None, "world_run": self.store.game_id() if self.store else None,
+                      "afk_timeout_s": self.afk_timeout_s}
         tok = self.spectator_token()
         if tok and obs is not None:
             body["spectator_token"] = tok   # so the Beach can hand participants a working viewer link

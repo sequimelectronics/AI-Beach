@@ -11,6 +11,7 @@
   let zone = null
   let mode = 'none'                        // 'none' | 'playing' | 'watching'
   let beat = null
+  let told = false                         // the page has said the world took your character out
   const ui = {}
 
   const zpath = () => '/zones/' + encodeURIComponent(zid)
@@ -38,14 +39,14 @@
           ? T.t(limit ? 'world_playing' : 'world_playing_plain', { zone: name, limit })
           : T.t('world_watching', { zone: name })))
     const buttons = []
-    if (m !== 'playing') buttons.push(el('button', { class: 'primary', type: 'button', text: T.t('play'), onclick: () => play(false) }))
+    if (m !== 'playing') buttons.push(el('button', { class: 'primary', type: 'button', text: T.t('play'), onclick: () => play(told) }))
     if (m === 'none') buttons.push(el('button', { type: 'button', text: T.t('watch'), onclick: watch }))
     if (m === 'playing') buttons.push(el('button', { class: 'quiet', type: 'button', text: T.t('leave'), onclick: leave }))
     if (m === 'watching') buttons.push(el('button', { class: 'quiet', type: 'button', text: T.t('stop_watching'), onclick: leave }))
     ui.buttons.replaceChildren(...buttons)
-    if (m === 'none' || !viewer) {
-      ui.stage.replaceChildren(el('div', { class: 'world-empty card' },
-        el('p', { text: m === 'none' ? T.t('world_choose') : T.t('world_no_viewer', { zone: name }) })))
+    if (m === 'none') { ui.stage.replaceChildren(); return }
+    if (!viewer) {
+      ui.stage.replaceChildren(el('div', { class: 'world-empty card' }, el('p', { text: T.t('world_no_viewer', { zone: name }) })))
       return
     }
     // The world's own viewer. The session (Play) is after '#', so it never reaches a server log.
@@ -67,6 +68,7 @@
     } catch (e) {
       if (e.body && e.body.removed) {
         // The world took your last character out: say so, and let you choose to come back.
+        told = true
         setMode('none')
         say(e.message, [el('button', { class: 'primary', type: 'button', text: T.t('play_again'), onclick: () => play(true) })])
       } else say(e.message)
@@ -114,6 +116,7 @@
       ui.status, ui.message, ui.stage)
     Beach.onEvent(ev => {
       if (!ev.data || ev.data.zone !== zid || ev.data.event !== 'world_removed') return false
+      told = true
       setMode('none')
       say(ev.text, [el('button', { class: 'primary', type: 'button', text: T.t('play_again'), onclick: () => play(true) })])
       return true

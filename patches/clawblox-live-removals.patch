@@ -1,0 +1,46 @@
+Clawblox engine: tell live viewers when a departed player's character leaves the world
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-live-removals.patch
+    cargo build --release
+
+Why: when a player leaves or is removed (Leave on the Beach, the world's idle limit, a kick), the
+engine takes their character out of the workspace without going through Lua, so the change is
+never marked for live replication. A viewer that is already open never hears that the
+character's parts are gone and keeps drawing the body (in a default look, since the Beach no
+longer sends that player's colors), while its Players panel reads 0; a page reload clears it.
+With this change the character and every part in it are marked changed first, so open viewers
+get a removal for each part, as they do for anything a world script destroys.
+
+diff --git a/src/game/lua/runtime/mod.rs b/src/game/lua/runtime/mod.rs
+index 7ad6dcd..18d08a5 100644
+--- a/src/game/lua/runtime/mod.rs
++++ b/src/game/lua/runtime/mod.rs
+@@ -628,6 +628,23 @@ impl LuaRuntime {
+     }
+ 
+     pub fn remove_player(&self, user_id: u64) {
++        // The character leaves the workspace without going through Lua, so mark it (and every
++        // part in it) changed first: live viewers then get a removal for each part, instead of
++        // drawing the departed player until the page is reloaded.
++        let character = self
++            .game
++            .players()
++            .get_player_by_user_id(user_id)
++            .and_then(|player| {
++                let data = player.data.lock().unwrap();
++                data.player_data
++                    .as_ref()
++                    .and_then(|pd| pd.character.as_ref())
++                    .and_then(|weak| weak.upgrade())
++            });
++        if let Some(character) = character {
++            Instance::from_ref(character).mark_replication_dirty_recursive(&self.lua);
++        }
+         self.game.players().remove_player(user_id);
+     }
+ 

@@ -1,0 +1,85 @@
+Clawblox viewer: a Beach page around it (watching read-only, no stray replay button)
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, after
+clawblox-viewer-session.patch (it extends that patch's HOST_SESSION). Independent of the other
+patches in this folder.
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-viewer-session.patch
+    git apply /path/to/AI-Beach/patches/clawblox-viewer-beach-page.patch
+    cargo build --release
+
+Why: a Beach shows a world's viewer on its own page, under the Beach's bar (/world?zone=...).
+1. Watching. Someone who chose Watch has no character in the world; their name shows at the
+   world's watch spot instead. The Beach opens the viewer with #watch=1 (after '#', so it never
+   reaches a server), and the chat panel stays read-only: sending would otherwise join the world
+   under a made-up name, as a player nobody chose to be.
+2. The "Agent messages" button. It belongs to replays, and the viewer sets it hidden in live
+   play, but the HUD button style (display: grid) overrides the hidden attribute, so it showed in
+   the bottom-left corner and opened nothing. Hidden HUD buttons now stay hidden.
+
+diff --git a/frontend_runtime/dist/main.js b/frontend_runtime/dist/main.js
+index bdf8174..6f10e15 100644
+--- a/frontend_runtime/dist/main.js
++++ b/frontend_runtime/dist/main.js
+@@ -1749,8 +1749,8 @@ function setChatLocalStatus(text) {
+ }
+ 
+ function updateChatSendUi() {
+-  if (chatSendEl) chatSendEl.disabled = chatState.sending
+-  if (chatInputEl) chatInputEl.disabled = false
++  if (chatSendEl) chatSendEl.disabled = chatState.sending || !!HOST_SESSION.watch
++  if (chatInputEl) chatInputEl.disabled = !!HOST_SESSION.watch
+ }
+ 
+ function setChatPanelOpen(open) {
+@@ -1765,13 +1765,21 @@ function setChatPanelOpen(open) {
+ 
+ // A host's session arrives after '#' (#session=...&player=...), so it never reaches a server log
+ // or the Referer header; read it once, then take it out of the address bar and history entry.
++// #watch=1 instead: the host shows this viewer to someone watching, who has no character here,
++// so the chat stays read-only (sending would join the world as someone nobody can see).
+ const HOST_SESSION = (() => {
+   const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+   const token = params.get('session')
+-  if (!token) return {}
++  const watch = params.get('watch') === '1'
++  if (!token && !watch) return {}
+   try { history.replaceState(null, '', window.location.pathname + window.location.search) } catch (_) {}
+-  return { token, player: params.get('player') }
++  return watch ? { watch: true } : { token, player: params.get('player') }
+ })()
++if (HOST_SESSION.watch) {
++  if (chatInputEl) { chatInputEl.disabled = true; chatInputEl.placeholder = 'Watching: read-only' }
++  if (chatSendEl) chatSendEl.disabled = true
++  setChatLocalStatus('Watching. To chat and play, choose Play on the Beach page.')
++}
+ 
+ function makeLocalPlayerName() {
+   const key = 'clawblox_local_chat_name'
+@@ -1784,6 +1792,7 @@ function makeLocalPlayerName() {
+ 
+ async function ensureChatSession() {
+   if (chatState.sessionToken) return
++  if (HOST_SESSION.watch) throw new Error('watching: the chat is read-only')
+   // A host (e.g. a Beach front door) may have joined for this viewer already: use that session.
+   if (HOST_SESSION.token) {
+     chatState.sessionToken = HOST_SESSION.token
+diff --git a/frontend_runtime/dist/styles.css b/frontend_runtime/dist/styles.css
+index d53468a..f8602b6 100644
+--- a/frontend_runtime/dist/styles.css
++++ b/frontend_runtime/dist/styles.css
+@@ -114,6 +114,12 @@ body {
+   transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+ }
+ 
++/* A hidden HUD button stays hidden (display: grid above would otherwise override [hidden]):
++   e.g. the replay-only "Agent messages" button in live play. */
++.hud-icon-button[hidden] {
++  display: none;
++}
++
+ .hud-icon-button:hover {
+   background: rgba(24, 33, 59, 0.82);
+   border-color: rgba(209, 222, 255, 0.28);

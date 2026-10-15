@@ -464,7 +464,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             beach.set_join_key(zid, str(body["join_key"]) if body["join_key"] else None)
         # Each matched player's look (colours, style, face) for a world that draws them, and the
         # plain face for players who aren't participants.
-        return {"zone": zid, "playing": n, "names": ", ".join(w["name"] for w in beach.who_in(zid)),
+        return {"zone": zid, "playing": n, "names": ", ".join(w["name"] for w in beach.who_in(zid) if not w.get("watching")),
                 "looks": beach.game_looks(zid), "guest_face": GUEST_FACE}
 
     @app.post("/zones/{zid}/events")

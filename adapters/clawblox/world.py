@@ -276,6 +276,21 @@ def beach_layout(snap: Snapshot) -> dict | None:
         return None
 
 
+def watchers(snap: Snapshot) -> tuple[str, list[str]]:
+    """Who's watching the world from its watch spot (a world behind a Beach shows them on a
+    folder): (the spot, their names). Watchers have no character there."""
+    import json
+    f = snap.folders.get("Watchers")
+    if f is None:
+        return "", []
+    try:
+        names = json.loads(f.attrs.get("Names") or "[]")
+    except ValueError:
+        names = []
+    names = [str(n) for n in names] if isinstance(names, list) else []
+    return str(f.attrs.get("Spot") or "the watch spot"), names
+
+
 def announcements(snap: Snapshot) -> list[tuple[int, str]]:
     """World messages (goals, falling castles) as (event id, text)."""
     out = []

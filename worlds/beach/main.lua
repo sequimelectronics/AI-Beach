@@ -48,6 +48,10 @@ local CONFIG = {
     -- a sandcastle is castle_pieces or more resting in a plot; it "stood tall" at
     -- tall_height or more, standing still for stand_s seconds.
     badges = { kick_memory = 10, castle_pieces = 3, tall_height = 4, stand_s = 3, again_s = 600 },
+    -- Watching (when the world runs with an AI Beach): people and agents who watch have no
+    -- character; their names show at this spot, outside the land wall where nothing can reach,
+    -- and the world announces each one.
+    watch = { name = "the lifeguard chair", x = -19.5, z = 0 },
 }
 
 local BALLS = {
@@ -203,6 +207,29 @@ if PLOTS.enabled then
     end
 end
 
+-- The lifeguard chair: the watch spot. Behind the land wall, off the sand, and nothing in it
+-- collides, so a watcher never blocks a ball or a build.
+do
+    local W = CONFIG.watch
+    local white = Color3.fromRGB(250, 248, 240)
+    local red = Color3.fromRGB(214, 58, 52)
+    local function chairPart(name, size, pos, color)
+        scenery(name, size, Vector3.new(W.x + pos[1], pos[2], W.z + pos[3]),
+            { Role = "LifeguardChair", Color = color, CanCollide = false, CanQuery = false, CanTouch = false })
+    end
+    chairPart("WatchDune", Vector3.new(7, 0.6, 9), { 0, -0.1, 0 }, Color3.fromRGB(228, 204, 150))
+    for i, leg in ipairs({ { -0.9, -0.8 }, { 0.9, -0.8 }, { -0.9, 0.8 }, { 0.9, 0.8 } }) do
+        chairPart("WatchChairLeg" .. i, Vector3.new(0.25, 3.2, 0.25), { leg[1], 1.8, leg[2] }, white)
+    end
+    for i, y in ipairs({ 1.0, 2.0 }) do
+        chairPart("WatchChairRung" .. i, Vector3.new(0.2, 0.15, 1.85), { 0.9, y, 0 }, white)
+    end
+    chairPart("WatchChairSeat", Vector3.new(2.1, 0.25, 1.9), { 0, 3.4, 0 }, white)
+    chairPart("WatchChairBack", Vector3.new(0.25, 1.6, 1.9), { -1.0, 4.3, 0 }, red)
+    scenery("WatchSign", Vector3.new(0.15, 1.0, 2.2), Vector3.new(W.x - 1.3, 5.7, W.z),
+        { Role = "WatchSign", Color = white, CanCollide = false, CanQuery = false, CanTouch = false })
+end
+
 --------------------------------------------------------------------------------
 -- MAP INFO for agents: scenery is Static (hidden from observations), so the
 -- layout is published once as attributes on a folder that observations include.
@@ -230,6 +257,13 @@ mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
     spawns = CONFIG.spawn_points,
 }))
 mapInfo.Parent = Workspace
+
+-- Who's watching, for agents (observations include this folder): a JSON list of names.
+local watchersInfo = child(Workspace, "Watchers") or Instance.new("Folder")
+watchersInfo.Name = "Watchers"
+watchersInfo:SetAttribute("Spot", CONFIG.watch.name)
+watchersInfo:SetAttribute("Names", "[]")
+watchersInfo.Parent = Workspace
 
 local score = child(Workspace, "Score") or Instance.new("Folder")
 score.Name = "Score"
@@ -821,6 +855,36 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     evaluatePlots(dt)
+end)
+
+--------------------------------------------------------------------------------
+-- WATCHERS: the Beach's bridge writes who's watching into this world's DataStore (key
+-- "watchers"); their names go on the board above the lifeguard chair and in the Watchers
+-- folder, and each new one is announced. Nobody watches unseen.
+--------------------------------------------------------------------------------
+task.spawn(function()
+    local watching = {}
+    local sign = child(Workspace, "WatchSign")
+    while true do
+        task.wait(1)
+        local ok, w = pcall(function() return eventStore:GetAsync("watchers") end)
+        if ok then
+            local names = (type(w) == "table" and type(w.names) == "table") and w.names or {}
+            local now, list = {}, {}
+            for _, n in ipairs(names) do
+                if type(n) == "string" and n ~= "" and not now[n] then
+                    now[n] = true
+                    table.insert(list, n)
+                    if not watching[n] then
+                        announce(n .. " is watching from " .. CONFIG.watch.name)
+                    end
+                end
+            end
+            watching = now
+            watchersInfo:SetAttribute("Names", HttpService:JSONEncode(list))
+            if sign then sign:SetAttribute("WatchNames", table.concat(list, ", ")) end
+        end
+    end
 end)
 
 --------------------------------------------------------------------------------
