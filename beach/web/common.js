@@ -147,31 +147,109 @@ const Beach = (() => {
     return me
   }
 
-  // The top bar: the Beach's name (a setting), the pages, and who you are.
+  // Where each zone's page is: a chat, a zone with game tables, or a game world's Beach page.
+  function zoneHref (z) {
+    const id = encodeURIComponent(z.id)
+    if (z.kind === 'game') return '/world?zone=' + id
+    return (z.tables ? '/boardwalk?zone=' : '/chat?zone=') + id
+  }
+  // The order zones are listed in, here and on the map: SandChat first, then oldest first.
+  function zoneOrder (zones) {
+    return zones.slice().sort((a, b) => (a.id === 'sandchat' ? -1 : b.id === 'sandchat' ? 1 : a.created_at - b.created_at))
+  }
+  // A small pin for "you're here" (playing, watching, or in a chat).
+  const PIN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 20"><path d="M8 19.2C3.6 13.4 1.5 9.9 1.5 7A6.5 6.5 0 0 1 14.5 7C14.5 9.9 12.4 13.4 8 19.2Z" fill="#e8453c" stroke="#fff" stroke-width="1.4"/><circle cx="8" cy="7" r="2.4" fill="#fff"/></svg>'
+  const YOU = { here: "you're here", playing: "you're playing", watching: "you're watching" }
+  function pin (you) {
+    const n = el('span', { class: 'pin', title: T.cap(YOU[you]) })
+    n.append(svgNode(PIN), el('span', { class: 'sr-only', text: ' (' + YOU[you] + ')' }))
+    return n
+  }
+
+  // The top bar: the Beach's name (a setting), every zone with a pin where you are, the keeper's
+  // page, and your picture, which opens a small menu (My look, Sign out).
+  let barMap = null
+  let barCurrent = null
   async function topbar (current) {
+    barCurrent = current
     const bar = el('header', { class: 'topbar' })
     document.body.prepend(bar)
     let map
     try { map = await api('GET', '/map') } catch (e) { return null }
     document.title = (document.title ? document.title + ' · ' : '') + map.beach
-    const chat = map.zones.find(z => z.id === 'sandchat') || map.zones.find(z => z.kind === 'chat' && !z.tables) || { name: 'Chat', id: 'sandchat' }
-    const links = [['map', '/', 'Map'], ['chat', '/chat?zone=' + encodeURIComponent(chat.id), chat.name]]
-    for (const z of map.zones.filter(z => z.tables)) links.push(['boardwalk', '/boardwalk?zone=' + encodeURIComponent(z.id), z.name])
-    links.push(['avatar', '/avatar', 'My look'])
-    if (map.me.admin) links.push(['keeper', '/keeper', 'Keeper'])
-    bar.append(
-      el('a', { class: 'beach-name', href: '/', text: map.beach }),
-      el('nav', { 'aria-label': 'Pages' }, links.map(([k, href, label]) =>
-        el('a', { href, text: label, 'aria-current': k === current ? 'page' : null }))),
-      el('span', { class: 'me-chip' }, avatar(map.me), el('span', { text: map.me.name }),
-        el('button', { class: 'quiet', style: null, onclick: signOut, text: 'Sign out' }))
-    )
-    bar.querySelector('.me-chip button').classList.add('signout')
+    drawBar(map)
     watchInvites()
+    watchEvents()
+    setInterval(refreshBar, 10000)
     return map
   }
 
-  // The Desk Bell: if someone rang while you're away, offer to come (or not). Never pushed; we ask.
+  function drawBar (map) {
+    barMap = map
+    const bar = document.querySelector('.topbar')
+    const here = new URLSearchParams(location.search).get('zone')
+    const links = [el('a', { href: '/', text: T.t('map'), 'aria-current': barCurrent === 'map' ? 'page' : null })]
+    for (const z of zoneOrder(map.zones)) {
+      const open = barCurrent !== 'map' && here === z.id && location.pathname === zoneHref(z).split('?')[0]
+      links.push(el('a', { href: zoneHref(z), class: (z.open ? '' : 'closed') + (z.you ? ' in' : ''), 'aria-current': open ? 'page' : null },
+        z.name, z.you ? pin(z.you) : null, z.open ? null : el('span', { class: 'sr-only', text: ' (' + T.t('closed') + ')' })))
+    }
+    if (map.me.admin) links.push(el('a', { href: '/keeper', text: T.t('keeper'), 'aria-current': barCurrent === 'keeper' ? 'page' : null }))
+    bar.replaceChildren(
+      el('a', { class: 'beach-name', href: '/', text: map.beach }),
+      el('nav', { 'aria-label': T.t('zones') }, links),
+      meMenu(map.me))
+  }
+
+  async function refreshBar () {
+    if (document.hidden) return
+    try { drawBar(await api('GET', '/map')) } catch (e) {}
+  }
+
+  // Your picture and name: a button that opens My look and Sign out.
+  function meMenu (me) {
+    const menu = el('div', { class: 'me-menu', role: 'menu', hidden: true },
+      el('a', { href: '/avatar', role: 'menuitem', text: T.t('my_look'), 'aria-current': barCurrent === 'avatar' ? 'page' : null }),
+      el('button', { type: 'button', role: 'menuitem', class: 'quiet', text: T.t('sign_out'), onclick: signOut }))
+    const button = el('button', { type: 'button', class: 'me-chip', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: me.name },
+      avatar(me), el('span', { class: 'me-name', text: me.name }), el('span', { class: 'caret', 'aria-hidden': 'true', text: '▾' }))
+    const close = () => { menu.hidden = true; button.setAttribute('aria-expanded', 'false') }
+    button.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      menu.hidden = !menu.hidden
+      button.setAttribute('aria-expanded', String(!menu.hidden))
+      if (!menu.hidden) menu.querySelector('a').focus()
+    })
+    document.addEventListener('click', (ev) => { if (!wrap.contains(ev.target)) close() })
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !menu.hidden) { close(); button.focus() } })
+    const wrap = el('div', { class: 'me-wrap' }, button, menu)
+    return wrap
+  }
+
+  // Private notes for you (the Beach parted you from a zone after you were away, a world took
+  // your character out): a page may show them its own way (onEvent), else a notice under the bar.
+  const eventHandlers = []
+  function onEvent (fn) { eventHandlers.push(fn) }
+  function notice (text) {
+    const n = el('div', { class: 'notice private', role: 'status' }, el('span', { text }),
+      el('button', { type: 'button', class: 'quiet', text: T.t('ok'), onclick: () => n.remove() }))
+    document.querySelector('.topbar').after(n)
+  }
+  function watchEvents () {
+    const check = async () => {
+      if (document.hidden) return
+      let r
+      try { r = await api('GET', '/me/events') } catch (e) { return }
+      for (const ev of r.events) {
+        if (!eventHandlers.some(fn => fn(ev))) notice(ev.text)
+      }
+      if (r.events.length) refreshBar()   // the pins follow at once
+    }
+    setTimeout(check, 1500)
+    setInterval(check, 5000)
+  }
+
+  // The Gather Bell: if someone rang while you're away, offer to come (or not). Never pushed; we ask.
   const answered = new Set()
   function watchInvites () {
     const check = async () => {
@@ -183,10 +261,10 @@ const Beach = (() => {
       if (!open.length) return
       const inv = open[0]
       const bar = el('div', { class: 'notice bell', role: 'status' },
-        el('span', { text: (inv.rung_by || 'Someone') + ' rang the Desk Bell. Come to the chat?' }),
+        el('span', { text: T.t('bell_rang', { name: inv.rung_by || T.t('someone') }) }),
         el('button', {
           class: 'primary',
-          text: 'Come',
+          text: T.t('come'),
           onclick: async () => {
             answered.add(inv.bell_id)
             try { await api('POST', '/bell/' + inv.bell_id + '/respond', { answer: 'come' }) } catch (e) {}
@@ -195,7 +273,7 @@ const Beach = (() => {
         }),
         el('button', {
           class: 'quiet',
-          text: 'Not now',
+          text: T.t('not_now'),
           onclick: async () => {
             answered.add(inv.bell_id)
             bar.remove()
@@ -248,5 +326,6 @@ const Beach = (() => {
     return m === 1 ? '1 minute' : m + ' minutes'
   }
 
-  return { api, el, svgNode, avatar, toast, start, whoAmI, token, minutes, ApiError, GUEST, badgeIcon, badgeSvg }
+  return { api, el, svgNode, avatar, toast, start, whoAmI, token, minutes, ApiError, GUEST, badgeIcon, badgeSvg,
+    zoneHref, zoneOrder, pin, onEvent, refreshBar, notice, signOut }
 })()

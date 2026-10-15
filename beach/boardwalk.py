@@ -173,6 +173,19 @@ class Boardwalk:
             self.db.run("DELETE FROM table_watchers WHERE table_id = ? AND participant_id = ?", (tid, pid))
         return self.view(pid, tid)
 
+    def leave(self, pid: int, tid: int) -> dict:
+        """Done at this table: stand up if the game hasn't started, stop watching it. A finished
+        game's seats stay as its record. A game in progress waits for its players (leaving never
+        forfeits); to stop playing it, resign."""
+        row = self.table(tid)
+        seat = self.seat_of(tid, pid)
+        if seat is not None and row["status"] == "waiting":
+            return self.stand(pid, tid)
+        if seat is not None and row["status"] == "playing":
+            raise self._err("conflict", "this game is still on and waits for you; to stop playing it, resign")
+        self.db.run("DELETE FROM table_watchers WHERE table_id = ? AND participant_id = ?", (tid, pid))
+        return {**self.view(pid, tid), "left": True}
+
     # ---------------------------------------------------------------- play
 
     def _playing_seat(self, pid: int, tid: int):

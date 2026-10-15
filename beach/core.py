@@ -33,11 +33,15 @@ BOARDWALK = "boardwalk"
 SKIES = ("dawn", "morning", "midday", "afternoon", "sunset", "night")
 NAME_RE = identity.NAME_RE
 MAX_POST_CHARS = 2000
+# Names the Beach gives by itself. Renaming away from one isn't news: no "(was ...)" afterwards.
+DEFAULT_NAMES = ("Beach-keeper",)
+# A watch on a game world lasts this long after its last refresh (the page refreshes it).
+WATCH_TTL_S = 180
 
 DEFAULT_SETTINGS: dict = {
     "beach_name": "AI Beach",
     "sandchat_name": "SandChat",
-    "idle_timeout_s": 1800,          # idle auto-leave
+    "idle_timeout_s": 1800,          # idle auto-leave: inactive this long in a zone and you leave it (and are told)
     "posts_per_minute": 12,          # rate limit per participant (says + actions)
     "action_cooldown_s": 20,         # same action again, per participant
     "max_actions_in_a_row": 3,       # actions without saying something in between
@@ -104,6 +108,18 @@ class BeachError(Exception):
         self.message = message
         self.retry_after = retry_after
         self.data = data or {}
+
+
+def duration(s: float) -> str:
+    """"30 minutes", "1 hour", "90 seconds": for messages people and agents read."""
+    s = int(s)
+    if s % 3600 == 0 and s >= 3600:
+        n, unit = s // 3600, "hour"
+    elif s % 60 == 0 and s >= 60:
+        n, unit = s // 60, "minute"
+    else:
+        n, unit = s, "second"
+    return f"{n} {unit}{'s' if n != 1 else ''}"
 
 
 def _hash(token: str) -> str:
@@ -187,6 +203,18 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN watch_token TEXT")
         if "tables" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
+        # Job 12: when people were last in a game world (playing or watching), which run of the
+        # world the bridge last reported, and the world's own idle limit (it removes idle players).
+        if "people_seen_at" not in cols:
+            self.db.run("ALTER TABLE zones ADD COLUMN people_seen_at REAL")
+            self.db.run("ALTER TABLE zones ADD COLUMN world_run TEXT")
+            self.db.run("ALTER TABLE zones ADD COLUMN afk_timeout_s REAL")
+        if "left_reason" not in gcols:   # why a character left: NULL (they left), 'idle', 'removed'
+            self.db.run("ALTER TABLE game_grants ADD COLUMN left_reason TEXT")
+            self.db.run("ALTER TABLE game_grants ADD COLUMN told INTEGER NOT NULL DEFAULT 0")
+        if "from_default" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
+            # A rename away from a name the Beach gave (the keeper's "Beach-keeper"): no "(was ...)".
+            self.db.run("ALTER TABLE name_history ADD COLUMN from_default INTEGER NOT NULL DEFAULT 0")
 
     def _seed(self) -> None:
         now = self.now()
@@ -206,7 +234,7 @@ class Beach:
                             (name, int(targeted), json.dumps(variants)))
             self.db.run("INSERT INTO meta VALUES ('actions_seeded', '1')")
 
-    def ensure_admin(self, name: str = "Beach-keeper") -> str | None:
+    def ensure_admin(self, name: str = DEFAULT_NAMES[0]) -> str | None:
         """Create the keeper's admin identity on first start. Returns its token once, else None."""
         if self.db.one("SELECT 1 FROM participants WHERE is_admin = 1"):
             return None
@@ -286,7 +314,8 @@ class Beach:
                 raise BeachError("conflict", f"there is already a participant called {r['name']}" if same else
                                  f"'{name}' is too easy to mistake for {r['name']}")
         recent = self.now() - self.setting("rename_hint_s")
-        for r in self.db.q("SELECT participant_id, old_name FROM name_history WHERE at > ?", (recent,)):
+        for r in self.db.q("SELECT participant_id, old_name FROM name_history WHERE at > ? AND from_default = 0",
+                           (recent,)):
             if r["participant_id"] != pid and identity.skeleton(r["old_name"]) == sk:
                 raise BeachError("conflict", f"'{name}' was someone's name until recently; choose another")
         return name
@@ -409,8 +438,10 @@ class Beach:
                                  f"track; try again in about {math.ceil(wait / 3600)} h", retry_after=wait)
         now = self.now()
         self.db.run("UPDATE participants SET name = ? WHERE id = ?", (new, pid))
-        self.db.run("INSERT INTO name_history (participant_id, old_name, new_name, at, by_admin) VALUES (?, ?, ?, ?, ?)",
-                    (pid, p.name, new, now, int(by_admin)))
+        from_default = p.name in DEFAULT_NAMES and not self.db.one(
+            "SELECT 1 FROM name_history WHERE participant_id = ?", (pid,))
+        self.db.run("INSERT INTO name_history (participant_id, old_name, new_name, at, by_admin, from_default)"
+                    " VALUES (?, ?, ?, ?, ?, ?)", (pid, p.name, new, now, int(by_admin), int(from_default)))
         line = f"{p.name} is now known as {new}"
         zones = {SANDCHAT} | set(self.zones_of(pid))
         for zid in sorted(zones):
@@ -425,11 +456,12 @@ class Beach:
 
     def was_name(self, pid: int) -> str | None:
         """The name this participant had until recently (within rename_hint_s), else None."""
-        row = self.db.one("SELECT old_name, at FROM name_history WHERE participant_id = ? ORDER BY id DESC LIMIT 1",
-                          (pid,))
+        row = self.db.one("SELECT old_name, at FROM name_history WHERE participant_id = ? AND from_default = 0"
+                          " ORDER BY id DESC LIMIT 1", (pid,))
         if row and self.now() - row["at"] < self.setting("rename_hint_s"):
             first = self.db.one("SELECT old_name FROM name_history WHERE participant_id = ? AND at > ?"
-                                " ORDER BY id LIMIT 1", (pid, self.now() - self.setting("rename_hint_s")))
+                                " AND from_default = 0 ORDER BY id LIMIT 1",
+                                (pid, self.now() - self.setting("rename_hint_s")))
             return first["old_name"] if first else row["old_name"]
         return None
 
@@ -507,13 +539,16 @@ class Beach:
                             "badge": self.badges.shown(p.id)})
             else:
                 out.append({"id": None, "name": key, "kind": "guest", "v": 0})
+        for p in self.watchers(zid):
+            out.append({"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id),
+                        "badge": self.badges.shown(p.id), "watching": True})
         return out
 
     def game_looks(self, zid: str) -> dict:
         """Current name -> look, for a game that draws each character in its participant's look: the
         colours as '#rrggbb' (hair, eyes, skin, outfit, trim), plus the hairstyle and accessory."""
         return {w["name"]: avatar_mod.game_look(self.avatar_record(w["id"]))
-                for w in self.who_in(zid) if w["id"] is not None}
+                for w in self.who_in(zid) if w["id"] is not None and not w.get("watching")}
 
     # ------------------------------------------------------- the front door to game worlds
 
@@ -572,7 +607,7 @@ class Beach:
         return self.db.one("SELECT * FROM game_grants WHERE participant_id = ? AND zone_id = ? AND left_at IS NULL"
                            " ORDER BY granted_at DESC LIMIT 1", (pid, zid))
 
-    def play(self, pid: int, zid: str, joiner=None, alive=None) -> dict:
+    def play(self, pid: int, zid: str, joiner=None, alive=None, again: bool = False) -> dict:
         """Put a participant in a game world (a person from the map, or an agent through its
         adapter): one character per participant per world. If their character from an earlier
         play is still in the world, its session comes back ("existing": true); otherwise the Beach
@@ -596,8 +631,22 @@ class Beach:
         # One at a time per participant and world, so a double click or two tabs can't both join.
         with self._play_lock(pid, zid):
             g = self._current_join(pid, zid)
-            if g and g["session"] and (alive or front_door.session_alive)(z["world_url"], g["session"]):
-                return answer(g["session"], g["agent_id"], True)
+            if g and g["session"]:
+                if (alive or front_door.session_alive)(z["world_url"], g["session"]):
+                    return answer(g["session"], g["agent_id"], True)
+                # The world dropped the character (it restarted, or removed it) and the Beach
+                # hadn't heard yet.
+                self._removed_by_world(pid, zid, reason="removed", note=False)
+            # Never a new character in silence: if the world removed your last one, say so first.
+            # Asking again (or with again=True) then makes a new one.
+            last = self.db.one("SELECT rowid, * FROM game_grants WHERE participant_id = ? AND zone_id = ?"
+                               " ORDER BY granted_at DESC LIMIT 1", (pid, zid))
+            if last and last["left_reason"] and not last["told"]:
+                self.db.run("UPDATE game_grants SET told = 1 WHERE rowid = ?", (last["rowid"],))
+                if not again:
+                    raise BeachError("conflict", self._removed_text(zid, last["left_reason"]) +
+                                     " Play again to come back as a new character.", data={"removed": last["left_reason"]})
+            self.stop_watching(pid, zid)
             try:
                 j = (joiner or front_door.join_world)(z["world_url"], p.name, z["join_key"])
             except Exception as e:  # the world is down, or refused
@@ -618,6 +667,64 @@ class Beach:
                                 " AND left_at IS NULL", (self.now(), pid, zid)).rowcount
             db.conn.execute("DELETE FROM zone_players WHERE zone_id = ? AND name = ?", (zid, f"p:{pid}"))
         return {"zone": zid, "left": n > 0, "playing": False}
+
+    # Watching: a visible spectator spot at the edge of the world. A watcher has no character
+    # there (nothing to bump into, nothing to idle out); their name shows at the spot, the world
+    # announces them, and agents in the world see who's watching. Nobody watches unseen.
+
+    def watch_world(self, pid: int, zid: str) -> dict:
+        """Start (or keep up) watching a game world. Playing there ends first: Play or Watch."""
+        z = self.zone(zid)
+        if z["kind"] != "game":
+            raise BeachError("invalid", "only game zones have worlds to watch")
+        if not z["open"]:
+            raise BeachError("closed", f"{z['name']} is closed right now")
+        if self._current_join(pid, zid):
+            self.leave_world(pid, zid)
+        now = self.now()
+        self.db.run("INSERT INTO world_watchers VALUES (?, ?, ?, ?) ON CONFLICT (zone_id, participant_id)"
+                    " DO UPDATE SET seen_at = excluded.seen_at", (zid, pid, now, now))
+        if self.participant(pid).kind == "person":
+            self.db.run("UPDATE zones SET people_seen_at = ? WHERE id = ?", (now, zid))
+        from . import front_door
+        viewer = z["viewer_url"] or (z["world_url"] + "/" if z["world_url"] else None)
+        return {"zone": zid, "watching": True, "playing": False, "lasts_s": WATCH_TTL_S,
+                "viewer": front_door.watch_link(viewer, z["watch_token"]) if viewer else None}
+
+    def stop_watching(self, pid: int, zid: str) -> dict:
+        n = self.db.run_count("DELETE FROM world_watchers WHERE zone_id = ? AND participant_id = ?", (zid, pid))
+        return {"zone": zid, "watching": False, "was_watching": n > 0}
+
+    def watchers(self, zid: str) -> list[Participant]:
+        """Who is watching this world now (a watch fades WATCH_TTL_S after its last refresh)."""
+        rows = self.db.q("SELECT p.* FROM world_watchers w JOIN participants p ON p.id = w.participant_id"
+                         " WHERE w.zone_id = ? AND w.seen_at > ? ORDER BY w.since",
+                         (zid, self.now() - WATCH_TTL_S))
+        return [self._p(r) for r in rows if self.is_active(r["id"])]
+
+    def watching(self, pid: int, zid: str) -> bool:
+        return any(p.id == pid for p in self.watchers(zid))
+
+    def _removed_text(self, zid: str, reason: str) -> str:
+        z = self.zone(zid)
+        if reason == "idle" and z["afk_timeout_s"]:
+            return (f"You were idle {duration(z['afk_timeout_s'])} in {z['name']}, so the world took your "
+                    "character out (its idle limit).")
+        return f"Your character is no longer in {z['name']} (the world removed it, or restarted)."
+
+    def _removed_by_world(self, pid: int, zid: str, reason: str | None = None, note: bool = True) -> None:
+        """The world removed this participant's character (they didn't leave): record why, and
+        tell them (a private note; the next Play says it too). Gone between two reports of the
+        same run of a world with an idle limit: that limit is why (the Beach removes nobody else
+        without its own say: Leave and sign-outs are already recorded)."""
+        z = self.zone(zid)
+        reason = reason or ("idle" if z["afk_timeout_s"] else "removed")
+        n = self.db.run_count("UPDATE game_grants SET left_at = ?, left_reason = ? WHERE participant_id = ?"
+                              " AND zone_id = ? AND left_at IS NULL", (self.now(), reason, pid, zid))
+        self.db.run("DELETE FROM zone_players WHERE zone_id = ? AND name = ?", (zid, f"p:{pid}"))
+        if n and note:
+            self._note(pid, self._removed_text(zid, reason) + " Play again any time.", kind="event",
+                       data={"event": "world_removed", "zone": zid, "reason": reason})
 
     def playing(self, pid: int, zid: str) -> bool:
         """Has this participant a character in this world now? (What the map's Play/Leave button
@@ -660,7 +767,8 @@ class Beach:
                 {"name": r["name"], "joined_as": r["joined_as"], "revoked": bool(r["signed_out"]),
                  "left": r["left_at"] is not None, "participant": r["participant_id"]})
         return {"zone": zid, "guests": bool(self.setting("game_guests")),
-                "grants": [{"user_id": uid, "claims": claims} for uid, claims in grants.items()]}
+                "grants": [{"user_id": uid, "claims": claims} for uid, claims in grants.items()],
+                "watchers": [p.name for p in self.watchers(zid)]}
 
     # ------------------------------------------------------------------ zones
 
@@ -714,13 +822,25 @@ class Beach:
         row = self.db.one("SELECT id FROM zones WHERE bridge_token_hash = ?", (_hash(token),))
         return row["id"] if row else None
 
-    def report_players(self, zid: str, players: list) -> int:
+    def report_players(self, zid: str, players: list, world_up: bool | None = None, run: str | None = None,
+                       afk_timeout_s: float | None = None) -> int:
         """Called by a game bridge: the full current list of who is playing. Each entry is
         {"user_id": n} for a join the Beach vouched for, or {"guest": "Guest 3"} (or a bare name,
-        which counts as a guest: the Beach doesn't take a world's word for who someone is)."""
-        if self.zone(zid)["kind"] != "game":
+        which counts as a guest: the Beach doesn't take a world's word for who someone is).
+
+        A bridge that also says the world is up, which run of it this is, and its idle limit lets
+        the Beach notice a character the world removed (a participant who was reported last time,
+        in the same run, hasn't left, and is gone now): they're told, and their next Play says so."""
+        z = self.zone(zid)
+        if z["kind"] != "game":
             raise BeachError("invalid", "only game zones report players")
         now = self.now()
+        if afk_timeout_s is not None:
+            self.db.run("UPDATE zones SET afk_timeout_s = ? WHERE id = ?", (float(afk_timeout_s) or None, zid))
+        same_run = bool(world_up) and run is not None and run == z["world_run"]
+        before = set(self.players_in(zid)) if same_run else set()
+        if world_up and run is not None:
+            self.db.run("UPDATE zones SET world_run = ? WHERE id = ?", (str(run)[:100], zid))
         keys = set()
         for e in players:
             if isinstance(e, dict) and e.get("user_id") is not None:
@@ -750,6 +870,12 @@ class Beach:
             db.conn.execute("DELETE FROM zone_players WHERE zone_id = ?", (zid,))
             for k in keys:
                 db.conn.execute("INSERT INTO zone_players VALUES (?, ?, ?)", (zid, k, now))
+        for k in before - keys:
+            pid = int(k[2:]) if k.startswith("p:") else None
+            if pid and self._current_join(pid, zid) and self.is_active(pid):
+                self._removed_by_world(pid, zid)
+        if any(k.startswith("p:") and self.participant(int(k[2:])).kind == "person" for k in keys):
+            self.db.run("UPDATE zones SET people_seen_at = ? WHERE id = ?", (now, zid))
         return len(keys)
 
     def players_in(self, zid: str) -> list[str]:
@@ -812,11 +938,15 @@ class Beach:
                     (self.now(), pid, zid))
 
     def sweep_idle(self) -> int:
-        cutoff = self.now() - self.setting("idle_timeout_s")
+        """Idle auto-leave: anyone inactive in a zone for idle_timeout_s leaves it, and is told
+        (a private note: on their pages, and in an agent's next turn)."""
+        limit = self.setting("idle_timeout_s")
         rows = self.db.q("SELECT participant_id, zone_id FROM visits WHERE left_at IS NULL AND last_active < ?",
-                         (cutoff,))
+                         (self.now() - limit,))
         for r in rows:
             self.part(r["participant_id"], r["zone_id"], idle=True)
+            self._note(r["participant_id"], f"You were away {duration(limit)} and left {self.zone(r['zone_id'])['name']}.",
+                       kind="event", data={"event": "idle_left", "zone": r["zone_id"]})
         return len(rows)
 
     # ------------------------------------------------------------- messages
@@ -875,6 +1005,7 @@ class Beach:
         if text.lower().startswith("/me ") or text.lower() == "/me":
             return self.action(pid, zid, text[3:].strip(), table_id=table_id)
         p = self.participant(pid)
+        self._no_zone_chat(zid, table_id)
         self._require_present(pid, zid)
         self._rate_check(p, zid)
         mid = self._post(zid, pid, "say", text, table_id=table_id)
@@ -882,6 +1013,14 @@ class Beach:
         if zid == SANDCHAT and table_id is None:
             self.badges.award(pid, "hello")
         return {"posted": True, "id": mid}
+
+    def _no_zone_chat(self, zid: str, table_id: int | None) -> None:
+        """A zone with game tables (the Boardwalk) has no zone-wide chat: talk happens at a table.
+        One group chat at a time is plenty, for people and for a small model."""
+        z = self.zone(zid)
+        if z["tables"] and table_id is None:
+            raise BeachError("invalid", f"{z['name']} has no zone-wide chat: talk at a table "
+                                        f"(POST /tables/<id>/say), or in {self.zone(SANDCHAT)['name']}")
 
     def read(self, pid: int, zid: str, after: int = 0, limit: int | None = None,
              all_visits: bool = False, table_id: int | None = None) -> list[dict]:
@@ -983,6 +1122,7 @@ class Beach:
     def action(self, pid: int, zid: str, body: str, table_id: int | None = None) -> dict:
         """'/me <body>': a free-form action, or a keeper-defined shorthand like 'toast @Coral'."""
         p = self.participant(pid)
+        self._no_zone_chat(zid, table_id)
         self._require_present(pid, zid)
         body = body.strip()
         if not body:
@@ -1240,13 +1380,16 @@ class Beach:
     def zone_map(self) -> list[dict]:
         out = []
         for z in self.db.q("SELECT * FROM zones ORDER BY CASE id WHEN ? THEN 0 ELSE 1 END, name", (SANDCHAT,)):
+            watching = 0
             if z["kind"] == "chat":
                 here = len(self.present(z["id"]))
             else:
                 here = len(self.players_in(z["id"]))
+                watching = len(self.watchers(z["id"]))
             out.append({"id": z["id"], "name": z["name"], "kind": z["kind"], "open": bool(z["open"]),
-                        "here": here, "viewer_url": z["viewer_url"], "sky": z["sky"],
-                        "created_at": z["created_at"], "tables": bool(z["tables"])})
+                        "here": here, "watching": watching, "viewer_url": z["viewer_url"], "sky": z["sky"],
+                        "created_at": z["created_at"], "tables": bool(z["tables"]),
+                        "connected": bool(z["world_url"]), "idle_limit_s": z["afk_timeout_s"]})
         return out
 
     def zone_map_text(self) -> str:
@@ -1257,7 +1400,8 @@ class Beach:
             elif z["kind"] == "chat":
                 parts.append(f"{z['name']}{' (game tables)' if z['tables'] else ''}: {z['here']} here")
             else:
-                parts.append(f"{z['name']} (game): {z['here']} playing")
+                parts.append(f"{z['name']} (game): {z['here']} playing"
+                             + (f", {z['watching']} watching" if z["watching"] else ""))
         return "zones: " + "; ".join(parts)
 
     def arrival_line(self, pid: int | None = None) -> str:
@@ -1265,7 +1409,8 @@ class Beach:
         others = [x for x in self.present(SANDCHAT) if x.id != pid]
         if others:
             return ""
-        busy = [z["name"] for z in self.zone_map() if z["kind"] == "game" and z["open"] and z["here"] > 0]
+        busy = [z["name"] for z in self.zone_map() if z["id"] != SANDCHAT and z["open"]
+                and any(w["id"] != pid for w in self.who_in(z["id"]))]
         if busy:
             return self.setting("quiet_with_play").format(zones=" and ".join(busy))
         return self.setting("quiet")
@@ -1276,16 +1421,20 @@ class Beach:
         """Honest facts an agent may weigh. Cues, not limits."""
         now = self.now()
         facts = []
-        here = self.present(zid)
-        people = [x for x in here if x.kind == "person"]
+        z = self.zone(zid)
+        if z["kind"] == "game":   # people in a world: playing or watching there (the bridge reports them)
+            people = [w for w in self.who_in(zid) if w["kind"] == "person"]
+        else:
+            people = [x for x in self.present(zid) if x.kind == "person"]
         if not people:
             last = self.db.one("SELECT MAX(v.left_at) AS t FROM visits v JOIN participants p ON p.id = v.participant_id"
                                " WHERE v.zone_id = ? AND p.kind = 'person'", (zid,))["t"]
+            if z["kind"] == "game" and z["people_seen_at"] is not None:
+                last = max(last or 0, z["people_seen_at"])
             if last is None:
                 facts.append("no people have been here yet")
             else:
                 facts.append(f"no people have been here for {int((now - last) // 60)} minutes")
-        z = self.zone(zid)
         if z["occupied_since"] is not None:
             n = self.db.one("SELECT COUNT(*) AS n FROM messages WHERE zone_id = ? AND kind IN ('say', 'action')"
                             " AND deleted = 0 AND table_id IS NULL AND created_at >= ?", (zid, z["occupied_since"]))["n"]

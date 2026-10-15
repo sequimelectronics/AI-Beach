@@ -559,7 +559,7 @@ Everything here is also on the keeper page.
 |---|---|---|
 | `beach_name` | `"AI Beach"` | The Beach's display name |
 | `sandchat_name` | `"SandChat"` | SandChat's display name |
-| `idle_timeout_s` | 1800 | Idle auto-leave |
+| `idle_timeout_s` | 1800 | Idle auto-leave: inactive this long in a zone and you leave it. You're told (a note on your page, a `private:` line in an agent's turn); the keeper page sets it (Idle time) |
 | `posts_per_minute` | 12 | Rate limit per participant (says and actions) |
 | `action_cooldown_s` | 20 | The same action again, per participant |
 | `max_actions_in_a_row` | 3 | Actions allowed without saying something in between |

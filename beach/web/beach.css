@@ -39,7 +39,8 @@ button.primary { background: var(--sea); border-color: var(--sea-dark); color: #
 button.primary:hover { background: var(--sea-dark); }
 button.quiet { border-color: var(--line); font-weight: 500; }
 button.danger { border-color: var(--accent); color: var(--accent); }
-button:disabled { opacity: .5; cursor: not-allowed; }
+button:disabled, select:disabled, input:disabled { opacity: .5; cursor: not-allowed; }
+select:disabled { background: #ece6da; }
 input[type=text], input[type=number], input[type=url], select {
   min-height: 44px; padding: .35em .6em;
   border: 2px solid var(--line); border-radius: 8px; background: #fff; max-width: 100%;
@@ -50,19 +51,49 @@ label { cursor: pointer; }
 
 /* ---------------------------------------------------------------- top bar */
 .topbar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .4em 1em;
-  padding: .5em 1em; background: var(--sea-dark); color: #fff;
+  display: flex; align-items: center; gap: .4em 1em;
+  padding: .4em 1em; background: var(--sea-dark); color: #fff;
 }
-.topbar .beach-name { font-size: 1.25rem; font-weight: 700; margin-right: auto; color: #fff; text-decoration: none; }
-.topbar nav { display: flex; flex-wrap: wrap; gap: .3em; }
+.topbar .beach-name { font-size: 1.2rem; font-weight: 700; color: #fff; text-decoration: none; white-space: nowrap; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: .2em; flex: 1; min-width: 0; }
 .topbar nav a {
-  color: #fff; text-decoration: none; padding: .35em .8em; border-radius: 999px; min-height: 44px;
-  display: inline-flex; align-items: center;
+  color: #fff; text-decoration: none; padding: .3em .75em; border-radius: 999px; min-height: 44px;
+  display: inline-flex; align-items: center; gap: .3em; white-space: nowrap;
 }
-.topbar nav a[aria-current=page] { background: rgba(255,255,255,.2); font-weight: 700; }
+.topbar nav a[aria-current=page] { background: rgba(255,255,255,.22); font-weight: 700; }
 .topbar nav a:hover { background: rgba(255,255,255,.12); }
-.me-chip { display: inline-flex; align-items: center; gap: .4em; color: #fff; }
+.topbar nav a.closed { opacity: .6; }
+.topbar nav a.in { font-weight: 700; }
+.pin { display: inline-block; width: 14px; height: 18px; flex: none; }
+.pin svg { width: 100%; height: 100%; display: block; }
+.me-wrap { position: relative; margin-left: auto; }
+.topbar .me-chip {
+  display: inline-flex; align-items: center; gap: .4em; color: #fff; background: transparent;
+  border-color: rgba(255,255,255,.35); padding: .15em .7em .15em .2em; font-weight: 600;
+}
+.topbar .me-chip:hover, .topbar .me-chip[aria-expanded=true] { background: rgba(255,255,255,.14); }
 .me-chip .avatar { width: 34px; height: 41px; background: rgba(255,255,255,.85); border-radius: 50%; }
+.me-chip .caret { font-size: .8em; }
+.me-menu {
+  position: absolute; right: 0; top: calc(100% + .35em); z-index: 40; min-width: 11em;
+  display: flex; flex-direction: column; gap: .2em; padding: .4em;
+  background: var(--paper); color: var(--ink); border: 2px solid var(--ink); border-radius: 10px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.me-menu[hidden] { display: none; }
+.me-menu a, .me-menu button {
+  min-height: 44px; display: flex; align-items: center; justify-content: flex-start; padding: .3em .8em;
+  border-radius: 8px; color: var(--ink); text-decoration: none; font-weight: 600; border: 0; background: none;
+}
+.me-menu a:hover, .me-menu button:hover, .me-menu a[aria-current=page] { background: var(--paper-2); }
+.notice.private { background: #e5f2f7; border-bottom-color: var(--sea); }
+@media (max-width: 700px) {
+  /* Phones: name and picture on the first row, the zones in a row you can swipe below them. */
+  .topbar { flex-wrap: wrap; padding: .35em .6em; }
+  .topbar nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .topbar nav a { padding: .3em .55em; font-size: .92rem; }
+  .topbar .me-name { max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
 
 main { max-width: 1200px; margin: 0 auto; padding: 1em; }
 h1 { font-size: 1.6rem; margin: .2em 0 .6em; }
@@ -133,6 +164,30 @@ h2 { font-size: 1.25rem; margin: 1.2em 0 .5em; }
 .zone .play-pill.leaving { background: var(--paper); color: var(--ink); }
 .zone .play-pill:hover { transform: translateY(-1px); }
 .zone-list .row button + button { margin-left: .4em; }
+.zone .pills { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .3em; margin-top: .3em; }
+.zone .pills .play-pill { margin-top: 0; }
+.zone .play-pill.watch { background: #fffaf0; color: var(--ink); }
+.zone-list .you-are { display: inline-flex; align-items: center; gap: .3em; font-weight: 700; margin-right: .4em; }
+.zone .sign .you-line { display: inline-flex; align-items: center; gap: .25em; font-weight: 800; font-size: .8em; color: #b8322b; }
+.zone .sign .pin { width: .8em; height: 1em; }
+.zone.in .sign { border-color: #e8453c; box-shadow: 3px 3px 0 #b8322b; }
+.zone .crowd .who.watching .avatar { opacity: .75; }
+.zone-list li.in { border-color: #e8453c; }
+
+/* The map page: the map fits the window; on wide screens a column beside it holds who's where
+   and your badges (on phones they stack below it). */
+body.map-page main { max-width: 1800px; }
+.map-layout { display: flex; flex-direction: column; gap: 1em; }
+.map-side .who-title { margin-top: .4em; }
+.who-where { list-style: none; padding: 0; margin: 0 0 .8em; display: flex; flex-direction: column; gap: .3em; }
+.who-where:empty { display: none; }
+@media (min-width: 1000px) and (orientation: landscape) {
+  .map-layout { flex-direction: row; align-items: flex-start; justify-content: center; }
+  .map-layout > .map-wrap { flex: none; width: min(calc((100vh - 5.4rem) * 1.6), calc(100vw - 26rem)); }
+  .map-side { flex: 1 1 18rem; min-width: 16rem; max-width: 24rem; }
+  .map-side .arrival { margin-top: 0; }
+  .map-side .zone-list { grid-template-columns: 1fr; }
+}
 
 .zone-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8em; padding: 0;
   list-style: none; }
@@ -303,6 +358,8 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
 /* The upright map (phones held portrait): taller art, bigger markers. */
 .map-wrap.portrait { aspect-ratio: 10 / 16; }
 .map-wrap.portrait .zone { width: 44%; }
+/* Phones: the markers stay small (sign and crowd); each zone's buttons are in its card below the map. */
+.map-wrap.portrait .zone .pills { display: none; }
 .map-wrap.portrait .zone .sign { font-size: clamp(.85rem, 3.8vw, 1.1rem); }
 .map-wrap.portrait .zone .crowd .avatar { width: clamp(30px, 8vw, 46px); height: clamp(36px, 9.6vw, 55px); }
 .map-wrap.portrait .map-title { font-size: clamp(1rem, 5vw, 1.6rem); }
@@ -393,3 +450,17 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
 .my-badges li button[aria-pressed="true"] { border-color: var(--ok); background: #eef8ea; font-weight: 800; }
 .badge-toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .3em .8em; margin: .4em 0 .8em; }
 .badge-toggles label { display: flex; align-items: center; gap: .3em; flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- a game world's page */
+body.world main { max-width: 1600px; }
+.world-status { margin: 0 0 .6em; display: flex; align-items: center; gap: .3em; flex-wrap: wrap; }
+.world-status .pin { width: 14px; height: 18px; }
+.world-message { margin: 0 0 .8em; border-radius: var(--radius); border: 2px solid #d9b44a; }
+.world-message[hidden] { display: none; }
+.world-stage { width: 100%; }
+.world-frame {
+  display: block; width: 100%; height: calc(100vh - 13rem); min-height: 360px; border: 3px solid var(--ink);
+  border-radius: var(--radius); background: #9fd3e6;
+}
+.world-empty { max-width: 40em; }
+@media (max-width: 700px) { .world-frame { height: 70vh; min-height: 320px; } }

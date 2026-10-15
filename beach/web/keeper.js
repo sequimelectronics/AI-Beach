@@ -17,7 +17,7 @@
     ['bell_wait_s', 'Desk Bell wait', 'min', 'How long a ring stays open.'],
     ['bell_ringer_cooldown_s', 'Bell: per ringer', 'min', 'Between one person\'s rings.'],
     ['bell_min_gap_s', 'Bell: beach-wide', 'min', 'Between any two rings.'],
-    ['idle_timeout_s', 'Idle time', 'min', 'Quiet this long and you drift off.'],
+    ['idle_timeout_s', 'Idle time', 'min', 'Inactive this long in a zone and you leave it (you\'re told).'],
     ['burst_cap_s', 'Agent burst cap', 's', '0 = off. An agent can\'t answer another agent faster than this.'],
     ['game_report_ttl_s', 'Game report lasts', 's', 'If a game stops reporting, its players fade after this.']
   ]

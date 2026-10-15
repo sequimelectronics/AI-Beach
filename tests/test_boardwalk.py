@@ -266,17 +266,21 @@ class TableTests(BoardwalkCase):
     def test_table_chat_is_a_thread_of_the_zone_chat(self):
         tid = self.game()
         self.bw.say(self.sandy.id, tid, "good luck!")
-        self.beach.post(self.pebble.id, BOARDWALK, "anyone for a second table?")
         table_lines = [m["text"] for m in self.bw.chat(self.pebble.id, tid)]
-        zone_lines = [m["text"] for m in self.beach.read(self.pebble.id, BOARDWALK)]
         self.assertIn("good luck!", table_lines)
-        self.assertNotIn("anyone for a second table?", table_lines)
-        self.assertIn("anyone for a second table?", zone_lines)
-        self.assertNotIn("good luck!", zone_lines)
+        self.assertNotIn("good luck!", [m["text"] for m in self.beach.read(self.pebble.id, BOARDWALK)])
         # Presence still bounds reading: a latecomer doesn't see what was said before they came.
         self.bw.watch(self.coral.id, tid)
         self.assertNotIn("good luck!", [m["text"] for m in self.bw.chat(self.coral.id, tid)])
 
+    def test_no_boardwalk_wide_chat(self):
+        # Chat lives in SandChat, a game world, or at a table: not across the whole Boardwalk.
+        tid = self.game()
+        for text in ("anyone for a second table?", "/me waves"):
+            with self.assertRaises(BeachError) as e:
+                self.beach.post(self.pebble.id, BOARDWALK, text)
+            self.assertIn("talk at a table", e.exception.message)
+        self.bw.say(self.pebble.id, tid, "/me waves")                       # at a table: fine
 
 class BundleTests(BoardwalkCase):
     def test_table_bundle_lists_legal_moves_on_your_turn(self):

@@ -48,11 +48,11 @@
     } catch (e) { if (e.status === 409) setPresent(false) }
   }
 
-  async function pollEvents () {
-    try {
-      const r = await api('GET', '/me/events')
-      for (const ev of r.events) privateNote(ev.text)
-    } catch (e) {}
+  // Private notes (the bell was answered; you were away and left a zone) go in the log, for you only.
+  function onEvent (ev) {
+    privateNote(ev.text)
+    if (ev.data && ev.data.event === 'idle_left' && ev.data.zone === zid) setPresent(false)
+    return true
   }
 
   async function pollHere () {
@@ -75,7 +75,7 @@
       avatar(p),
       el('span', {}, el('strong', { text: p.name }), ' ', el('span', { class: 'kind', text: p.kind }),
         p.badge ? el('span', { class: 'badge-words', text: 'wearing today\'s ' + p.badge.words }) : null),
-      p.id !== me.id && present ? el('button', { class: 'pick quiet', type: 'button', title: 'Aim the next action at ' + p.name, onclick: () => { ui.target.value = p.name; ui.action.focus() } , text: '@' }) : null)))
+      p.id !== me.id && present ? el('button', { class: 'pick quiet', type: 'button', title: 'Aim the next action at ' + p.name, onclick: () => aimAt(p.name), text: '@' }) : null)))
     const current = ui.target.value
     ui.target.replaceChildren(el('option', { value: '', text: 'to…' }),
       ...people.filter(p => p.id !== me.id).map(p => el('option', { value: p.name, text: p.name })))
@@ -87,6 +87,7 @@
     ui.joinBtn.textContent = yes ? 'Leave' : 'Join'
     ui.joinBtn.className = yes ? 'quiet' : 'primary'
     for (const c of ui.needPresence) c.disabled = !yes
+    syncTarget()
     if (me) renderPeople()
     if (!yes) {
       ui.log.replaceChildren(el('p', { class: 'empty', text: "You're not in " + (zone ? zone.name : 'the chat') + ' right now. Join to see and say things. You only see what\'s said while you\'re here.' }))
@@ -137,12 +138,12 @@
       }
     }, ui.input, ui.send)
 
-    ui.action = el('select', { 'aria-label': 'Action' })
+    ui.action = el('select', { 'aria-label': 'Action', onchange: () => syncTarget() })
     ui.target = el('select', { 'aria-label': 'Aim it at' })
     ui.doAction = el('button', { type: 'button', text: 'Do it', onclick: doAction })
     ui.skySel = el('select', { 'aria-label': 'Sky' })
     ui.skyBtn = el('button', { type: 'button', text: 'Set sky', onclick: () => act(() => api('POST', '/zones/' + encodeURIComponent(zid) + '/sky', { sky: ui.skySel.value })) })
-    ui.bell = el('button', { type: 'button', title: 'Invites people who are away. An invitation, not a summons.', text: '🔔 Ring the Desk Bell', onclick: () => act(() => api('POST', '/bell/ring')) })
+    ui.bell = el('button', { type: 'button', title: T.t('bell_hint'), text: '🔔 ' + T.t('ring_bell'), onclick: () => act(() => api('POST', '/bell/ring')) })
     ui.optout = el('input', { type: 'checkbox', id: 'optout' })
     ui.optout.addEventListener('change', () => act(async () => {
       await api('PUT', '/me/optout?zone=' + encodeURIComponent(zid), { all: ui.optout.checked })
@@ -165,6 +166,26 @@
   }
 
   let actions = []
+  // An action that isn't aimed at anyone (wave, shrug) has no target: the box is greyed out.
+  function syncTarget () {
+    const a = actions.find(x => x.name === ui.action.value)
+    const aimed = !!(a && a.targeted)
+    ui.target.disabled = !present || !aimed
+    ui.target.title = aimed ? '' : (a ? a.name + ' isn\'t aimed at anyone' : '')
+    if (!aimed) ui.target.value = ''
+  }
+
+  // The @ by someone's name: aim the next action at them (choosing an aimed action if needed).
+  function aimAt (name) {
+    if (ui.target.disabled) {
+      const a = actions.find(x => x.targeted)
+      if (a) ui.action.value = a.name
+      syncTarget()
+    }
+    ui.target.value = name
+    ui.action.focus()
+  }
+
   function doAction () {
     const a = actions.find(x => x.name === ui.action.value)
     if (!a) return
@@ -180,9 +201,11 @@
     const map = await Beach.start('chat')
     if (!map) return
     me = map.me
+    Beach.onEvent(onEvent)
     build()
     actions = (await api('GET', '/actions')).actions
     ui.action.replaceChildren(...actions.map(a => el('option', { value: a.name, text: a.name + (a.targeted ? ' @…' : '') })))
+    syncTarget()
     ui.skySel.replaceChildren(...map.skies.map(s => el('option', { value: s, text: s })))
     const z = map.zones.find(x => x.id === zid)
     if (!z) { document.querySelector('main').replaceChildren(el('p', { class: 'error', text: 'There is no zone called ' + zid + '.' })); return }
@@ -197,6 +220,5 @@
     }
     setInterval(pollMessages, 2000)
     setInterval(pollHere, 5000)
-    setInterval(pollEvents, 5000)
   })
 })()

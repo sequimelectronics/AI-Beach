@@ -80,8 +80,8 @@ class EarningTests(BadgeCase):
         self.assertEqual(self.beach.db.one("SELECT COUNT(*) AS n FROM badges")["n"], 1)
 
     def test_an_action_says_hello_too_but_other_zones_dont(self):
-        self.beach.join(self.p["Sandy"].id, BOARDWALK)
-        self.beach.post(self.p["Sandy"].id, BOARDWALK, "hello boardwalk")
+        tid = self.beach.tables.open(self.p["Sandy"].id, BOARDWALK, "checkers")["id"]
+        self.beach.tables.say(self.p["Sandy"].id, tid, "hello table")      # table chat isn't SandChat
         self.assertEqual(self.b.today(self.p["Sandy"].id), [])
         self.beach.join(self.p["Sandy"].id, SANDCHAT)
         self.beach.post(self.p["Sandy"].id, SANDCHAT, "/me waves")

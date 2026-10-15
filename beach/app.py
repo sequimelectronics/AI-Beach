@@ -23,7 +23,7 @@ from .tokens import make_counter
 
 WEB = Path(__file__).parent / "web"
 PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
-         "/boardwalk": "boardwalk.html"}
+         "/boardwalk": "boardwalk.html", "/world": "world.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
 WEB_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
@@ -101,8 +101,21 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def health():
         return {"ok": True}
 
-    def page(name: str):
-        return FileResponse(WEB / name, media_type="text/html", headers=WEB_HEADERS)
+    def page(name: str, headers: dict | None = None):
+        return FileResponse(WEB / name, media_type="text/html", headers=headers or WEB_HEADERS)
+
+    @app.get("/world", include_in_schema=False)
+    def world_page(zone: str = ""):
+        """A game world's Beach page: the bar, Play / Watch / Leave, and the world's viewer framed
+        below. The one thing it may frame is that world's own viewer."""
+        from .front_door import origin_of
+        try:
+            z = beach.zone(zone)
+            origin = origin_of(z["viewer_url"] or z["world_url"]) if z["kind"] == "game" else None
+        except BeachError:
+            origin = None
+        csp = WEB_HEADERS["Content-Security-Policy"] + "; frame-src " + (origin or "'none'")
+        return page("world.html", {**WEB_HEADERS, "Content-Security-Policy": csp})
 
     @app.get("/")
     def index(request: Request):
@@ -114,7 +127,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             "'Authorization: Bearer <token>'. Start with GET /zones and GET /agent/turn.\n")
 
     for route, name in PAGES.items():
-        if route != "/":
+        if route not in ("/", "/world"):
             app.add_api_route(route, (lambda n: lambda: page(n))(name), methods=["GET"],
                               include_in_schema=False)
 
@@ -218,10 +231,15 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def zone_map(p: Participant = Depends(who)):
         """The zone map for the browser: zones with who is in each."""
         zones = []
+        mine = set(beach.zones_of(p.id))
         for z in beach.zone_map():
             entry = {**z, "who": beach.who_in(z["id"]) if z["open"] else []}
             if z["kind"] == "game":
                 entry["playing"] = beach.playing(p.id, z["id"])   # your Play / Leave button
+                entry["watching_now"] = not entry["playing"] and beach.watching(p.id, z["id"])
+                entry["you"] = "playing" if entry["playing"] else "watching" if entry["watching_now"] else None
+            else:
+                entry["you"] = "here" if z["id"] in mine else None   # the pin in the bar and on the map
             zones.append(entry)
         return {"beach": beach.setting("beach_name"), "zones": zones, "skies": list(SKIES),
                 "me": {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
@@ -307,6 +325,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def turn(zone: str = SANDCHAT, table: int | None = None, p: Participant = Depends(who)):
         if table is not None:
             return agent.table_bundle(beach, p.id, table, counter=counter)
+        if beach.zone(zone)["kind"] == "game" and beach.watching(p.id, zone):
+            beach.watch_world(p.id, zone)   # an agent watching keeps its watch up by taking turns
         return agent.turn_bundle(beach, p.id, zone, counter=counter)
 
     # ----------------------------------------------------------- tables (the Boardwalk)
@@ -334,6 +354,12 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def sit(tid: int, body: dict = Body(default={}), p: Participant = Depends(who)):
         seat = body.get("seat")
         return bw.sit(p.id, tid, None if seat is None else int(seat))
+
+    @app.post("/tables/{tid}/leave")
+    def leave_table(tid: int, p: Participant = Depends(who)):
+        """Done at this table: stand up (before it starts) or stop watching. A game in progress
+        waits for its players; to stop playing one, resign."""
+        return bw.leave(p.id, tid)
 
     @app.post("/tables/{tid}/stand")
     def stand(tid: int, p: Participant = Depends(who)):
@@ -378,17 +404,32 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return beach.vouch(p.id, zid, str(body.get("agent_id", "")), str(body.get("name", "")))
 
     @app.post("/zones/{zid}/play")
-    def play(zid: str, p: Participant = Depends(who)):
+    def play(zid: str, body: dict = Body(default={}), p: Participant = Depends(who)):
         """Your character in the world: the one you already have there ("existing": true), or the
-        Beach joins under your Beach name and vouches for it. One character per person per world."""
-        return beach.play(p.id, zid)
+        Beach joins under your Beach name and vouches for it. One character per person per world.
+        If the world took your last character out, this says so first (409, "removed"); asking
+        again, or {"again": true}, then makes a new one."""
+        return beach.play(p.id, zid, again=bool((body or {}).get("again")))
 
     @app.get("/zones/{zid}/play")
     def playing(zid: str, p: Participant = Depends(who)):
-        """Whether you have a character in this world now (the map's Play / Leave button)."""
+        """Whether you have a character in this world now, or are watching it (the Play / Watch /
+        Leave buttons)."""
         if beach.zone(zid)["kind"] != "game":
             raise BeachError("invalid", "only game zones have worlds to play in")
-        return {"zone": zid, "playing": beach.playing(p.id, zid)}
+        on = beach.playing(p.id, zid)
+        return {"zone": zid, "playing": on, "watching": not on and beach.watching(p.id, zid)}
+
+    @app.post("/zones/{zid}/watch")
+    def watch_world(zid: str, p: Participant = Depends(who)):
+        """Watch a game world from its spectator spot: your name shows there and the world says
+        you're watching. No character, so nothing to bump into. Lasts 3 minutes per call; the page
+        repeats it while it's open."""
+        return beach.watch_world(p.id, zid)
+
+    @app.delete("/zones/{zid}/watch")
+    def stop_watching(zid: str, p: Participant = Depends(who)):
+        return beach.stop_watching(p.id, zid)
 
     @app.delete("/zones/{zid}/play")
     def leave_world(zid: str, p: Participant = Depends(who)):
@@ -413,7 +454,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         names = body.get("players", [])
         if not isinstance(names, list):
             raise HTTPException(400, "players must be a list")
-        n = beach.report_players(zid, names)
+        n = beach.report_players(zid, names, world_up=body.get("world_up"), run=body.get("world_run"),
+                                 afk_timeout_s=body.get("afk_timeout_s"))
         if body.get("spectator_token"):
             beach.set_watch_token(zid, str(body["spectator_token"]))
         if body.get("world_url"):
