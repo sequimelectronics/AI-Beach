@@ -779,6 +779,13 @@ tables, turns, notices, abandoning, draws, the two-level cards and the ClawBlox 
 and scripted three-player games; `scripts/cards_scripted.py` plays more and measures token sizes.
 `tests/test_badges.py` covers badges: earned, shown, chosen, announced, gone after the reset, and the
 bridge passing world events on.
+`tests/test_getting_around.py` covers the bar's zones and pins, Leave table and leaving the
+Boardwalk, the idle auto-leave note, renaming from the default name, the closed Boardwalk chat,
+watching a world, and a character the world removed. `tests/test_pages_browser.py` checks the same
+pages in a real browser (skipped without Node and Playwright). `tests/test_spelling.py` fails on a
+British spelling in anything the repository's own text says (a line that keeps one on purpose says
+`spelling: kept`). `scripts/watch_live.py` checks watching, ghost bodies and the idle limit against
+a running world; `scripts/text_sizes.py` measures the cards and state texts.
 
 **On Windows.** The whole suite runs on Windows too, in any order. Every process the code and
 the tests start gets its standard input, output and error explicitly (a test checks this), so

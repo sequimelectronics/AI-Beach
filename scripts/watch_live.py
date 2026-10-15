@@ -51,7 +51,7 @@ def call(tok: str, method: str, path: str, body: dict | None = None) -> dict:
 
 
 def ghosts(T: dict, log: str, seconds: int = 40) -> dict:
-    tok = re.findall(r"spectator_token=([A-Za-z0-9_\-]+)", Path(log).read_text(errors="replace"))[-1]
+    tok = re.findall(r"spectator_token=([A-Za-z0-9_\-]+)", Path(log).read_text(encoding="utf-8", errors="replace"))[-1]
     follower = subprocess.Popen(["node", str(ROOT / "scripts" / "viewer_stream.cjs"),
                                  f"ws://127.0.0.1:8100/spectate/ws?spectator_token={tok}", str(seconds)],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -105,7 +105,7 @@ def idle(T: dict, log: str, wait: float) -> dict:
     out["sandy_after"] = a.look().splitlines()[0]
     out["coral"] = call(T["Coral"], "GET", "/zones/beachblox/play")
     out["coral_events"] = call(T["Coral"], "GET", "/me/events")["events"]
-    out["world_log"] = [ln for ln in Path(log).read_text(errors="replace").splitlines() if "[AFK]" in ln or "watching from" in ln][-6:]
+    out["world_log"] = [ln for ln in Path(log).read_text(encoding="utf-8", errors="replace").splitlines() if "[AFK]" in ln or "watching from" in ln][-6:]
     stop.set()
     a.leave()
     call(T["Coral"], "DELETE", "/zones/beachblox/watch")
@@ -119,7 +119,7 @@ def main(argv=None) -> int:
     ap.add_argument("what", choices=("ghosts", "idle"))
     ap.add_argument("--wait", type=float, default=75, help="idle: seconds to wait (the world's idle limit + ~30)")
     a = ap.parse_args(argv)
-    T = json.loads(Path(a.tokens).read_text())
+    T = json.loads(Path(a.tokens).read_text(encoding="utf-8"))
     res = ghosts(T, a.world_log) if a.what == "ghosts" else idle(T, a.world_log, a.wait)
     print(json.dumps(res, indent=1))
     return 0

@@ -77,7 +77,7 @@ class SpellingTests(unittest.TestCase):
             path = ROOT / f
             if not path.exists():
                 continue
-            for n, word, line in british_lines(path.read_text(errors="replace"), patch=f.endswith(".patch")):
+            for n, word, line in british_lines(path.read_text(encoding="utf-8", errors="replace"), patch=f.endswith(".patch")):
                 found.append(f"{f}:{n}: {word} -> {BRITISH[word.lower()]}: {line[:100]}")
         self.assertEqual(found, [], "British spellings:\n" + "\n".join(found[:60]))
 
@@ -93,9 +93,9 @@ class SpellingTests(unittest.TestCase):
         from beach import colors, colours
         self.assertIs(colours.ColourError, colors.ColorError)
         self.assertEqual(colors.parse("dark slate grey")[1], colors.parse("dark slate gray")[1])
-        app = (ROOT / "beach" / "app.py").read_text()
+        app = (ROOT / "beach" / "app.py").read_text(encoding="utf-8")
         self.assertIn('"colours": avatar_mod.hexes(rec)', app)
-        lua = (ROOT / "worlds" / "beach" / "main.lua").read_text()
+        lua = (ROOT / "worlds" / "beach" / "main.lua").read_text(encoding="utf-8")
         self.assertIn("centre = { CONFIG.center.X, CONFIG.center.Z }", lua)
 
 

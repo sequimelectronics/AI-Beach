@@ -84,7 +84,7 @@ class BarTests(ApiCase):
         self.assertNotIn("frame-src", self.http.get("/chat").headers["content-security-policy"])
 
     def test_the_bar_menu_holds_my_look_and_sign_out(self):
-        js = (ROOT / "beach/web/common.js").read_text()
+        js = (ROOT / "beach/web/common.js").read_text(encoding="utf-8")
         menu = js[js.index("function meMenu"):js.index("function onEvent")]
         self.assertIn("T.t('my_look')", menu)
         self.assertIn("T.t('sign_out')", menu)
@@ -124,7 +124,7 @@ class LeaveTests(ApiCase):
         self.http.post("/zones/boardwalk/part", headers=self.h(self.coral_tok))
         self.assertIsNone(self.zones(self.coral_tok)["boardwalk"]["you"])
         self.assertEqual(self.beach.tables.seat_of(tid, self.coral.id), 0)        # leaving never forfeits
-        page = (ROOT / "beach/web/boardwalk.js").read_text()
+        page = (ROOT / "beach/web/boardwalk.js").read_text(encoding="utf-8")
         self.assertIn("leaveZoneButton()", page[page.index("function renderLobby"):])
         self.assertIn("T.t('leave_table')", page)
 
@@ -174,7 +174,7 @@ class ChatTests(ApiCase):
 
     def test_untargeted_actions_grey_out_the_target_box(self):
         # The page grays the box out for an action that takes no target (wave, shrug)...
-        js = (ROOT / "beach/web/chat.js").read_text()
+        js = (ROOT / "beach/web/chat.js").read_text(encoding="utf-8")
         sync = js[js.index("function syncTarget"):js.index("function aimAt")]
         self.assertIn("ui.target.disabled = !present || !aimed", sync)
         self.assertIn("onchange: () => syncTarget()", js)

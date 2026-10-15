@@ -375,17 +375,23 @@ function makeWatchSprite(names) {
   canvas.width = 320
   canvas.height = 56 + 40 * Math.max(1, shown.length)
   const g = canvas.getContext('2d')
-  g.fillStyle = 'rgba(176, 38, 38, 0.88)'
+  g.fillStyle = '#b02626'
   g.fillRect(0, 0, canvas.width, canvas.height)
+  g.strokeStyle = '#ffffff'
+  g.lineWidth = 6
+  g.strokeRect(3, 3, canvas.width - 6, canvas.height - 6)
   g.fillStyle = '#ffffff'
   g.textAlign = 'center'
   g.textBaseline = 'middle'
   g.font = 'bold 30px sans-serif'
   g.fillText('Watching', 160, 30)
-  g.font = '28px sans-serif'
+  g.font = 'bold 30px sans-serif'
   shown.forEach((n, i) => g.fillText(n.slice(0, 18), 160, 76 + 40 * i))
   if (!shown.length) { g.font = 'italic 26px sans-serif'; g.fillText('nobody', 160, 76) }
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }))
+  const map = new THREE.CanvasTexture(canvas)
+  map.colorSpace = THREE.SRGBColorSpace
+  // Not lit or tone-mapped: the board reads the same in any light.
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false, toneMapped: false }))
   sprite.scale.set(6, 6 * canvas.height / canvas.width, 1)
   return sprite
 }
