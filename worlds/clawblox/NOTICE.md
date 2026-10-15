@@ -12,9 +12,9 @@ One file here is derived from Clawblox's `worlds/mesa-island` at commit `8be90a0
 | `renderer/package.json` | `worlds/mesa-island/renderer/package.json` | Package name only. |
 
 `renderer/src/beach-tint.js` is ours (not derived): it gives each player's copy of the claw
-character's material their Beach colours (the red shell becomes their outfit colour, the gold plates
-their trim colour) with a few lines of shader code. The character model itself (`player.glb`) is
+character's material their Beach colors (the red shell becomes their outfit color, the gold plates
+their trim color) with a few lines of shader code. The character model itself (`player.glb`) is
 Clawblox's, copied at run time from your checkout and never changed or committed.
 
-Clawblox's licence text is in `renderer/LICENSE.clawblox`. The vendored three.js and lucide come from
+Clawblox's license text is in `renderer/LICENSE.clawblox`. The vendored three.js and lucide come from
 `worlds/beach/static/vendor/` (licences and sources listed there).

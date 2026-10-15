@@ -45,7 +45,7 @@ def main() -> int:
     sandy.turn("map_card")
     pebble.turn("map_card")
 
-    # 1. Positions: Pebble waits north of the centre; Sandy goes behind the soccer ball.
+    # 1. Positions: Pebble waits north of the center; Sandy goes behind the soccer ball.
     pebble.go(0, 12)
     sandy.go(-3, -4)
     s_view = sandy.look()

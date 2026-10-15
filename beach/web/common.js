@@ -67,7 +67,7 @@ const Beach = (() => {
     return document.importNode(root, true)
   }
 
-  // A guest (someone playing a game who isn't a Beach participant): a plain sand-coloured figure.
+  // A guest (someone playing a game who isn't a Beach participant): a plain sand-colored figure.
   const GUEST = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120"><g stroke="#3d2b2b" stroke-width="1.8">' +
     '<ellipse cx="50" cy="113.5" rx="22" ry="3.5" fill="#000" fill-opacity=".15" stroke="none"/>' +
     '<path d="M38 73 L62 73 L68.5 104 L31.5 104Z" fill="#d9c7a7"/><ellipse cx="50" cy="48" rx="29" ry="27" fill="#efe3cc"/>' +
@@ -95,9 +95,12 @@ const Beach = (() => {
       '<text x="9.4" y="9.6" font-size="5.2" font-weight="800" font-family="system-ui, Arial, sans-serif" fill="' + INK + '" transform="rotate(8 12 12)">A</text>' +
       '<path d="M12.6 10.2C15 12.3 15.8 13.4 15.8 14.3A1.5 1.5 0 0 1 13.1 15.1L13.6 16.6H11.6L12.1 15.1A1.5 1.5 0 0 1 9.4 14.3C9.4 13.4 10.2 12.3 12.6 10.2Z" fill="' + INK + '" transform="rotate(8 12 12)"/>',
     'card-win': ROSETTE('#f2b632', '<path d="M12 13.4C9.3 11.2 8.3 9.9 8.3 8.7A1.9 1.9 0 0 1 12 7.8A1.9 1.9 0 0 1 15.7 8.7C15.7 9.9 14.7 11.2 12 13.4Z" fill="#c0312f" stroke="' + INK + '" stroke-width=".7"/>'),
-    bell: '<path d="M4 18.5H20V20.5H4Z" fill="#8a5a36" stroke="' + INK + '" stroke-width="1"/><path d="M5.5 18.5A6.5 6.5 0 0 1 18.5 18.5Z" fill="#f2b632" stroke="' + INK + '" stroke-width="1"/>' +
-      '<path d="M11 10.5V8.5H13V10.5" fill="#8a5a36" stroke="' + INK + '" stroke-width=".9"/><path d="M10 8.3H14" stroke="' + INK + '" stroke-width="1.4" stroke-linecap="round"/>' +
-      '<path d="M8 15.5Q9 13 11.2 12.4" fill="none" stroke="#fff3c4" stroke-width="1.1" stroke-linecap="round"/><path d="M3.5 6L5.5 7.5M20.5 6L18.5 7.5M12 3.2V5" stroke="#e39a1f" stroke-width="1.2" stroke-linecap="round"/>'
+    // The Gather Bell: a brass hand bell, rung (tilted), with a wooden handle.
+    bell: '<g transform="rotate(-16 12 13)"><rect x="10.7" y="2.6" width="2.6" height="6.4" rx="1.2" fill="#8a5a36" stroke="' + INK + '" stroke-width=".9"/>' +
+      '<path d="M7.6 18.2C7.6 13.6 8.6 10.2 12 9.6C15.4 10.2 16.4 13.6 16.4 18.2Z" fill="#f2b632" stroke="' + INK + '" stroke-width="1"/>' +
+      '<ellipse cx="12" cy="18.2" rx="5.9" ry="1.5" fill="#e39a1f" stroke="' + INK + '" stroke-width=".9"/><circle cx="12" cy="20.4" r="1.15" fill="' + INK + '"/>' +
+      '<path d="M9.6 16Q9.6 12.6 11.4 11.3" fill="none" stroke="#fff3c4" stroke-width="1.1" stroke-linecap="round"/></g>' +
+      '<path d="M3.8 10.5Q2.8 13 3.9 15.6M20.2 8.6Q21.2 11 20.4 13.6" fill="none" stroke="#e39a1f" stroke-width="1.2" stroke-linecap="round"/>'
   }
   function badgeSvg (id) {
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.3" fill="#fffaf0" stroke="#b99b76" stroke-width="1.2"/>' +

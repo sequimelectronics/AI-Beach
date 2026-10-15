@@ -16,8 +16,9 @@ act(type, data):
 Good to know:
 - Soccer ball: medium. Volleyball: light, bouncy. Beach ball: floats, drifts.
 - Goals at the north and south ends: a ball over the line between the posts scores, then
-  goes back to the centre.
+  goes back to the center.
 - A ball in the sea drifts back to the sand.
-- Castles only count inside plots. Badly balanced pieces fall: stack them centred, wide
+- Castles only count inside plots. Badly balanced pieces fall: stack them centered, wide
   under narrow. A flag finishes a castle.
-- "World:" chat lines announce goals and falls.
+- "World:" chat lines announce goals and falls, and who watches (from the lifeguard chair).
+- 5 minutes idle and your character is taken out (you're told).

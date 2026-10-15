@@ -27,13 +27,13 @@ Date: 2026-10-14 · Python 3.13 · Clawblox at `8be90a0` (with `patches/`) · th
   - Old messages are removed the way admin delete removes them, and the removal is audited.
   - The setting is on the keeper page.
 - **Part B, item 1: BeachBlox players are their chibi in 3D.**
-  - The chibi is built in the renderer from simple shapes and coloured from the participant's look.
+  - The chibi is built in the renderer from simple shapes and colored from the participant's look.
   - All six hairstyles and all eight accessories are drawn.
   - Names stay above characters.
-- **Part B, item 2: ClawBlox keeps Clawblox's claw character, recoloured per player.**
-  - The red shell becomes the player's outfit colour and the gold plates their trim colour.
+- **Part B, item 2: ClawBlox keeps Clawblox's claw character, recolored per player.**
+  - The red shell becomes the player's outfit color and the gold plates their trim color.
   - The model itself is untouched and not committed.
-- **The look route is extended.** The bridge already wrote each player's colours to
+- **The look route is extended.** The bridge already wrote each player's colors to
   `static/tints.json`; it now also carries the hairstyle and accessory. Skin tone was already
   there.
 
@@ -44,7 +44,7 @@ Date: 2026-10-14 · Python 3.13 · Clawblox at `8be90a0` (with `patches/`) · th
     HTTPS settings and endpoints.
   - `tests/test_chibi3d.py`, 11 tests. They cover the look route and the renderer wiring. When
     Node.js is installed, they also build every hairstyle × accessory with the real `chibi.js` and
-    check the colours, the distinct shapes, the draw calls, the triangle budget, and that the
+    check the colors, the distinct shapes, the draw calls, the triangle budget, and that the
     shading formula matches the 2D one.
   - `LauncherTests`, rewritten as described in Part A, item 2.
 - **The full suite has 265 tests and passes:**
@@ -95,7 +95,7 @@ with the players joined through the Beach.
 
 ![BeachBlox with eight chibis](chibi_beachblox.png)
 
-**ClawBlox, 3 players.** All three are Clawblox's own claw character, each recoloured from the
+**ClawBlox, 3 players.** All three are Clawblox's own claw character, each recolored from the
 player's look:
 
 - Kelp (seafoam): mint shell, white plates;
@@ -104,18 +104,18 @@ player's look:
 
 The eyes and dark lines stay as Clawblox painted them.
 
-![ClawBlox with three coloured claw characters](chibi_clawblox.png)
+![ClawBlox with three colored claw characters](chibi_clawblox.png)
 
 **Coral, close up.** On the left, the 2D avatar cropped from Coral's own "My look" page. On the
 right, the 3D chibi built from the same record by the same `chibi.js` the world uses, rendered on
 a plain page so it can be seen close (the world's spectator camera can't zoom in this far). The
-colours match:
+colors match:
 
 - hair: black;
 - eyes: sea green;
 - skin: peach;
 - outfit and trim: pink and peach;
-- shoes: the outfit colour darkened, exactly as in 2D;
+- shoes: the outfit color darkened, exactly as in 2D;
 - the starfish clip on the same side.
 
 ![Coral in 2D and 3D](chibi_closeup.png)
@@ -279,7 +279,7 @@ colours match:
 
 - The route is the existing one: Beach → bridge → `static/tints.json` → renderer.
 - The Beach's reply to each presence report now uses `avatar.game_look(record)`. That is the
-  colours as `#rrggbb` (hair, eyes, skin, outfit, trim) plus `preset` (hairstyle) and `accessory`.
+  colors as `#rrggbb` (hair, eyes, skin, outfit, trim) plus `preset` (hairstyle) and `accessory`.
   Skin tone was already in it; hairstyle and accessory are new.
 - The bridge writes it unchanged.
 - Each renderer reads the file every 10 s, as before. There's no new channel, and the viewer never
@@ -294,7 +294,7 @@ colours match:
   - **The body is small:** legs, round shoes, a flared outfit with a trim band and collar, puffed
     shoulders, and arms.
 - **The face, after the 2D one:**
-  - eyes are layered discs: outline, iris in the eye colour, pupil, two highlights;
+  - eyes are layered discs: outline, iris in the eye color, pupil, two highlights;
   - pink cheeks;
   - a small smile;
   - ears.
@@ -306,45 +306,45 @@ colours match:
   - **spiky:** cones standing out;
   - **curly:** a cloud of small spheres.
 
-  As in 2D, the back hair is the hair colour darkened by 0.8.
+  As in 2D, the back hair is the hair color darkened by 0.8.
 - **The eight accessories:** sun hat, flower, headphones, bow, sunglasses pushed up, starfish clip,
   bandana. Clips sit on the same side as in 2D.
-- **Colours come from the look exactly.** `shade()` matches `beach/colours.py` (a test compares 40
+- **Colors come from the look exactly.** `shade()` matches `beach/colors.py` (a test compares 40
   values), so the shoes and back hair darken the same way.
-  - Materials are Lambert, one per colour, shared between players.
-  - A little self-glow keeps shadowed sides their colour; without it, peach skin read as brown.
-  - The eyes are unlit, so the eye colour stays true.
+  - Materials are Lambert, one per color, shared between players.
+  - A little self-glow keeps shadowed sides their color; without it, peach skin read as brown.
+  - The eyes are unlit, so the eye color stays true.
 - **Cheap to draw.**
-  - After building, the parts are merged into one mesh per colour: 11–14 draw calls per
+  - After building, the parts are merged into one mesh per color: 11–14 draw calls per
     character, down from 32–52.
   - Building one takes 0.73 ms.
   - Shapes are shared until merged.
   - It is rebuilt only when that player's name or look changes, and their label is redrawn when
     their name changes, so renames show at once.
 - **Guests,** and players not yet admitted (label "..."), are plain short-haired chibis in the
-  colour picked from their name, as the capsules were.
+  color picked from their name, as the capsules were.
 - **No model file, and no animation.** Characters move and turn as wholes, as the capsules did.
 - **Names stay above characters:** the same label sprite, at the same height.
 
-### ClawBlox: Clawblox's character in Beach colours (`worlds/clawblox/renderer/src/beach-tint.js`, ours)
+### ClawBlox: Clawblox's character in Beach colors (`worlds/clawblox/renderer/src/beach-tint.js`, ours)
 
 - **What the model is.** `player.glb` (Clawblox's; copied at run time by
   `scripts/clawblox_world.py`, never committed) is one skinned mesh of 35,906 triangles with one
-  material. All its colour is painted into one 2048² texture shown unlit (an emissive map): a red
+  material. All its color is painted into one 2048² texture shown unlit (an emissive map): a red
   shell, gold plates, dark lines and eyes.
   - The painted hues all fall between 0° and 35°, which made a hue split reliable.
 - **What's done.** Each player's model gets its own copy of that material, with a few lines in the
   shader's emissive step:
-  - texels that are grey or nearly black stay as painted (lines, eyes, highlights);
-  - otherwise red hues become the outfit colour and gold hues the trim colour, blended across 12–22°,
+  - texels that are gray or nearly black stay as painted (lines, eyes, highlights);
+  - otherwise red hues become the outfit color and gold hues the trim color, blended across 12–22°,
     with the painted brightness kept as shading.
   - All copies share one shader program (`customProgramCacheKey`).
 - **Matching models to players.** Each model is matched to its player through the spectator
   state's `root_part_id`, named by `BeachName` when present. Players without a Beach look keep the
-  original colours.
+  original colors.
 - **The change to our adapted mesa-island renderer** is four lines, each marked "AI Beach".
   `NOTICE.md` records it, and Clawblox's MIT credit stays at the top of the file.
-- **Limit.** Because the texture is the only colour source, the split follows hue. If Clawblox ever
+- **Limit.** Because the texture is the only color source, the split follows hue. If Clawblox ever
   repaints the character in other hues, the split would need adjusting.
 
 ### What agents see: unchanged
@@ -381,7 +381,7 @@ Takeaways:
 
 Two reductions came out of measuring:
 
-- merging each character into one mesh per colour (about 40 meshes became about 12);
+- merging each character into one mesh per color (about 40 meshes became about 12);
 - simpler spheres for small parts. This halved the triangles (from about 6.7k per chibi to about
   3.5k) with no visible difference at viewing distance.
 
@@ -393,7 +393,7 @@ Two reductions came out of measuring:
   - BeachBlox's 5-minute idle kick eventually removes the spare. mesa-island has no idle kick, so
     in ClawBlox the spare stays until the world restarts. Seen live: six claws for three people.
   - **A fix:** the Beach remembers each person's live session per zone and hands it back when it's
-    still in the world. It's small, but it changes `/play`'s behaviour, so I left it for your call.
+    still in the world. It's small, but it changes `/play`'s behavior, so I left it for your call.
 - **Chromium makes background requests.** Headless Chromium itself tried Google's update and
   safe-browsing addresses (the sandbox's proxy refused them). These come from the browser, not the
   pages: the viewer pages' own requests went only to 127.0.0.1, as in earlier jobs. The measurement
@@ -413,7 +413,7 @@ Two reductions came out of measuring:
 | `beach/web/keeper.js`, `beach.css` | "Keeping messages" and HTTPS on the keeper page |
 | `worlds/beach/renderer/src/chibi.js` | New: the 3D chibi |
 | `worlds/beach/renderer/src/index.js` | Chibis instead of capsules; live name and look changes |
-| `worlds/clawblox/renderer/src/beach-tint.js` | New: Beach colours on the claw character |
+| `worlds/clawblox/renderer/src/beach-tint.js` | New: Beach colors on the claw character |
 | `worlds/clawblox/renderer/src/index.js` | Four marked lines |
 | `worlds/*/NOTICE.md` | Updated |
 | `scripts/snapshot_live.py` | The live check for item A1 |

@@ -217,7 +217,7 @@ class DoorTests(Case):
         agent = str(uuid.uuid4())
         b.vouch(self.sandy.id, "beachblox", agent, "Sandy")
         # Pebble claims Sandy's join (Pebble saw its id while spectating): allowed, but harmless,
-        # because the world honours only the claim whose name is the one the join used.
+        # because the world honors only the claim whose name is the one the join used.
         b.vouch(self.pebble.id, "beachblox", agent, "Pebble")
         door = b.door("beachblox")
         self.assertFalse(door["guests"])

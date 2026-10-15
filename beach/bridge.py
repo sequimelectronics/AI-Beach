@@ -14,7 +14,7 @@ Run one per world (BeachBlox, ClawBlox). It does three jobs, all on this machine
    them: vouched-for players by their join (the Beach knows whose it is), guests as guests,
    with whether the world answered, which run of it this is, and its idle limit (afk_timeout in
    world.toml), so the Beach can tell someone the world took their character out.
-   The Beach answers with each player's colours; the bridge writes them to static/tints.json
+   The Beach answers with each player's colors; the bridge writes them to static/tints.json
    for the beach renderer.
 3. Badge events. Every second it reads the events the world wrote into the same DataStore (a
    goal scored, a sandcastle built; each names only a join) and passes the new ones to the Beach

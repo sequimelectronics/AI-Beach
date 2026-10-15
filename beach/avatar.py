@@ -1,9 +1,9 @@
 """Chibi avatars: a small record each participant owns, drawn from layered parts.
 
 The record is six choices: preset (the hairstyle and silhouette), theme (the
-outfit's colours), hair and eye colours (hex or a name), skin tone, accessory.
+outfit's colors), hair and eye colors (hex or a name), skin tone, accessory.
 Every part is a list of simple shapes (ellipses and polygons) in one 100x120
-box, so a colour change is only a recolour of a layer. The same shapes are
+box, so a color change is only a recolor of a layer. The same shapes are
 written out as SVG (for browsers) or rasterised to PNG (for agents that look
 at images); no image libraries are needed.
 """
@@ -15,7 +15,7 @@ import struct
 import zlib
 from functools import lru_cache
 
-from . import colours
+from . import colors
 
 PRESETS = {  # id -> how the hair is described
     "short": "short {c} hair",
@@ -26,7 +26,7 @@ PRESETS = {  # id -> how the hair is described
     "curly": "curly {c} hair",
 }
 
-THEMES = {  # id -> (outfit colour, trim colour, words)
+THEMES = {  # id -> (outfit color, trim color, words)
     "lagoon": ("#2a9d8f", "#e9f5f2", "teal-and-white"),
     "sunset": ("#f4845f", "#ffd166", "orange-and-gold"),
     "driftwood": ("#a47551", "#f1e3c8", "brown-and-cream"),
@@ -53,14 +53,14 @@ ACCESSORIES = {
 }
 
 FIELDS = ("preset", "theme", "hair", "eyes", "skin", "accessory")
-_DEFAULT_HAIR = ("saddle brown", "black", "goldenrod", "sienna", "dark slate grey", "chocolate", "coral")
-_DEFAULT_EYES = ("saddle brown", "teal", "royal blue", "sea green", "amber", "dim grey")
+_DEFAULT_HAIR = ("saddle brown", "black", "goldenrod", "sienna", "dark slate gray", "chocolate", "coral")
+_DEFAULT_EYES = ("saddle brown", "teal", "royal blue", "sea green", "amber", "dim gray")
 
-# The builder's one-tap colours (any name or hex works too).
+# The builder's one-tap colors (any name or hex works too).
 QUICK = {
     "hair": ["black", "saddle brown", "chocolate", "goldenrod", "sand", "sunset orange", "coral", "sea green",
              "teal", "midnight blue", "orchid", "silver"],
-    "eyes": ["saddle brown", "amber", "sea green", "teal", "royal blue", "slate grey", "olive", "violet"],
+    "eyes": ["saddle brown", "amber", "sea green", "teal", "royal blue", "slate gray", "olive", "violet"],
 }
 
 INK = "#3d2b2b"
@@ -112,27 +112,27 @@ def validate(changes: dict, current: dict) -> dict:
             rec[k] = _choice(k, v, ACCESSORIES)
         else:
             try:
-                rec[k] = colours.parse(v)[0]
-            except colours.ColourError as e:
+                rec[k] = colors.parse(v)[0]
+            except colors.ColorError as e:
                 raise AvatarError(f"{k}: {e}") from None
     return rec
 
 
 def hexes(rec: dict) -> dict:
-    """The record's colours as '#rrggbb' (what a game uses to tint a character)."""
+    """The record's colors as '#rrggbb' (what a game uses to tint a character)."""
     outfit, trim, _ = THEMES[rec["theme"]]
-    return {"hair": colours.parse(rec["hair"])[1], "eyes": colours.parse(rec["eyes"])[1],
+    return {"hair": colors.parse(rec["hair"])[1], "eyes": colors.parse(rec["eyes"])[1],
             "skin": SKINS[rec["skin"]], "outfit": outfit, "trim": trim}
 
 
 def guest_face_svg() -> str:
     """The face for a game-world player who isn't a Beach participant: the same face, plain brown
-    eyes, no fringe (their hair colour is picked by the world from their name)."""
+    eyes, no fringe (their hair color is picked by the world from their name)."""
     return face_svg({**default_record(0), "eyes": "#5c4a42"}, hair=False)
 
 
 def game_look(rec: dict) -> dict:
-    """What a game world needs to draw the chibi in 3D: the colours, the hairstyle, the accessory,
+    """What a game world needs to draw the chibi in 3D: the colors, the hairstyle, the accessory,
     and the face itself, as the 2D avatar draws it (an SVG the renderer paints onto the head)."""
     return {**hexes(rec), "preset": rec["preset"], "accessory": rec["accessory"], "face": face_svg(rec)}
 
@@ -143,10 +143,10 @@ def _a(phrase: str) -> str:
 
 def describe(rec: dict) -> str:
     """The record as one short plain-language sentence."""
-    h = colours.parse(rec["hair"])
-    e = colours.parse(rec["eyes"])
-    parts = [PRESETS[rec["preset"]].format(c=colours.words(*h)),
-             f"{colours.words(*e)} eyes",
+    h = colors.parse(rec["hair"])
+    e = colors.parse(rec["eyes"])
+    parts = [PRESETS[rec["preset"]].format(c=colors.words(*h)),
+             f"{colors.words(*e)} eyes",
              _a(f"{THEMES[rec['theme']][2]} outfit")]
     acc = ACCESSORIES[rec["accessory"]]
     if acc:
@@ -162,11 +162,11 @@ def card(cooldown_s: int) -> str:
         "Your look here: a chibi shown beside your name.",
         "set: PUT /me/avatar {preset, theme, hair, eyes, skin, accessory} (any; one word from each list)",
         "see: GET /me/avatar (with a sentence) or /me/avatar.png",
-        f"preset: {' '.join(PRESETS)}",
-        f"theme: {' '.join(THEMES)}",
+        f"preset (hair style): {' '.join(PRESETS)}",
+        f"theme (clothing): {' '.join(THEMES)}",
         f"skin: {' '.join(SKINS)}",
         f"accessory: {' '.join(ACCESSORIES)}",
-        "hair, eyes: #rrggbb or a colour name (sea green)",
+        "hair, eyes: #rrggbb or a color name (sea green)",
         f"changes: {pace}; the first is free",
     ])
 
@@ -268,7 +268,7 @@ def layers(rec: dict) -> list[tuple[str, list]]:
     """The avatar as named layers of shapes, back to front."""
     c = hexes(rec)
     hair, skin, outfit, trim = c["hair"], c["skin"], c["outfit"], c["trim"]
-    hair_dark = colours.shade(hair, 0.8)
+    hair_dark = colors.shade(hair, 0.8)
     preset = rec["preset"]
     out = []
 
@@ -294,7 +294,7 @@ def layers(rec: dict) -> list[tuple[str, list]]:
 
     out.append(("body", [
         _E(43, 107, 4.5, 6.5, skin), _E(57, 107, 4.5, 6.5, skin),
-        _E(42, 113, 6, 3, colours.shade(outfit, 0.6)), _E(58, 113, 6, 3, colours.shade(outfit, 0.6)),
+        _E(42, 113, 6, 3, colors.shade(outfit, 0.6)), _E(58, 113, 6, 3, colors.shade(outfit, 0.6)),
         _E(30.5, 89, 5, 10, skin), _E(69.5, 89, 5, 10, skin),
     ]))
     out.append(("outfit", [
@@ -368,7 +368,7 @@ def _n(v: float) -> str:
 
 
 def svg(rec: dict, size: int | None = None, title: str | None = None, only: set | None = None) -> str:
-    """Layered SVG. Each layer is a <g> so a recolour touches one group. `only`: just those layers."""
+    """Layered SVG. Each layer is a <g> so a recolor touches one group. `only`: just those layers."""
     dims = f' width="{size}" height="{int(size * 1.2)}"' if size else ""
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120"{dims} role="img">']
     if title:
@@ -463,13 +463,13 @@ def _png_cached(key: tuple, size: int) -> bytes:
     W, H = size * S, int(size * 1.2) * S
     k = W / 100
     buf = bytearray(W * H * 4)
-    ink = colours.rgb(INK)
+    ink = colors.rgb(INK)
     for _, shapes in layers(rec):
         for kind, geo, fill, line, alpha in shapes:
             if line:
                 for dk, dg in _dilate(kind, geo, STROKE / 2):
                     _fill(buf, W, H, k, dk, dg, ink, alpha)
-            _fill(buf, W, H, k, kind, geo, colours.rgb(fill), alpha)
+            _fill(buf, W, H, k, kind, geo, colors.rgb(fill), alpha)
     # Downsample SxS (premultiplied) for smooth edges.
     w, h = W // S, H // S
     raw = bytearray()
@@ -509,4 +509,4 @@ def options() -> dict:
     return {"presets": list(PRESETS), "themes": {k: {"outfit": v[0], "trim": v[1], "words": v[2]}
                                                  for k, v in THEMES.items()},
             "skins": SKINS, "accessories": list(ACCESSORIES),
-            "quick": {f: [[n, colours.parse(n)[1]] for n in names] for f, names in QUICK.items()}}
+            "quick": {f: [[n, colors.parse(n)[1]] for n in names] for f, names in QUICK.items()}}

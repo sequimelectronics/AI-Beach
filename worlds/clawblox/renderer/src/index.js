@@ -2,7 +2,7 @@
 // MIT License, Copyright (c) 2026 nacloos; see ../LICENSE.clawblox. One change: three.js comes
 // from the vendored copy next to the world (static/vendor/three, MIT) instead of esm.sh, so the
 // ClawBlox viewer works without the internet. A second change (marked "AI Beach" below): each
-// player's character wears their Beach colours, via ./beach-tint.js (ours). Everything else is
+// player's character wears their Beach colors, via ./beach-tint.js (ours). Everything else is
 // mesa-island's code, unchanged.
 import * as THREE from '../../static/vendor/three/build/three.module.min.js'
 import { startTints, tintModel } from './beach-tint.js'

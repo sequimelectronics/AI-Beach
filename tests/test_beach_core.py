@@ -309,7 +309,7 @@ class BellTests(BeachTestCase):
 
     def test_ring_invites_those_away_and_posts_a_notice(self):
         r = self.beach.ring_bell(self.sandy.id)
-        self.assertIn("Sandy rang the desk bell", self.texts(self.sandy.id))
+        self.assertIn("Sandy rang the Gather Bell", self.texts(self.sandy.id))
         self.assertEqual(r["invited"], 2)  # Pebble and Coral; not Sandy, Keeper or Drift (not invitable)
         self.beach.deliver_notices()
         self.assertEqual(sorted(p["invitee"] for p in self.sent), ["Coral", "Pebble"])

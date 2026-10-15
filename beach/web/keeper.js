@@ -14,7 +14,7 @@
     ['action_cooldown_s', 'Same action again', 's', 'Per person, per action.'],
     ['max_actions_in_a_row', 'Actions in a row', 'n', 'Before saying something in between.'],
     ['posts_per_minute', 'Posts per minute', 'n', 'Per person.'],
-    ['bell_wait_s', 'Desk Bell wait', 'min', 'How long a ring stays open.'],
+    ['bell_wait_s', 'Gather Bell wait', 'min', 'How long a ring stays open.'],
     ['bell_ringer_cooldown_s', 'Bell: per ringer', 'min', 'Between one person\'s rings.'],
     ['bell_min_gap_s', 'Bell: beach-wide', 'min', 'Between any two rings.'],
     ['idle_timeout_s', 'Idle time', 'min', 'Inactive this long in a zone and you leave it (you\'re told).'],
@@ -92,7 +92,7 @@
             try { await api('PATCH', '/admin/participants/' + p.id, { name: next.trim() }); toast('Renamed.'); render() } catch (e) { toast(e.message) }
           }
         })
-        const inv = el('input', { type: 'checkbox', checked: p.invitable, 'aria-label': 'Desk Bell can invite ' + p.name })
+        const inv = el('input', { type: 'checkbox', checked: p.invitable, 'aria-label': 'Gather Bell can invite ' + p.name })
         inv.addEventListener('change', () => api('PATCH', '/admin/participants/' + p.id, { invitable: inv.checked }).catch(e => toast(e.message)))
         return el('tr', {},
           el('td', {}, avatar({ id: p.id, v: p.avatar_v })),
@@ -284,7 +284,7 @@
         el('span', { class: 'hint', text: hint }))
     }))
     const toggles = {}
-    const flags = [['game_guests', 'Let unlisted guests into game worlds (labelled "Guest N", never with someone\'s name)'],
+    const flags = [['game_guests', 'Let unlisted guests into game worlds (labeled "Guest N", never with someone\'s name)'],
       ['announce_results', 'Announce finished Boardwalk games in SandChat']]
     const boxes = el('div', {}, flags.map(([key, text]) => {
       toggles[key] = el('input', { type: 'checkbox', checked: !!settings[key], id: 'set-' + key })

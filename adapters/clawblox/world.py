@@ -36,10 +36,10 @@ class Rules:
     world: str = "mesa-island"
     actions: tuple = ("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw")
     play_card: str = "PLAY_CARD.md"  # relative to adapters/clawblox/
-    pickup_reach: float = 6.0        # from your centre
+    pickup_reach: float = 6.0        # from your center
     place_reach: float = 7.0
     pickup_match: float = 1.5        # target point must be this close to the object
-    hold_offset_y: float = 3.5       # held object floats this far above your centre
+    hold_offset_y: float = 3.5       # held object floats this far above your center
     throw_speed_cap: float = 10.0    # silently clamped by the world
     half_height: float = 2.5         # character root part is 2 x 5 x 2
     radius: float = 1.0

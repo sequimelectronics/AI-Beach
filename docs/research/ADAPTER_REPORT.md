@@ -156,7 +156,7 @@ The first full runs did **not** complete. Each failure pointed at something the 
    - Measured: a held block placed at y=0.4 or 0.5 was rejected; at 0.6 it worked, *usually*.
    - The integration test still failed 6 runs in 32 at y=0.6. The cause: the world checks
      overlap using the held block's **current, tumbled rotation**. A cube tilted on two axes
-     reaches about 0.65 below its centre and clips the ground.
+     reaches about 0.65 below its center and clips the ground.
    - Fix: the adapter places **upright by default** (`rotation` 0/0/0 unless the model passes
      one). Since then: 12/12 integration runs and 3/3 agent runs.
    - The play card says y = 0.6.

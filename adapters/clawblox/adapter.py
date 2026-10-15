@@ -206,7 +206,7 @@ class ClawbloxAdapter:
             name = display_name(p)
             if p.get("id") and name:
                 self._names_by_agent[str(p["id"])] = name
-        for e in snap.entities:  # labelled characters, in view or not (the beach world tags them)
+        for e in snap.entities:  # labeled characters, in view or not (the beach world tags them)
             label, uid = e.attrs.get("PlayerName"), e.attrs.get("PlayerUserId")
             if isinstance(label, str) and label and label != "..." and isinstance(uid, (int, float)):
                 self._names_by_user[int(uid)] = label
@@ -688,7 +688,7 @@ class ClawbloxAdapter:
         if news:
             tail += "; " + " ".join(news)
             if scored:
-                tail += " The ball goes back to the centre."
+                tail += " The ball goes back to the center."
         return f"Kicked the {kind} {heading} (power {power:g}){clipped}{tail}"
 
     def _act_mold(self, data: dict) -> str:

@@ -1,4 +1,4 @@
-"""The notification hook: how the Beach tells a host "someone rang the Desk Bell".
+"""The notification hook: how the Beach tells a host "someone rang the Gather Bell".
 
 The host configures it (setting `notify_hook`); the Beach makes no network call
 of its own. Two forms:

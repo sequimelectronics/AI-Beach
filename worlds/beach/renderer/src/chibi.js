@@ -1,19 +1,19 @@
 // A participant's chibi in 3D, built from simple shapes (spheres, capsules, cylinders, cones) and
-// coloured from their Beach look: hair, eyes, skin, and the outfit and trim colours of their theme.
+// colored from their Beach look: hair, eyes, skin, and the outfit and trim colors of their theme.
 // The same choices as the "My look" page (beach/avatar.py draws the 2D one), as simple shapes:
 // a big head, a small body, one of six hairstyles, and an accessory. Original work for AI Beach.
 //
-// Drawn like the 2D avatar, not like a doll: flat colours (no lighting, no tone mapping) and a dark
-// outline round every shape. The face isn't modelled at all: the head wears the 2D avatar's own
+// Drawn like the 2D avatar, not like a doll: flat colors (no lighting, no tone mapping) and a dark
+// outline round every shape. The face isn't modeled at all: the head wears the 2D avatar's own
 // face (eyes, shines, cheeks, smile and front fringe), drawn by beach/avatar.py face_svg() and
 // projected straight onto the front of the head, so the 3D face can't drift from the 2D one.
 //
-// The character stands in its HumanoidRootPart's box (2 x 5 x 2, origin at the centre) and faces
+// The character stands in its HumanoidRootPart's box (2 x 5 x 2, origin at the center) and faces
 // -Z, the way the engine's characters face. Nothing moves except the whole character.
 import * as THREE from '../../static/vendor/three/build/three.module.min.js'
 
 const H = 1.2                   // head radius
-const HEAD_Y = 1.25             // head centre (the box runs from -2.5 to 2.5)
+const HEAD_Y = 1.25             // head center (the box runs from -2.5 to 2.5)
 const HAIR_R = H * 1.06
 // Spiky and bun hair are short at the sides: their painted face reaches this far round (degrees),
 // and the side hair meets its edge.
@@ -39,8 +39,8 @@ const shell = (theta, gap = 120) => geo('shell-' + theta.toFixed(3) + '-' + gap,
 })
 const torus = (arc) => geo('torus-' + arc.toFixed(3), () => new THREE.TorusGeometry(1, 0.06, 6, 20, arc))
 
-// Materials, shared by colour: flat, unlit, and not tone-mapped, so each colour on screen is the
-// look's colour exactly, as in 2D.
+// Materials, shared by color: flat, unlit, and not tone-mapped, so each color on screen is the
+// look's color exactly, as in 2D.
 const MAT = new Map()
 function mat (hex, opts = {}) {
   const key = hex + JSON.stringify(opts)
@@ -52,7 +52,7 @@ function mat (hex, opts = {}) {
   return MAT.get(key)
 }
 
-// The outline: every shape drawn again in the 2D avatar's ink colour, a little bigger and inside
+// The outline: every shape drawn again in the 2D avatar's ink color, a little bigger and inside
 // out, so only a dark rim shows round it (the usual cartoon outline; one draw call per character).
 export const INK = '#3d2b2b'
 const OUTLINE_W = 0.055
@@ -106,7 +106,7 @@ const faceShell = (span = 180) => geo('face-shell-' + span, () => {
   return g
 })
 
-// Darken (f < 1) or lighten (f > 1) a '#rrggbb' colour, exactly as beach/colours.py shade() does.
+// Darken (f < 1) or lighten (f > 1) a '#rrggbb' color, exactly as beach/colors.py shade() does.
 export function shade (hex, f) {
   const n = parseInt(hex.slice(1), 16)
   let c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
@@ -123,13 +123,13 @@ function part (g, material, scale, pos, rot) {
   return m
 }
 
-// A point on the head's surface, `x` right and `y` up from the head's centre, on the face side.
+// A point on the head's surface, `x` right and `y` up from the head's center, on the face side.
 function onFace (x, y, r = H) {
   const z = -Math.sqrt(Math.max(0, r * r - x * x - y * y))
   return new THREE.Vector3(x, HEAD_Y + y, z)
 }
 
-// The default look for someone without one (a guest): plain colours picked from their name, and
+// The default look for someone without one (a guest): plain colors picked from their name, and
 // the Beach's plain guest face (no fringe) when the bridge has provided it.
 export function guestLook (base, face = null) {
   return { preset: 'short', accessory: 'none', hair: shade(base, 0.6), eyes: '#5c4a42', skin: '#e0ac7e', outfit: base,
@@ -159,7 +159,7 @@ export function buildChibi (look, opts = {}) {
   g.add(part(cylinder(0.73, 0.775), trim, [1.012, 0.22, 1.012], [0, -1.25, 0]))
   g.add(part(cylinder(0.3, 0.47), trim, [1, 0.14, 1], [0, 0.02, 0]))
 
-  // Head and ears. The face is painted on (below), not modelled.
+  // Head and ears. The face is painted on (below), not modeled.
   g.add(part(sphere(), skin, [H, H * 0.95, H * 0.97], [0, HEAD_Y, 0]))
   for (const s of [-1, 1]) g.add(part(smallSphere(), skin, [0.17, 0.24, 0.12], [1.17 * s, HEAD_Y - 0.1, 0]))
 
@@ -182,7 +182,7 @@ export function buildChibi (look, opts = {}) {
   return out
 }
 
-// One mesh per colour instead of one per part: ~10 draw calls per character instead of ~40, which
+// One mesh per color instead of one per part: ~10 draw calls per character instead of ~40, which
 // is what costs most on a modest machine. The parts are baked into place; nothing moves anyway.
 function mergeByMaterial (g) {
   g.updateMatrixWorld(true)
@@ -266,7 +266,7 @@ function concat (geoms) {
   return out
 }
 
-// Free a built character's geometry (its colours, outline and face textures are shared and cached).
+// Free a built character's geometry (its colors, outline and face textures are shared and cached).
 export function disposeChibi (obj) {
   obj.traverse((m) => {
     if (!m.isMesh) return
@@ -293,7 +293,7 @@ function addHair (g, preset, hair, hairDark, painted) {
     return hairCap(hair, (front + back) / 2, (back - front) / 2)
   }
   // Under the cap (a smaller radius), so the two never fight over the same pixels.
-  const backShell = (theta, colour = hairDark, gap = 120) => part(shell(theta, gap), colour, HAIR_R * 0.965, [0, HEAD_Y, 0])
+  const backShell = (theta, color = hairDark, gap = 120) => part(shell(theta, gap), color, HAIR_R * 0.965, [0, HEAD_Y, 0])
   // Short at the sides: hair down to the top of the ears beside the painted face (whose edge it
   // meets), and lower only behind the ears, so nothing hangs in front of an ear.
   const shortSides = () => {

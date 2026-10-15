@@ -1,5 +1,5 @@
-// The avatar builder: choose a style, theme, skin, hair and eye colours and an accessory.
-// Every change is drawn by the Beach itself (one renderer, one set of colour rules); nothing is
+// The avatar builder (My look): hair style and color, clothing theme and accessory, skin, eye color.
+// Every change is drawn by the Beach itself (one renderer, one set of color rules); nothing is
 // saved until you press Save, and looks can only change once in a while so people know who's who.
 'use strict'
 ;(() => {
@@ -22,16 +22,16 @@
   }
 
   let QUICK = {}
-  function colourField (field, title) {
+  function colorField (field, title) {
     const text = el('input', { type: 'text', id: field, autocomplete: 'off', spellcheck: 'false', 'aria-describedby': field + '-err', placeholder: 'a name or #rrggbb' })
-    const pick = el('input', { type: 'color', 'aria-label': title + ' colour picker' })
+    const pick = el('input', { type: 'color', 'aria-label': title + ' color picker' })
     const err = el('div', { class: 'field-error error', id: field + '-err', 'aria-live': 'polite' })
     text.addEventListener('input', () => change(field, text.value, true))
     pick.addEventListener('input', () => { text.value = pick.value; change(field, pick.value) })
     ui[field] = { text, pick, err }
     return el('div', {},
       el('h2', {}, el('label', { for: field, text: title })),
-      el('div', { class: 'colour-row' }, text, pick),
+      el('div', { class: 'color-row' }, text, pick),
       err,
       el('div', { class: 'choices' },
         QUICK[field].map(([c, hex]) => el('label', { title: c },
@@ -39,9 +39,9 @@
           dot(hex), c))))
   }
 
-  function dot (colour, b) {
+  function dot (color, b) {
     const s = el('span', { class: 'swatch' + (b ? ' half' : '') })
-    if (b) { s.style.setProperty('--a', colour); s.style.setProperty('--b', b) } else s.style.background = colour
+    if (b) { s.style.setProperty('--a', color); s.style.setProperty('--b', b) } else s.style.background = color
     return s
   }
 
@@ -58,7 +58,7 @@
       for (const f of ['hair', 'eyes']) ui[f].err.textContent = ''
       ui.figure.replaceChildren(svgNode(r.svg))
       for (const f of ['hair', 'eyes']) {
-        ui[f].pick.value = r.colours[f]
+        ui[f].pick.value = r.colors[f]
         if (document.activeElement !== ui[f].text) ui[f].text.value = rec[f]
       }
       ui.describe.textContent = r.describe
@@ -154,13 +154,16 @@
       el('div', { class: 'builder' },
         el('div', { class: 'preview card' }, ui.figure, ui.describe, ui.save, ui.status,
           el('p', {}, el('button', { class: 'quiet', type: 'button', text: 'Download my picture', onclick: downloadPicture }))),
+        // In pairs that belong together: hair style with hair color, clothing with accessory.
         el('div', {},
-          el('h2', { text: 'Style' }), radios('preset', opts.presets, v => LABELS.presets[v] || v),
-          el('h2', { text: 'Theme' }), radios('theme', Object.keys(opts.themes), v => v.replace('-', ' '), v => dot(opts.themes[v].outfit, opts.themes[v].trim)),
+          el('div', { class: 'look-pair' },
+            el('h2', { text: 'Hair style' }), radios('preset', opts.presets, v => LABELS.presets[v] || v),
+            colorField('hair', 'Hair color')),
+          el('div', { class: 'look-pair' },
+            el('h2', { text: 'Clothing theme' }), radios('theme', Object.keys(opts.themes), v => v.replace('-', ' '), v => dot(opts.themes[v].outfit, opts.themes[v].trim)),
+            el('h2', { text: 'Accessory' }), radios('accessory', opts.accessories, v => LABELS.accessories[v] || v)),
           el('h2', { text: 'Skin' }), radios('skin', Object.keys(opts.skins), v => v, v => dot(opts.skins[v])),
-          colourField('hair', 'Hair colour'),
-          colourField('eyes', 'Eye colour'),
-          el('h2', { text: 'Accessory' }), radios('accessory', opts.accessories, v => LABELS.accessories[v] || v))))
+          colorField('eyes', 'Eye color'))))
     reflect()
     await preview(rec)
     showWait()

@@ -99,7 +99,7 @@ properties alone. Both are **scripted approximations** in `main.lua`, described 
 
 **Yes, but by approximation, not by air physics.** On the beach ball only, every tick the
 script applies:
-- an upward push cancelling 80% of gravity;
+- an upward push canceling 80% of gravity;
 - quadratic drag in flight (0.06·|v|·v);
 - a light northward breeze while it's airborne.
 
@@ -115,7 +115,7 @@ the same velocity (7.2 up, 20 forward), in a scratch copy:
 | 3.0 | rest / 20.4 | rest / 15.9 |
 
 The beach ball goes twice as high, stays up three times longer, and drifts on after the plain
-ball has stopped. That's a visible, different behaviour. It is not simulated air resistance,
+ball has stopped. That's a visible, different behavior. It is not simulated air resistance,
 and `API.md` says so.
 
 ### The sea
@@ -137,7 +137,7 @@ wall into the zone "scored" from outside the posts; tracking the crossing fixed 
 the world:
 - adds to `Score.North` or `Score.South`;
 - announces "Goal at the north end! (soccer ball)";
-- returns the ball to the centre 3 s later.
+- returns the ball to the center 3 s later.
 
 **Announcements.** The engine has no way for a world script to post into the HTTP chat
 (nothing chat-related exists in `src/game`). The world fires an `Announce` replicated event
@@ -186,7 +186,7 @@ So mesa-island keeps "unknown player" until someone has been in front of you.
   adapter detects the world from the `BeachMap` folder. Nothing else hard-codes beach values.
 - **Kick results** follow the ball: `Kicked the soccer ball N (power 1); it stopped 24.6 away
   at (0,0.6,24.6)`, or `...; Goal at the north end! (soccer ball) The ball goes back to the
-  centre.`, or `... in the sea (it will drift back)`. A miss says
+  center.`, or `... in the sea (it will drift back)`. A miss says
   `Kick failed: no ball within 3 of you; nearest is the soccer ball 2.6 N at (0,0.6,0) - walk
   up to it first`.
 - **Castles** are one line each:
@@ -242,10 +242,10 @@ hear). Each step held in all 3 runs:
 
 | Step | Result |
 |---|---|
-| Kick a ball into a goal and see it announced | ✓ Two kicks from the centre; the second result read `Goal at the north end! (soccer ball)`; `score: north 1, south 0` |
+| Kick a ball into a goal and see it announced | ✓ Two kicks from the center; the second result read `Goal at the north end! (soccer ball)`; `score: north 1, south 0` |
 | Ball into the sea, then retrieve it | ✓ The volleyball showed `in the sea`; the player waded in, picked it up, carried it back and placed it on the sand |
 | Build a 3-high castle in a plot that stands | ✓ Three blocks and a flag in plot 1: `4 pieces, 3 high, with a flag, standing`, still standing at the end of the run |
-| Build one badly and show it falls | ✓ A wall placed 0.9 off-centre on a tower in plot 4 toppled; `has fallen 1 time`, and `World: The sandcastle in plot 4 fell down!` reached `hear()` |
+| Build one badly and show it falls | ✓ A wall placed 0.9 off-center on a tower in plot 4 toppled; `has fallen 1 time`, and `World: The sandcastle in plot 4 fell down!` reached `hear()` |
 
 **Two players** (`scripts/beach_two_players.py`, each with its own adapter):
 

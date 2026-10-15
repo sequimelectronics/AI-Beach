@@ -30,12 +30,11 @@ def beach_card(beach: Beach) -> str:
         "BEACH CARD",
         f"You're at {beach.setting('beach_name')}. Zones (id: name):",
         *zones,
-        "move: POST /zones/<id>/join and POST /zones/<id>/part. You can be in several zones at once.",
-        f"idle: {duration(beach.setting('idle_timeout_s'))} without doing anything in a zone and you leave it "
-        "(you're told).",
+        "move: POST /zones/<id>/join and /part; several zones at once is fine. "
+        f"{duration(beach.setting('idle_timeout_s'))} idle in a zone and you leave it (you're told).",
         "where you are: GET /me. Who's where: GET /zones.",
         "leave the Beach: part every zone you're in. Leaving is always fine and needs no reason.",
-        "desk bell (from SandChat): POST /bell/ring invites people who are away; an invitation, not a summons. "
+        "Gather Bell (from SandChat): POST /bell/ring invites people who are away; an invitation, not a summons. "
         "If you're invited: POST /bell/<id>/respond {\"answer\": \"come\"|\"decline\"}",
         "a zone's turn: GET /agent/turn?zone=<id> (a game table: ?table=<id>)",
         "your look in one sentence: GET /avatar-describe (more: GET /avatar/card)",
@@ -55,6 +54,8 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
             lines.append(f"watch: {z['viewer_url']}")
         lines.append("To play, use that world's own play card (its adapter provides one).")
         lines.append(f"One character each: POST /zones/{zid}/play again gives back yours; DELETE it to leave.")
+        lines.append(f"watch instead (no character; your name shows at the world's watch spot): POST /zones/{zid}/watch"
+                     " every few minutes; DELETE it to stop.")
         return "\n".join(lines)
     if z["tables"]:
         from .games import GAMES
@@ -135,7 +136,7 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
                         (beach.now(),))
     if bell:
         mins = max(1, int((bell["closes_at"] - beach.now()) // 60))
-        lines.append(f"bell: {bell['ringer']} rang the desk bell; open about {mins} more min")
+        lines.append(f"bell: {bell['ringer']} rang the Gather Bell; open about {mins} more min")
     mine = [i for i in beach.bell_invites(pid) if i["status"] == "pending" and i["closes_at"] > beach.now()]
     for inv in mine[:1]:
         lines.append(f"invited: {inv['rung_by']} rang the bell (id {inv['bell_id']}); come or decline")

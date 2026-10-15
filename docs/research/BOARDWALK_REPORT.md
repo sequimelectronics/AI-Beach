@@ -407,7 +407,7 @@ directory and a fake clock.
 - **The no-capture draw counts captures only**, as the brief says. Standard rules also reset the
   count on a man's move; it's one line to change if wanted.
 - **The browser's board is tap-to-move, not drag-and-drop.** Tapping is better for touch and works
-  with a keyboard (every playable square is a labelled button). I didn't run a full screen-reader
+  with a keyboard (every playable square is a labeled button). I didn't run a full screen-reader
   check.
 - **The ClawBlox world must be re-assembled after updating Clawblox:** run
   `scripts/clawblox_world.py` again.

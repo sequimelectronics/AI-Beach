@@ -70,7 +70,7 @@ the Python package under `python/`. I didn't run Clawblox's own test suite.
 **Couldn't run or didn't try**
 - I didn't test a human *playing* through the browser. The stock mesa-island renderer has no
   play controls (see Q5), so there was nothing to test beyond spectating and chat.
-- I didn't test proximity chat (`speech.mode = "proximity"`), AFK timeout behaviour, the Postgres
+- I didn't test proximity chat (`speech.mode = "proximity"`), AFK timeout behavior, the Postgres
   datastore, or recording/replay.
 - I tested the "fresh machine, offline" startup failure by moving the npx cache aside, not on a
   truly clean machine.
@@ -159,7 +159,7 @@ Real-tokenizer counts on saved observations:
 | One block entity | 742 | 186 | **447** | – | 1 | about 40 |
 
 One small cube costs about 450 tokens, because each entity carries a 3×3 rotation matrix, an
-AABB, an OBB with 8 corners, an RGB colour, material, shape and attributes. The fixed part of the
+AABB, an OBB with 8 corners, an RGB color, material, shape and attributes. The fixed part of the
 observation (tick, player, attributes, with no entities) is only 164 tokens. Entities are the
 whole cost.
 
@@ -225,7 +225,7 @@ interesting play happens. Only radius 8 away from objects (about 1.2k) fits comf
 
 **What actually fits** is the same data, compacted: name, position rounded to 0.1, size and role
 per entity. That's 1,500 tokens for the entire island at full radius, about 9× smaller, with
-nothing lost that the game logic uses. Rotation, AABB, OBB corners and colour are derived or
+nothing lost that the game logic uses. Rotation, AABB, OBB corners and color are derived or
 rendering data. A thin adapter between the model and Clawblox could also:
 - return a one-line action result instead of a second full observation from `/input`;
 - drop static geometry after the first turn;
@@ -382,7 +382,7 @@ The API is Roblox-like and well documented. The real design work is the API.md a
 entity count low (every loose sandcastle block costs about 450 tokens raw, about 40 compacted).
 One more thing: you'd also need a renderer. `clawblox run` refuses to start without a
 `renderer/package.json` it can bundle, so you copy mesa-island's (707 lines of Three.js) and
-adjust colours.
+adjust colors.
 
 ### 5. What would a human need to join and watch or play in the browser? Does it need the internet?
 

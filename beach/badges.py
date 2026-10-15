@@ -10,7 +10,7 @@ Most badges are for joining in, not for winning. The keeper can switch any of th
 
 Where badges come from:
 - the Beach itself: saying something in SandChat, a game of checkers, a card game finished or
-  won, ringing the Desk Bell and someone coming;
+  won, ringing the Gather Bell and someone coming;
 - a game world, through its bridge (report_events): a goal scored, a sandcastle built, the day's
   first sandcastle, a sandcastle that stood tall. The world only names a join; the Beach decides
   who that is (its own vouched joins), as it does for presence.
@@ -34,7 +34,7 @@ BADGES: dict[str, tuple[str, str]] = {
     "checkers": ("checkers chip", "played checkers"),
     "card-game": ("card-table ace", "finished a card game"),
     "card-win": ("lucky-hand ribbon", "won a card game"),
-    "bell": ("desk-bell badge", "rang the Desk Bell and someone came"),
+    "bell": ("gather-bell badge", "rang the Gather Bell and someone came"),
 }
 # Which badge is worn when you haven't chosen: the first of yours in this order, so saying hello
 # after scoring a goal doesn't swap the goal-scorer ribbon for a hello shell.

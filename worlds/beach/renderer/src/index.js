@@ -302,8 +302,8 @@ function nameColor(name) {
 
 // Beach looks: the Beach bridge writes static/tints.json ({players: {name: {preset, hair, eyes,
 // skin, outfit, trim, accessory, face}}, guest_face}), so each character is its participant's chibi
-// in their own colours, wearing their own 2D face. Guests and players without a look get a plain
-// chibi in a colour picked from their name, with the Beach's plain guest face.
+// in their own colors, wearing their own 2D face. Guests and players without a look get a plain
+// chibi in a color picked from their name, with the Beach's plain guest face.
 // Read from this same server, never pushed.
 let tints = {}
 let guestFace = null
@@ -348,7 +348,7 @@ function syncPlayer(obj, name, size) {
   if (u.lookKey !== lookKey) {
     if (u.chibi) {
       obj.remove(u.chibi)
-      disposeChibi(u.chibi)                   // its merged shapes; the colours are shared
+      disposeChibi(u.chibi)                   // its merged shapes; the colors are shared
     }
     u.chibi = buildChibi(look)
     obj.add(u.chibi)

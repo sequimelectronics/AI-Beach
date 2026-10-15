@@ -166,7 +166,7 @@
   }
 
   let actions = []
-  // An action that isn't aimed at anyone (wave, shrug) has no target: the box is greyed out.
+  // An action that isn't aimed at anyone (wave, shrug) has no target: the box is grayed out.
   function syncTarget () {
     const a = actions.find(x => x.name === ui.action.value)
     const aimed = !!(a && a.targeted)

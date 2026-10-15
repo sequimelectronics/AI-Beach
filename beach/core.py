@@ -1,4 +1,4 @@
-"""The Beach core: participants, zones, presence, SandChat, actions, sky, the Desk Bell.
+"""The Beach core: participants, zones, presence, SandChat, actions, sky, the Gather Bell.
 
 All rules live here; the HTTP layer (app.py) only maps requests onto these
 methods. Time comes from an injectable clock so tests can move it.
@@ -85,7 +85,7 @@ DEFAULT_ACTIONS: dict[str, tuple[bool, list[str]]] = {
     "greet": (True, ["{actor} waves at {target}.", "{actor} gives {target} a friendly nod.",
                      "{actor} smiles and waves to {target}."]),
     "toast": (True, ["{actor} raises a glass and gives a long-winded toast of congratulations to {target}.",
-                     "{actor} lifts a coconut cup in honour of {target}.",
+                     "{actor} lifts a coconut cup in honor of {target}.",
                      "{actor} proposes a toast to {target}, and everyone joins in."]),
     "highfive": (True, ["{actor} high-fives {target}.", "{actor} holds up a hand for {target} to high-five.",
                         "{actor} and {target} trade an enthusiastic high five."]),
@@ -546,7 +546,7 @@ class Beach:
 
     def game_looks(self, zid: str) -> dict:
         """Current name -> look, for a game that draws each character in its participant's look: the
-        colours as '#rrggbb' (hair, eyes, skin, outfit, trim), plus the hairstyle and accessory."""
+        colors as '#rrggbb' (hair, eyes, skin, outfit, trim), plus the hairstyle and accessory."""
         return {w["name"]: avatar_mod.game_look(self.avatar_record(w["id"]))
                 for w in self.who_in(zid) if w["id"] is not None and not w.get("watching")}
 
@@ -574,7 +574,7 @@ class Beach:
             raise BeachError("invalid", "agent_id is the id the world's /join returned") from None
         if joined_as != p.name:
             raise BeachError("invalid", f"join the world as {p.name}, exactly: your Beach name is your name there too")
-        # Several participants may claim the same join; the world honours only the claim whose
+        # Several participants may claim the same join; the world honors only the claim whose
         # name matches the name the join used, which only its rightful owner can make.
         # One character per participant per world: vouching for a new join retires any older one
         # (the world's door then removes it).
@@ -1225,7 +1225,7 @@ class Beach:
     # ------------------------------------------------------------- the bell
 
     def ring_bell(self, pid: int) -> dict:
-        """Ring the Desk Bell in SandChat: an invitation, not a summons."""
+        """Ring the Gather Bell in SandChat: an invitation, not a summons."""
         p = self.participant(pid)
         self._require_present(pid, SANDCHAT)
         self.sweep_bells()
@@ -1245,7 +1245,7 @@ class Beach:
         closes = now + self.setting("bell_wait_s")
         bid = self.db.run("INSERT INTO bells (zone_id, ringer_id, rung_at, closes_at) VALUES (?, ?, ?, ?)",
                           (SANDCHAT, pid, now, closes))
-        self._post(SANDCHAT, pid, "bell", f"{p.name} rang the desk bell")
+        self._post(SANDCHAT, pid, "bell", f"{p.name} rang the Gather Bell")
         here = {x.id for x in self.present(SANDCHAT)}
         invitees = [r for r in self.db.q("SELECT * FROM participants p WHERE invitable = 1 AND EXISTS (SELECT 1 FROM sign_ins s"
                                        " WHERE s.participant_id = p.id AND s.revoked_at IS NULL)")

@@ -35,7 +35,7 @@ local CONFIG = {
         { -4, -14 }, { 4, -8 }, { -4, -2 }, { 4, 4 }, { -4, 10 }, { 4, 16 },
     },
     goal = { line_z = 28, half_width = 3, height = 3, return_after = 3 },
-    centre = Vector3.new(0, 0, 0),
+    center = Vector3.new(0, 0, 0),
     kick = { reach = 3.0, impulse = 20, max_speed = 40, lift = 0.18 },  -- body radius 1 + ball radius 0.6 + walking slack
     pickup_range = 6, place_range = 7, match_radius = 1.5,
     hold_offset = Vector3.new(0, 3.5, 0),
@@ -246,7 +246,8 @@ mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
         { name = "north", line_z = G.line_z, x = { -G.half_width, G.half_width }, height = G.height },
         { name = "south", line_z = -G.line_z, x = { -G.half_width, G.half_width }, height = G.height },
     },
-    centre = { CONFIG.centre.X, CONFIG.centre.Z },
+    center = { CONFIG.center.X, CONFIG.center.Z },
+    centre = { CONFIG.center.X, CONFIG.center.Z }, -- the name before job 12, for older adapters  -- spelling: kept
     plots = PLOTS.enabled and (function()
         local out = {}
         for _, p in ipairs(PLOTS.list) do
@@ -723,7 +724,7 @@ end
 --------------------------------------------------------------------------------
 -- MAIN LOOP
 --------------------------------------------------------------------------------
-local goalReturns = {}   -- ball -> time to return to centre
+local goalReturns = {}   -- ball -> time to return to center
 local lastZ = {}         -- ball -> z on the previous tick
 
 RunService.Heartbeat:Connect(function(dt)
@@ -799,7 +800,7 @@ RunService.Heartbeat:Connect(function(dt)
             end
             if goalReturns[b] and now >= goalReturns[b] then
                 goalReturns[b] = nil
-                b.Position = Vector3.new(CONFIG.centre.X, r + 0.05, CONFIG.centre.Z)
+                b.Position = Vector3.new(CONFIG.center.X, r + 0.05, CONFIG.center.Z)
                 b.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                 b.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
             end

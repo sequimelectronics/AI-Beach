@@ -93,6 +93,15 @@ CLAWBLOX_BIN=/path/to/clawblox CLAWBLOX_WORLD=/path/to/worlds/mesa-island \
   python3 -m unittest tests.test_clawblox_integration   # starts a headless server on a temp copy
 ```
 
+### Watchers, and a character the world removed
+
+A world behind a Beach can be watched: watchers have no character, and the beach world publishes
+them on a `Watchers` folder; the view ends with `watching from the lifeguard chair: Coral` when
+anyone is. If the world removes your character (its idle limit), the next call that needs it raises
+`CharacterGone` and forgets the session; with `beach_joiner`, the next join raises `BeachSaid` with
+the Beach's own words ("You were idle 5 minutes ... Play again to come back as a new character."),
+and the join after that makes one new character. Nothing is replaced in silence.
+
 ## Limits
 
 - Each world needs its own `Rules` and play card (mesa-island and beach exist).

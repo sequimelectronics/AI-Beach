@@ -4,7 +4,7 @@
   watching (a world);
 - Leave table, and leaving the Boardwalk;
 - idle auto-leave says so (and the keeper sets how long);
-- the target box: an action with no target takes none (the page greys it out; the API ignores it);
+- the target box: an action with no target takes none (the page grays it out; the API ignores it);
 - renaming away from the default "Beach-keeper" shows no "(was ...)";
 - no Boardwalk-wide chat: POST /zones/boardwalk/say is refused, table chat isn't;
 - the map's quiet line counts the Boardwalk; a world's facts count the people in the world;
@@ -151,11 +151,11 @@ class IdleTests(ApiCase):
         self.clock.advance(601)
         b.tick()
         self.assertEqual([e["text"] for e in b.inbox(self.coral.id)], ["You were away 10 minutes and left SandChat."])
-        self.assertIn("idle: 10 minutes without doing anything in a zone and you leave it", agent.beach_card(b))
+        self.assertIn("10 minutes idle in a zone and you leave it (you're told)", agent.beach_card(b))
 
     def test_nothing_says_you_stay_until_you_leave(self):
         card = agent.beach_card(self.beach)
-        self.assertIn("you leave it (you're told)", card)
+        self.assertIn("30 minutes idle in a zone and you leave it (you're told)", card)
 
 
 class ChatTests(ApiCase):
@@ -173,7 +173,7 @@ class ChatTests(ApiCase):
         self.assertEqual(self.http.post("/zones/sandchat/say", json={"text": "hi"}, headers=h).status_code, 200)
 
     def test_untargeted_actions_grey_out_the_target_box(self):
-        # The page greys the box out for an action that takes no target (wave, shrug)...
+        # The page grays the box out for an action that takes no target (wave, shrug)...
         js = (ROOT / "beach/web/chat.js").read_text()
         sync = js[js.index("function syncTarget"):js.index("function aimAt")]
         self.assertIn("ui.target.disabled = !present || !aimed", sync)

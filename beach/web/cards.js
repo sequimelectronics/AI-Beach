@@ -10,17 +10,17 @@
   const RED = '#c0312f'
   const DARK = '#1f2b38'
   const SUIT = {
-    S: { name: 'spades', colour: DARK, path: 'M5 0C8.6 3.2 10 4.9 10 6.3A2.4 2.4 0 0 1 5.7 7.6L6.6 10H3.4L4.3 7.6A2.4 2.4 0 0 1 0 6.3C0 4.9 1.4 3.2 5 0Z' },
-    H: { name: 'hearts', colour: RED, path: 'M5 9.6C1.4 6.6 0 4.8 0 3A2.7 2.7 0 0 1 5 1.6A2.7 2.7 0 0 1 10 3C10 4.8 8.6 6.6 5 9.6Z' },
-    D: { name: 'diamonds', colour: RED, path: 'M5 0L9.2 5L5 10L0.8 5Z' },
-    C: { name: 'clubs', colour: DARK, path: 'M5 0.2A2.35 2.35 0 0 1 6.9 4A2.35 2.35 0 1 1 6 7.6L6.8 10H3.2L4 7.6A2.35 2.35 0 1 1 3.1 4A2.35 2.35 0 0 1 5 0.2Z' }
+    S: { name: 'spades', color: DARK, path: 'M5 0C8.6 3.2 10 4.9 10 6.3A2.4 2.4 0 0 1 5.7 7.6L6.6 10H3.4L4.3 7.6A2.4 2.4 0 0 1 0 6.3C0 4.9 1.4 3.2 5 0Z' },
+    H: { name: 'hearts', color: RED, path: 'M5 9.6C1.4 6.6 0 4.8 0 3A2.7 2.7 0 0 1 5 1.6A2.7 2.7 0 0 1 10 3C10 4.8 8.6 6.6 5 9.6Z' },
+    D: { name: 'diamonds', color: RED, path: 'M5 0L9.2 5L5 10L0.8 5Z' },
+    C: { name: 'clubs', color: DARK, path: 'M5 0.2A2.35 2.35 0 0 1 6.9 4A2.35 2.35 0 1 1 6 7.6L6.8 10H3.2L4 7.6A2.35 2.35 0 1 1 3.1 4A2.35 2.35 0 0 1 5 0.2Z' }
   }
   const RANK_WORD = { A: 'ace', J: 'jack', Q: 'queen', K: 'king' }
 
   function pip (s, x, y, size, flip) {
     const k = size / 10
     const rot = flip ? ` rotate(180 ${x} ${y})` : ''
-    return `<path d="${SUIT[s].path}" fill="${SUIT[s].colour}" transform="${rot.trim()} translate(${x - 5 * k} ${y - 5 * k}) scale(${k})"/>`
+    return `<path d="${SUIT[s].path}" fill="${SUIT[s].color}" transform="${rot.trim()} translate(${x - 5 * k} ${y - 5 * k}) scale(${k})"/>`
   }
 
   // Where the pips go, on a 60 x 84 card.
@@ -40,7 +40,7 @@
   // The court cards get a small beach picture each: a sailboat (jack), a scallop shell (queen),
   // the sun (king). Simple shapes, drawn here.
   function court (r, s) {
-    const c = SUIT[s].colour
+    const c = SUIT[s].color
     const tint = s === 'H' || s === 'D' ? '#fbe3dc' : '#e1ebf3'
     let pic = ''
     if (r === 'J') {
@@ -65,7 +65,7 @@
 
   function faceSvg (code) {
     const r = code.slice(0, -1); const s = code.slice(-1)
-    const c = SUIT[s].colour
+    const c = SUIT[s].color
     let middle = ''
     if (r === 'A') middle = pip(s, 30, 42, 24)
     else if (PIPS[r]) middle = PIPS[r].map(([x, y]) => pip(s, x, y, 10, y > 42)).join('')

@@ -1,6 +1,6 @@
 """Job 08 (closing open items): the session in the viewer link's fragment, the join key, Beach
 names in the viewer and adapter, the keeper's card editor, several sign-in links per person, the
-world+bridge launcher, Desk Bell retries, and opt-outs that catch plain names.
+world+bridge launcher, Gather Bell retries, and opt-outs that catch plain names.
 
 Against a temporary data directory with a fake clock. The real-world part of the join key (a
 patched Clawblox refusing a direct join) is shown by scripts/join_key_live.py.
@@ -550,7 +550,7 @@ class SubprocessHandleTests(unittest.TestCase):
         self.assertIn('for std in ("stdin", "stdout", "stderr"):', src)
 
 
-# 7 ----------------------------------------------------------------------- Desk Bell retries
+# 7 ----------------------------------------------------------------------- Gather Bell retries
 
 class BellRetryTests(Case):
     def ring(self, sender_results):
