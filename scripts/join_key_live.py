@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The world's join key, live (job 08, item 2), plus the renamed player in the world (item 3).
 
 Needs, on this machine: the Beach, and a world started with `python -m beach.world` (so it has a

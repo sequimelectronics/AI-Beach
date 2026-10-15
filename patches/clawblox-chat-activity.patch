@@ -1,0 +1,70 @@
+Clawblox engine: a chat message counts as activity for the idle (AFK) limit
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-chat-activity.patch
+    cargo build --release
+
+Why: a world removes a player who hasn't been active for its `afk_timeout` (300 s in BeachBlox),
+and only inputs (moving, picking up, ...) counted as activity. Someone who stood still and only
+talked was removed after five minutes, mid-conversation. With this change, a chat message resets
+the idle timer the same way an input does. The idle limit itself is unchanged, and a player who
+neither acts nor talks is still removed after it.
+
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+index 8fb943c..60902ff 100644
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -5305,6 +5305,8 @@ async fn local_chat(
+     }
+ 
+     let (agent_id, agent_name) = get_session(&state, &headers)?;
++    // Talking is being there: a chat message resets the idle (AFK) timer, like an input does.
++    let _ = game::record_activity(&state.game_handle, state.game_id, agent_id);
+     let content = body.content.trim();
+     if content.is_empty() {
+         return Err((
+diff --git a/src/game/manager/players.rs b/src/game/manager/players.rs
+index 490446b..53a4929 100644
+--- a/src/game/manager/players.rs
++++ b/src/game/manager/players.rs
+@@ -98,3 +98,20 @@ pub fn queue_input(
+ 
+     Ok(())
+ }
++
++/// Counts as activity for the idle (AFK) limit without queuing an input: e.g. a chat message.
++/// Someone who only talks is still there.
++pub fn record_activity(state: &GameManagerHandle, game_id: Uuid, agent_id: Uuid) -> Result<(), String> {
++    let instance_id = get_player_instance(state, agent_id, game_id)
++        .ok_or_else(|| "Not in any instance of this game".to_string())?;
++    let instance_handle = state
++        .instances
++        .get(&instance_id)
++        .ok_or_else(|| "Instance not found".to_string())?;
++    let mut instance = instance_handle.write();
++    if !instance.players.contains_key(&agent_id) {
++        return Err("Not in instance".to_string());
++    }
++    instance.record_player_activity(agent_id);
++    Ok(())
++}
+diff --git a/src/game/mod.rs b/src/game/mod.rs
+index 336c5cc..8f79aca 100644
+--- a/src/game/mod.rs
++++ b/src/game/mod.rs
+@@ -195,6 +195,11 @@ pub fn queue_input(
+     manager::players::queue_input(state, game_id, agent_id, input_type, data)
+ }
+ 
++/// Records activity for the idle (AFK) limit without an input (a chat message counts).
++pub fn record_activity(state: &GameManagerHandle, game_id: Uuid, agent_id: Uuid) -> Result<(), String> {
++    manager::players::record_activity(state, game_id, agent_id)
++}
++
+ // =============================================================================
+ // Observations
+ // =============================================================================

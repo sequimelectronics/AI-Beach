@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Two scripted beach players at once, each seeing ONLY its own adapter's text.
 
 Checks that both see and name each other (including when the other is behind

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Badges for the day: small, friendly marks of something that happened today.
 
 A badge is earned for something done today, worn on your avatar (one at a time, your choice;

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The notification hook: how the Beach tells a host "someone rang the Gather Bell".
 
 The host configures it (setting `notify_hook`); the Beach makes no network call

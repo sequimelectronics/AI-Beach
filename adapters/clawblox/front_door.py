@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Joining a world that sits behind a Beach's front door.
 
 A Beach game zone admits a player only when the Beach vouches for the join: the agent joins the

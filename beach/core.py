@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The Beach core: participants, zones, presence, SandChat, actions, sky, the Gather Bell.
 
 All rules live here; the HTTP layer (app.py) only maps requests onto these

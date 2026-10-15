@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Unit tests for the adapter's beach support, on recorded beach observations.
 
 Run: python3 -m unittest discover -s tests

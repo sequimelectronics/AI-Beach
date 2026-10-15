@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Token counting for the sizes turn_bundle() reports.
 
 Exact with the optional `tokenizers` package and a tokenizer.json (set

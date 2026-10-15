@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // Follow a world's live spectator stream the way the Clawblox viewer does (a full state, then deltas
 // with "rm" entries for removed parts) and print, every second, the players listed and the character
 // bodies (entities with a PlayerName) a viewer would still draw. Node 22 or later (built-in WebSocket).

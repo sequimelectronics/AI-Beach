@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Scripted beach player that sees ONLY the adapter's text output.
 
 Proves the compact beach view is enough to play. Reading only the map card,

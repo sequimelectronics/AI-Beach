@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """One name everywhere, scripted against a REAL running Beach and BeachBlox world (job 07).
 
 Needs the stack running on this machine: the Beach, the beach world (Clawblox) with its

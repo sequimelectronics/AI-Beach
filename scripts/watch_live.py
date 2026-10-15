@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Watching a world, live (job 12, section 2).
 
 Needs, on this machine: the Beach, and BeachBlox started with `python -m beach.world` (patched

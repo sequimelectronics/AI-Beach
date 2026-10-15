@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """HTTP-level tests for the Beach door, plus the scripted three-participant scenario.
 
 Skipped if FastAPI (and httpx, for its TestClient) isn't installed:

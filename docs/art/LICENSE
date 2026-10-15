@@ -1,0 +1,18 @@
+AI-Beach artwork
+
+The original art in AI-Beach is licensed under the Creative Commons
+Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0).
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+
+    Summary:    https://creativecommons.org/licenses/by-sa/4.0/
+    Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+What it covers, and the credit to give when you share or adapt it, are in
+docs/LICENSES.md ("Art") and docs/art/README.md ("Credits"). The code that draws
+some of this art (for example beach/avatar.py, the 3D chibi renderer, the card and
+badge art in the web pages) is licensed AGPL-3.0-only as code; the artwork it
+draws is CC BY-SA 4.0.
+
+Copyright (C) 2026 Becky Northaven and the AI-Beach contributors. The reference
+sketches in this folder are by Kellan N., included with permission.

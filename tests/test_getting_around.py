@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 12: getting around, leaving, and watching a world.
 
 - the bar (GET /map) lists every zone, with "you" where you are: here (a chat), playing or

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Capture raw Clawblox observations as unit-test fixtures for adapters/clawblox.
 
 Run against a mesa-island copy with max_players >= 2. Writes generated game

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Parse a raw Clawblox observation into the pieces the adapter reasons about.
 
 Everything here is pure (no I/O) so it can be unit-tested on recorded fixtures.

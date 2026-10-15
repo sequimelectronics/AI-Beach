@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """One name, everywhere (job 07): renames, look-alike names, history, and the front door to
 game worlds (vouching, the bridge's door sync, presence by join, guests).
 

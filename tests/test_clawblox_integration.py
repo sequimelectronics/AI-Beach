@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Integration test against a running headless Clawblox server.
 
 Skipped unless one of these is set:
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -107,12 +110,11 @@ class LiveAdapterTest(unittest.TestCase):
 BEACH_DIR = Path(__file__).resolve().parents[1] / "worlds" / "beach"
 
 
-@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
-class LiveBeachTest(unittest.TestCase):
-    """Starts worlds/beach from this repo on a temp copy, behind a Beach (its front door), and plays
-    a short round. The world names characters by their Beach names, which only a Beach can give:
-    run alone, every character keeps the "..." placeholder (job 13 fixed this test, which until
-    then expected a name the world can't know)."""
+class _LiveBeachWorld:
+    """Starts worlds/beach from this repo on a temp copy, behind a Beach (its front door), for
+    Sandy and Pebble. AFK_TIMEOUT, when set, replaces the world's idle limit in the copy only."""
+
+    AFK_TIMEOUT: int | None = None
 
     @classmethod
     def setUpClass(cls):
@@ -128,6 +130,10 @@ class LiveBeachTest(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="beach-it-")
         world = Path(cls.tmp) / "beach"
         shutil.copytree(BEACH_DIR, world, ignore=shutil.ignore_patterns(".clawblox", "dist", ".build.lock"))
+        if cls.AFK_TIMEOUT is not None:
+            toml = world / "world.toml"
+            text = toml.read_text(encoding="utf-8")
+            toml.write_text(re.sub(r"(?m)^afk_timeout = \d+$", f"afk_timeout = {cls.AFK_TIMEOUT}", text), encoding="utf-8")
         # The Beach, in this process: Sandy and Pebble, and the BeachBlox zone with its bridge token.
         cls.beach = Beach(Path(cls.tmp) / "data", rng=random.Random(1))
         cls.beach.ensure_admin()
@@ -179,6 +185,14 @@ class LiveBeachTest(unittest.TestCase):
         from adapters.clawblox.front_door import beach_voucher
         return ClawbloxAdapter(self.url, name, vouch=beach_voucher(self.beach_url, self.tokens[name], "beachblox"))
 
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
+    """A short round on the beach world. The world names characters by their Beach names, which
+    only a Beach can give: run alone, every character keeps the "..." placeholder (job 13 fixed
+    this test, which until then expected a name the world can't know)."""
+
     def test_beach_round(self):
         a = self.adapter("Sandy")
         b = self.adapter("Pebble")
@@ -203,6 +217,32 @@ class LiveBeachTest(unittest.TestCase):
         self.assertIn("Sandy: hello Pebble", b.hear())
         bundle = a.turn_bundle()
         self.assertLess(bundle["total_tokens"], 8000)
+
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveChatIdleTest(_LiveBeachWorld, unittest.TestCase):
+    """Chatting counts as being active (patches/clawblox-chat-activity.patch): with the world's idle
+    limit cut to a few seconds, Sandy only talks and stays; Pebble says and does nothing and is
+    removed. Needs a Clawblox built with that patch."""
+
+    AFK_TIMEOUT = 6
+
+    def test_chatting_player_stays_silent_player_is_removed(self):
+        from adapters.clawblox.adapter import CharacterGone
+        sandy = self.adapter("Sandy")
+        pebble = self.adapter("Pebble")
+        sandy.look()
+        pebble.look()
+        start = time.monotonic()
+        while time.monotonic() - start < 4 * self.AFK_TIMEOUT:   # well past the limit
+            self.assertTrue(sandy.say("still here, just talking").startswith("said:"))
+            time.sleep(1.5)
+        # Sandy never moved or acted, only talked: still in the world.
+        self.assertTrue(sandy.look().startswith("you ("))
+        # Pebble did nothing at all: the world took their character out.
+        with self.assertRaises(CharacterGone):
+            pebble.look()
 
 
 if __name__ == "__main__":

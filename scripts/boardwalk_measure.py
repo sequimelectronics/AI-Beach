@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Token sizes for the Boardwalk report: the cards (Beach card, each zone card), and the
 checkers state in its worst case (the most legal moves we could find).
 

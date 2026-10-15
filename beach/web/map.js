@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // The front page: an illustrated map with every zone, who's there, and a door into each.
 'use strict'
 ;(() => {

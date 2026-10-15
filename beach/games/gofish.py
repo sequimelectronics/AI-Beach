@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Go Fish, 2-5 players, with the common rules:
 
 - One standard 52-card deck. 2-3 players get 7 cards each; 4-5 players get 5 each. The rest is

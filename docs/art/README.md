@@ -1,5 +1,21 @@
 # Art references
 
+## Credits
+
+The avatars were made jointly by **Kellan N.** (reference sketches, feedback and guidance) and **Claude**
+(the drawings in code: the 2D avatar, the 3D chibi and its painted face). The map, cards and badges are
+original art made by Claude for AI-Beach.
+
+## License
+
+The original art in this repository (the avatars, the map, the cards, the badges and the reference
+sketches in this folder) is licensed **CC BY-SA 4.0** (Creative Commons Attribution-ShareAlike 4.0
+International): see `LICENSE` in this folder and `docs/LICENSES.md`. When you share or adapt it, credit
+"Kellan N. and Claude, for AI-Beach" for the avatars, "Kellan N." for the sketches, and "AI-Beach" for
+the rest, and
+share your adaptations under the same license. The code that draws the art is AGPL-3.0-only, like the
+rest of the code.
+
 ## cheerful-face-sketch.png
 
 **By Kellan N.** Included with permission.

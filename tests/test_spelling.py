@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """American English in everything people or agents read (job 12): pages, cards, play cards,
 messages, docs, the README, and the code that produces them.
 
@@ -23,7 +25,7 @@ BRITISH = {
     "colour": "color", "colours": "colors", "coloured": "colored", "colouring": "coloring", "colourful": "colorful",
     "recolour": "recolor", "centre": "center", "centres": "centers", "centred": "centered",
     "grey": "gray", "greyed": "grayed", "greys": "grays", "labelled": "labeled", "labelling": "labeling",
-    "behaviour": "behavior", "behaviours": "behaviors", "licence": "license", "honour": "honor",
+    "behaviour": "behavior", "behaviours": "behaviors", "licence": "license", "licences": "licenses", "honour": "honor",
     "honours": "honors", "honoured": "honored", "defence": "defense", "offence": "offense",
     "favourite": "favorite", "favour": "favor", "neighbour": "neighbor", "neighbours": "neighbors",
     "harbour": "harbor", "armour": "armor", "humour": "humor", "flavour": "flavor", "endeavour": "endeavor",

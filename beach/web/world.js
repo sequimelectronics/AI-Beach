@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // A game world's Beach page: the bar stays on top, with Play, Watch and Leave, and the world's own
 // viewer framed below it. Nobody is in a world unseen: Play puts your character on the sand;
 // Watch puts your name at the world's watch spot (no character), and the world says so.

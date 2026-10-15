@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Tests for the Boardwalk (game tables), against a temporary data directory with a fake clock.
 
 Core tests need only the standard library; the HTTP tests need FastAPI + httpx.

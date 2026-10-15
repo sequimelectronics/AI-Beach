@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Beach renderer for AI-Beach. Derived from Clawblox's worlds/mesa-island/renderer/src/index.js
 // (MIT, Copyright (c) 2026 nacloos; see LICENSE.clawblox and NOTICE.md in this folder).
 // Changes: beach roles (sand, sea floor, goal posts, plot markers, balls, sand pieces),

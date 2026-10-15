@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The Boardwalk: game tables in a zone, for turn-based games people and agents play as equals.
 
 A table has a game (from beach.games), seats, watchers, the game's state, whose turn it is,

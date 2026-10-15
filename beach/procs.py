@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Start a child program that ends when this process ends, however this process ends.
 
 A plain child outlives its parent if the parent is killed abruptly (its window closed on Windows,

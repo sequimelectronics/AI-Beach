@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // The Boardwalk in the browser: the tables (open one, sit, watch), and a table's game.
 // Checkers: tap a piece, then where it goes; for a capture, tap each landing square in turn.
 // Card games (cards.js): tap a card in your hand to play it, or the stack to draw.

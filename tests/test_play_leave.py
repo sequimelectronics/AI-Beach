@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 10, item 2: one character per participant per world. Play becomes Leave.
 
 Against a temporary data directory with a fake clock, and stand-ins for the world (join and "is

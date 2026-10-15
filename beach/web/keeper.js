@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // The keeper's page (admin only): participants and their sign-in links, zones, and settings.
 'use strict'
 ;(() => {

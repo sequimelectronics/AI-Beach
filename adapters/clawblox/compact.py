@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Turn a parsed observation into the compact view and the one-time map card.
 
 Pure functions; see world.py for parsing. Two encodings of the same compact

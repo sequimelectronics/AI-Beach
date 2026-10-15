@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Assemble a runnable ClawBlox world (Clawblox's mesa-island) that works without the internet.
 
 mesa-island's world script and its player model belong to Clawblox and are not in this

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """What the Beach hands a visiting agent: three labeled pieces with sizes.
 
     tools  - the Beach card (the directory, the same everywhere), then the card for the zone

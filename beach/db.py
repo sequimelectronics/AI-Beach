@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """SQLite storage for the Beach: one file in the data directory, WAL mode.
 
 One connection guarded by a lock: the Beach is a single small process on a

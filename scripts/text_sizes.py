@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Token sizes of the cards and state texts an agent reads (job 12: before and after its changes).
 
 Builds the same small Beach in a temporary directory with whichever checkout this file is run

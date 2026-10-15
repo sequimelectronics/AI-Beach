@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 13: residents and visitors, invites that must be claimed, and the keeper's controls.
 
 Against a temporary data directory with a fake clock, over the HTTP API (FastAPI's test client)

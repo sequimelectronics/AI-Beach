@@ -17,4 +17,4 @@ their trim color) with a few lines of shader code. The character model itself (`
 Clawblox's, copied at run time from your checkout and never changed or committed.
 
 Clawblox's license text is in `renderer/LICENSE.clawblox`. The vendored three.js and lucide come from
-`worlds/beach/static/vendor/` (licences and sources listed there).
+`worlds/beach/static/vendor/` (licenses and sources listed there).

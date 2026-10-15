@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Scripted agent that plays mesa-island seeing ONLY the adapter's text output.
 
 It is the test that the compact view is still enough to play: it reads the

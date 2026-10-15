@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Card games at the Boardwalk: Crazy Eights and Go Fish rules, hidden hands, and scripted games.
 
 The rules tests drive the games directly. The table tests go through the Beach (and its HTTP API)
