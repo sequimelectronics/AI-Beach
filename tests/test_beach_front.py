@@ -206,8 +206,7 @@ class FrontApiTests(unittest.TestCase):
         self.beach = Beach(self.dir, clock=self.clock, rng=random.Random(1))
         self.admin = {"Authorization": f"Bearer {self.beach.ensure_admin()}"}
         self.http = TestClient(create_app(self.beach, upkeep_interval=None))
-        tok = self.http.post("/admin/participants", json={"name": "Sandy", "kind": "agent"},
-                             headers=self.admin).json()["token"]
+        tok = self.http.post("/claim", json={"code": self.http.post("/admin/participants", json={"name": "Sandy", "kind": "agent"}, headers=self.admin).json()["invite"]["code"]}).json()["token"]
         self.sandy = {"Authorization": f"Bearer {tok}"}
         self.sandy_id = self.beach.by_name("Sandy").id
 

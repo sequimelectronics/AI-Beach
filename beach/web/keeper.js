@@ -32,7 +32,10 @@
     return el('div', { class: 'secret', role: 'status' },
       el('strong', { text: title }),
       rows.map(([label, value]) => {
-        const input = el('input', { type: 'text', readonly: true, value, 'aria-label': label, onfocus: (e) => e.target.select() })
+        const input = value.includes('\n')
+          ? el('textarea', { readonly: true, rows: String(value.split('\n').length + 1), 'aria-label': label, onfocus: (e) => e.target.select() })
+          : el('input', { type: 'text', readonly: true, value, 'aria-label': label, onfocus: (e) => e.target.select() })
+        if (input.tagName === 'TEXTAREA') input.value = value
         return el('div', {}, el('label', { text: label }), el('div', { class: 'say-row' }, input,
           el('button', { type: 'button', text: 'Copy', onclick: () => copy(input) })))
       }),
@@ -46,10 +49,28 @@
     }
   }
 
-  function credentials (name, kind, token) {
-    const rows = kind === 'person' ? [['Sign-in link for ' + name, linkFor(token)], ['Token', token]] : [['Token for ' + name, token], ['Sign-in link (if they use a browser)', linkFor(token)]]
-    return secretBox(kind === 'person' ? 'Give ' + name + ' this link' : 'Give ' + name + "'s host this token",
-      rows, 'Shown once. Anyone holding it can be ' + name + ' here. If it gets out, revoke that link under "Links": their other devices keep working.')
+  // An invite to hand over: a link for a person's browser, the code itself, and a few lines for
+  // an agent. Each works once; the first claim becomes that device's own link.
+  function invitePanel (r) {
+    const inv = r.invite
+    const until = r.visit ? 'Works only during the visit, ' + when(r.visit.starts_at) + ' to ' + when(r.visit.ends_at) + '.'
+      : 'Works once, until ' + when(inv.expires_at) + '.'
+    const rows = r.kind === 'person'
+      ? [['Link for ' + r.name + "'s device", inv.link], ['Or the code', inv.code]]
+      : [['For ' + r.name + ' (an agent): give it this', inv.for_agent], ['The code alone', inv.code]]
+    return secretBox((r.visit ? 'Visitor invite for ' : 'Invite for ') + r.name, rows,
+      until + ' Shown once. Hand it over any way you like; the first device to use it is the one that gets in.')
+  }
+
+  function when (t) { return t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'never' }
+
+  const STATUS = {
+    active: 'active',
+    invited: 'invited, not claimed',
+    'invite expired': 'invite expired',
+    'signed out': 'signed out',
+    'visit waiting': 'visit not started',
+    'visit over': 'visit over'
   }
 
   // ------------------------------------------------------------- the Beach
@@ -76,109 +97,221 @@
   }
 
   // ------------------------------------------------------------- participants
+  // Residents keep a lasting way in (a link per device); visitors have a visit with a window.
+  // Nobody gets in by being added: each device claims a one-time invite.
   async function peopleSection () {
     const box = el('section', { class: 'card' })
-    const out = el('div', {})
+    const out = el('div', { class: 'people-out' })
+    const tbody = el('tbody')
     const render = async () => {
       const { participants } = await api('GET', '/admin/participants')
-      const rows = participants.map(p => {
-        const rename = el('button', {
-          type: 'button',
-          class: 'quiet',
-          text: 'Rename',
-          onclick: async () => {
-            const next = prompt('New name for ' + p.name + '? It changes everywhere: chat, tables, game worlds.', p.name)
-            if (!next || next.trim() === p.name) return
-            try { await api('PATCH', '/admin/participants/' + p.id, { name: next.trim() }); toast('Renamed.'); render() } catch (e) { toast(e.message) }
-          }
-        })
-        const inv = el('input', { type: 'checkbox', checked: p.invitable, 'aria-label': 'Gather Bell can invite ' + p.name })
+      tbody.replaceChildren(...participants.map(p => {
+        const inv = el('input', { type: 'checkbox', checked: p.invitable, disabled: p.access === 'visitor', 'aria-label': 'Gather Bell can invite ' + p.name })
         inv.addEventListener('change', () => api('PATCH', '/admin/participants/' + p.id, { invitable: inv.checked }).catch(e => toast(e.message)))
-        return el('tr', {},
+        return el('tr', { class: 'status-' + p.status.replace(' ', '-') },
           el('td', {}, avatar({ id: p.id, v: p.avatar_v })),
-          el('td', {}, el('strong', { text: p.name }), p.admin ? el('span', { class: 'hint', text: ' (admin)' }) : null,
+          el('td', {}, el('strong', { text: p.name }), p.admin ? el('span', { class: 'hint', text: ' (keeper)' }) : null,
             p.was ? el('div', { class: 'hint', text: 'was ' + p.was }) : null),
           el('td', { text: p.kind }),
-          el('td', {}, rename),
+          el('td', {}, el('span', { class: 'tag ' + p.access, text: p.access })),
+          el('td', {}, el('span', { class: 'status', text: STATUS[p.status] || p.status })),
           el('td', {}, inv),
-          el('td', { text: p.has_token ? (p.links === 1 ? '1 link' : p.links + ' links') : 'signed out' }),
-          el('td', {}, p.admin ? null : el('button', {
-            type: 'button',
-            class: 'quiet',
-            text: 'Links',
-            onclick: () => showLinks(p)
-          })))
-      })
-      table.querySelector('tbody').replaceChildren(...rows)
+          el('td', { text: String(p.links) }),
+          el('td', {}, el('button', { type: 'button', class: 'quiet', text: 'Details', onclick: () => details(p.id) })))
+      }))
     }
-    // One person's sign-in links: one per device, each revocable on its own.
-    const showLinks = async (p) => {
-      const { links } = await api('GET', '/admin/participants/' + p.id + '/links')
+
+    // One participant: what they are, where they are, their devices and invites, and what the
+    // keeper can do about it.
+    const details = async (pid) => {
+      const d = await api('GET', '/admin/participants/' + pid)
+      const refresh = async () => { await render(); details(pid) }
+      const where = [...d.where.zones.map(z => z.name), ...d.where.worlds.map(w => w.name + ' (' + w.as + ')')]
       const label = el('input', { type: 'text', maxlength: '40', placeholder: 'tablet, phone…', id: 'link-label' })
-      const when = (t) => t ? new Date(t * 1000).toLocaleString() : 'never'
+      const actions = []
+      if (!d.admin) {
+        actions.push(el('button', {
+          type: 'button', class: 'quiet', text: 'Rename',
+          onclick: async () => {
+            const next = prompt('New name for ' + d.name + '? It changes everywhere: chat, tables, game worlds.', d.name)
+            if (!next || next.trim() === d.name) return
+            try { await api('PATCH', '/admin/participants/' + pid, { name: next.trim() }); toast('Renamed.'); refresh() } catch (e) { toast(e.message) }
+          }
+        }))
+        if (d.visit && !d.visit.ended_at) {
+          actions.push(el('button', { type: 'button', class: 'danger', text: 'End visit', onclick: () => endVisit(d.visit, refresh) }))
+        }
+        if (d.access === 'visitor' && (!d.visit || !d.visit.ended_at || d.visit.end_reason === 'resident')) {
+          actions.push(el('button', {
+            type: 'button', class: 'quiet', text: 'Make resident',
+            onclick: async () => {
+              if (!confirm(d.name + ' becomes a resident: their links keep working after the visit.')) return
+              try { await api('POST', '/admin/participants/' + pid + '/resident'); toast(d.name + ' is a resident now.'); refresh() } catch (e) { toast(e.message) }
+            }
+          }))
+        }
+        actions.push(el('button', {
+          type: 'button', class: 'danger', text: 'Kick now',
+          onclick: async () => {
+            if (!confirm('Kick ' + d.name + '? Every device is signed out, they leave every zone and world. They stay on the list and can come back with a new invite.')) return
+            try { await api('POST', '/admin/participants/' + pid + '/kick'); toast(d.name + ' was kicked.'); refresh() } catch (e) { toast(e.message) }
+          }
+        }), el('button', {
+          type: 'button', class: 'danger', text: 'Remove',
+          onclick: async () => {
+            if (!confirm('Remove ' + d.name + '? They are signed out everywhere and taken off the list. Their past messages stay, marked as a former participant. The name stays held for a day.')) return
+            try { await api('DELETE', '/admin/participants/' + pid); toast(d.name + ' was removed.'); out.replaceChildren(); render() } catch (e) { toast(e.message) }
+          }
+        }))
+      }
       out.replaceChildren(el('div', { class: 'secret links-panel' },
-        el('strong', { text: p.name + "'s sign-in links" }),
-        el('table', {}, el('thead', {}, el('tr', {}, ['Link', 'Made', 'Last used', ''].map(h => el('th', { text: h })))),
-          el('tbody', {}, links.map(l => el('tr', {},
+        el('div', { class: 'row' }, el('strong', { text: d.name }), el('span', { class: 'tag ' + d.access, text: d.access }),
+          el('span', { class: 'hint', text: d.kind + ' · ' + (STATUS[d.status] || d.status) })),
+        d.visit ? el('p', { class: 'hint', text: 'Visit: ' + when(d.visit.starts_at) + ' to ' + when(d.visit.ends_at) +
+          (d.visit.ended_at ? ' · ended ' + when(d.visit.ended_at) + ' (' + d.visit.end_reason + ')' : '') +
+          (d.visit.bell ? ' · may ring the Gather Bell' : '') }) : null,
+        el('p', {}, el('strong', { text: 'Where now: ' }), where.length ? where.join(', ') : 'nowhere'),
+        el('h3', { text: 'Devices' }),
+        el('div', { class: 'table-wrap' }, el('table', {},
+          el('thead', {}, el('tr', {}, ['Device', 'Made', 'Last used', 'From', ''].map(h => el('th', { text: h })))),
+          el('tbody', {}, d.links.length ? d.links.map(l => el('tr', {},
             el('td', { text: l.label }), el('td', { text: when(l.created_at) }), el('td', { text: when(l.last_used_at) }),
+            el('td', { text: l.last_ip || '—' }),
             el('td', {}, l.active ? el('button', {
-              type: 'button',
-              class: 'danger',
-              text: 'Revoke',
+              type: 'button', class: 'danger', text: 'Revoke',
               onclick: async () => {
                 if (!confirm('Revoke the "' + l.label + '" link? Only that device is signed out.')) return
-                try { await api('DELETE', '/admin/participants/' + p.id + '/links/' + l.id); await render(); showLinks(p) } catch (e) { toast(e.message) }
+                try { await api('DELETE', '/admin/participants/' + pid + '/links/' + l.id); refresh() } catch (e) { toast(e.message) }
               }
-            }) : el('span', { class: 'hint', text: 'revoked' })))))),
-        el('form', {
+            }) : el('span', { class: 'hint', text: 'revoked' })))) : [el('tr', {}, el('td', { colspan: '5', class: 'hint', text: 'No devices yet.' }))]))),
+        d.invites.length ? el('p', { class: 'hint', text: 'Invites: ' + d.invites.map(i => i.label + ' (' + (i.state === 'waiting' ? 'not claimed, until ' + when(i.expires_at) : i.state) + ')').join('; ') }) : null,
+        d.admin || (d.visit && d.visit.ended_at && d.visit.end_reason !== 'resident') ? null : el('form', {
           class: 'inline-form',
           onsubmit: async (ev) => {
             ev.preventDefault()
-            const r = await api('POST', '/admin/participants/' + p.id + '/token', { label: label.value || 'link' })
-            await render()
-            out.replaceChildren(credentials(p.name, p.kind, r.token))
+            try {
+              const r = await api('POST', '/admin/participants/' + pid + '/token', { label: label.value || 'link' })
+              await render()
+              out.replaceChildren(invitePanel(r))
+            } catch (e) { toast(e.message) }
           }
-        }, el('label', { for: 'link-label' }, 'New link for', label), el('button', { class: 'primary', type: 'submit', text: 'Make link' })),
-        el('p', {}, el('button', {
-          type: 'button',
-          class: 'danger',
-          text: 'Sign out everywhere',
-          onclick: async () => {
-            if (!confirm('Sign ' + p.name + ' out on every device?')) return
-            await api('DELETE', '/admin/participants/' + p.id + '/token')
-            await render()
-            showLinks(p)
-          }
-        })),
-        el('p', { class: 'hint', text: 'Give each device its own link. If one gets out, revoke just that one: the others keep working.' })))
+        }, el('label', { for: 'link-label' }, 'Invite another device (or re-send)', label), el('button', { class: 'primary', type: 'submit', text: 'Make invite' })),
+        el('div', { class: 'row' }, actions)))
+      out.scrollIntoView({ block: 'nearest' })
     }
-    const table = el('table', {}, el('thead', {}, el('tr', {},
-      ['', 'Name', 'Kind', '', 'Bell', 'Access', ''].map(h => el('th', { text: h })))), el('tbody'))
+
+    // Add a resident: an invite, claimed once by their first device.
     const name = el('input', { type: 'text', maxlength: '24', id: 'new-name', required: true })
     const kind = el('select', { id: 'new-kind' }, el('option', { value: 'person', text: 'person' }), el('option', { value: 'agent', text: 'agent' }))
+    const expires = el('select', { id: 'new-expires' }, [['1 hour', 3600], ['1 day', 86400], ['3 days', 3 * 86400], ['7 days', 7 * 86400], ['30 days', 30 * 86400]]
+      .map(([t, v]) => el('option', { value: String(v), text: t, selected: v === 7 * 86400 })))
+    const addForm = el('form', {
+      class: 'inline-form',
+      onsubmit: async (ev) => {
+        ev.preventDefault()
+        try {
+          const r = await api('POST', '/admin/participants', { name: name.value, kind: kind.value, expires_in_s: Number(expires.value) })
+          out.replaceChildren(invitePanel(r))
+          name.value = ''
+          render()
+        } catch (e) { nameRefused(e, name) }
+      }
+    },
+    el('label', { for: 'new-name' }, 'Name', name),
+    el('label', { for: 'new-kind' }, 'Kind', kind),
+    el('label', { for: 'new-expires' }, 'Invite works for', expires),
+    el('button', { class: 'primary', type: 'submit', text: 'Make invite' }))
+
     box.append(
       el('h2', { text: 'Participants' }),
-      el('div', { class: 'table-wrap' }, table),
-      el('h2', { text: 'Add someone' }),
+      el('div', { class: 'table-wrap' }, el('table', { class: 'people-table' }, el('thead', {}, el('tr', {},
+        ['', 'Name', 'Kind', 'Access', 'Status', 'Bell', 'Devices', ''].map(h => el('th', { text: h })))), tbody)),
+      out,
+      el('h2', { text: 'Add someone (a resident)' }),
+      addForm,
+      el('p', { class: 'hint', text: 'Residents are the household, people or AIs. This makes an invite: a one-time code or link. The slot shows "invited, not claimed" until their first device uses it; that device then has its own link. An unclaimed invite expires; you can re-send it from Details.' }),
+      visitorForm(out, render))
+    await render()
+    return box
+  }
+
+  // A refused name comes with a free one to use instead.
+  function nameRefused (e, input) {
+    if (e.body && e.body.suggestion) {
+      toast(e.message)
+      input.value = e.body.suggestion
+      input.focus()
+    } else toast(e.message)
+  }
+
+  function localInput (id, t) {
+    const d = new Date(t * 1000)
+    const v = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+    return el('input', { type: 'datetime-local', id, value: v, required: true })
+  }
+
+  // A visitor invite: a name, a window, and whether they may ring the Gather Bell.
+  function visitorForm (out, render) {
+    const now = Date.now() / 1000
+    const name = el('input', { type: 'text', maxlength: '24', id: 'visit-name', required: true })
+    const kind = el('select', { id: 'visit-kind' }, el('option', { value: 'agent', text: 'agent' }), el('option', { value: 'person', text: 'person' }))
+    const start = localInput('visit-start', now)
+    const end = localInput('visit-end', now + 3 * 3600)
+    const bell = el('input', { type: 'checkbox', id: 'visit-bell' })
+    return el('div', {},
+      el('h2', { text: 'Invite a visitor' }),
       el('form', {
-        class: 'inline-form',
+        class: 'inline-form visitor-form',
         onsubmit: async (ev) => {
           ev.preventDefault()
           try {
-            const r = await api('POST', '/admin/participants', { name: name.value, kind: kind.value })
-            out.replaceChildren(credentials(r.name, r.kind, r.token))
+            const r = await api('POST', '/admin/visits', {
+              name: name.value, kind: kind.value, bell: bell.checked,
+              starts_at: new Date(start.value).getTime() / 1000, ends_at: new Date(end.value).getTime() / 1000
+            })
+            out.replaceChildren(invitePanel(r))
             name.value = ''
             render()
-          } catch (e) { toast(e.message) }
+            renderVisits()
+          } catch (e) { nameRefused(e, name) }
         }
       },
-      el('label', { for: 'new-name' }, 'Name', name),
-      el('label', { for: 'new-kind' }, 'Kind', kind),
-      el('button', { class: 'primary', type: 'submit', text: 'Add' })),
-      out,
-      el('p', { class: 'hint', text: 'A name is the same everywhere: chat, tables and every game world. Renaming changes it everywhere, and for a day others see "(was ...)" next to it.' }))
-    await render()
-    return box
+      el('label', { for: 'visit-name' }, 'Name', name),
+      el('label', { for: 'visit-kind' }, 'Kind', kind),
+      el('label', { for: 'visit-start' }, 'From', start),
+      el('label', { for: 'visit-end' }, 'Until', end),
+      el('label', { for: 'visit-bell', class: 'check' }, bell, ' May ring the Gather Bell'),
+      el('button', { class: 'primary', type: 'submit', text: 'Make visitor invite' })),
+      el('p', { class: 'hint', text: 'For an event or a one-time visit, like another company\'s agent. The code works once, and only between From and Until. When the visit ends (or you press End visit), every credential it made stops working, their characters leave the worlds and they leave every zone: nothing is left that they or their operator could keep. They only see what happens while they\'re here. The Gather Bell reaches the household\'s devices, so visitors can\'t ring it unless you allow it.' }))
+  }
+
+  async function endVisit (v, after) {
+    if (!confirm('End ' + v.name + '\'s visit now? Everything the visit made stops working at once.')) return
+    try { await api('POST', '/admin/visits/' + v.id + '/end'); toast(v.name + '\'s visit has ended.'); if (after) after(); renderVisits() } catch (e) { toast(e.message) }
+  }
+
+  // The visit log: who, when, which zones.
+  const visitsBody = el('tbody')
+  async function renderVisits () {
+    let visits = []
+    try { visits = (await api('GET', '/admin/visits')).visits } catch (e) { return }
+    const STATE = { on: 'on now', waiting: 'not started', over: 'ending…', ended: 'ended' }
+    visitsBody.replaceChildren(...(visits.length ? visits.map(v => el('tr', { class: 'visit-' + v.state },
+      el('td', {}, el('strong', { text: v.name })),
+      el('td', { text: when(v.starts_at) + ' – ' + when(v.ends_at) }),
+      el('td', { text: (STATE[v.state] || v.state) + (v.ended_at ? ' ' + when(v.ended_at) + ' (' + ({ window: 'window over', keeper: 'ended by the keeper', resident: 'became a resident' }[v.end_reason] || v.end_reason) + ')' : '') }),
+      el('td', { text: v.first_seen_at ? when(v.first_seen_at) : 'not yet' }),
+      el('td', { text: v.zones.length ? v.zones.join(', ') : '—' }),
+      el('td', {}, v.ended_at ? null : el('button', { type: 'button', class: 'danger', text: 'End visit', onclick: () => endVisit(v) }))))
+      : [el('tr', {}, el('td', { colspan: '6', class: 'hint', text: 'No visits yet.' }))]))
+  }
+  async function visitSection () {
+    await renderVisits()
+    setInterval(() => { if (!document.hidden) renderVisits() }, 15000)
+    return el('section', { class: 'card' },
+      el('h2', { text: 'Visits' }),
+      el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {},
+        ['Visitor', 'Window', 'State', 'Came in', 'Zones', ''].map(h => el('th', { text: h })))), visitsBody)))
   }
 
   // ------------------------------------------------------------- zones
@@ -381,6 +514,6 @@
     if (!map.me.admin) { main.replaceChildren(el('h1', { text: 'Keeper' }), el('p', { text: 'This page is for the Beach-keeper.' })); return }
     settings = await api('GET', '/admin/settings')
     BADGE_LIST = (await api('GET', '/admin/badges')).badges
-    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await zoneSection(), settingsSection(), await httpsSection())
+    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await visitSection(), await zoneSection(), settingsSection(), await httpsSection())
   })
 })()

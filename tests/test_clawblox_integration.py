@@ -109,18 +109,44 @@ BEACH_DIR = Path(__file__).resolve().parents[1] / "worlds" / "beach"
 
 @unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
 class LiveBeachTest(unittest.TestCase):
-    """Starts worlds/beach from this repo on a temp copy and plays a short round."""
+    """Starts worlds/beach from this repo on a temp copy, behind a Beach (its front door), and plays
+    a short round. The world names characters by their Beach names, which only a Beach can give:
+    run alone, every character keeps the "..." placeholder (job 13 fixed this test, which until
+    then expected a name the world can't know)."""
 
     @classmethod
     def setUpClass(cls):
+        import random
+        import threading
+        try:
+            import uvicorn
+            from beach.app import create_app
+        except ImportError:
+            raise unittest.SkipTest("needs the Beach's requirements (fastapi, uvicorn)")
+        from beach.bridge import Bridge, run_loop, spectator_token_from_log
+        from beach.core import Beach
         cls.tmp = tempfile.mkdtemp(prefix="beach-it-")
         world = Path(cls.tmp) / "beach"
         shutil.copytree(BEACH_DIR, world, ignore=shutil.ignore_patterns(".clawblox", "dist", ".build.lock"))
+        # The Beach, in this process: Sandy and Pebble, and the BeachBlox zone with its bridge token.
+        cls.beach = Beach(Path(cls.tmp) / "data", rng=random.Random(1))
+        cls.beach.ensure_admin()
+        cls.tokens = {n: cls.beach.add_participant(n, "agent")[1] for n in ("Sandy", "Pebble")}
+        cls.beach.add_zone("beachblox", "BeachBlox", "game")
+        bridge_token = cls.beach.bridge_token("beachblox")
+        beach_port = _free_port()
+        cls.beach_url = f"http://127.0.0.1:{beach_port}"
+        cls.server = uvicorn.Server(uvicorn.Config(create_app(cls.beach, upkeep_interval=None), host="127.0.0.1",
+                                                   port=beach_port, log_level="error"))
+        threading.Thread(target=cls.server.run, daemon=True).start()
+        # The world, logging to a file the bridge reads its spectator token from.
         port = _free_port()
         cls.url = f"http://127.0.0.1:{port}"
+        log_path = Path(cls.tmp) / "world.log"
+        cls.log = open(log_path, "w")
         cls.proc = subprocess.Popen([BIN, "run", str(world), "--port", str(port)],
-                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(120):
+                                    stdin=subprocess.DEVNULL, stdout=cls.log, stderr=subprocess.STDOUT)
+        for _ in range(240):
             try:
                 urllib.request.urlopen(cls.url + "/api.md", timeout=1).read()
                 break
@@ -129,20 +155,37 @@ class LiveBeachTest(unittest.TestCase):
         else:
             cls.tearDownClass()
             raise unittest.SkipTest("beach server did not start")
+        # Its bridge, in a thread: the door's claims into the world, presence back to the Beach.
+        cls.stop = threading.Event()
+        bridge = Bridge(cls.url, cls.beach_url, "beachblox", bridge_token, lambda: spectator_token_from_log(str(log_path)),
+                        str(world), log=lambda m: None)
+        cls.bridge = threading.Thread(target=run_loop, args=(bridge, 2.0), kwargs={"keep_going": lambda: not cls.stop.is_set()},
+                                      daemon=True)
+        cls.bridge.start()
 
     @classmethod
     def tearDownClass(cls):
+        if getattr(cls, "stop", None):
+            cls.stop.set()
+            cls.bridge.join(timeout=10)
         cls.proc.terminate()
         cls.proc.wait(timeout=10)
+        cls.log.close()
+        cls.server.should_exit = True
+        cls.beach.db.close()
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
+    def adapter(self, name):
+        from adapters.clawblox.front_door import beach_voucher
+        return ClawbloxAdapter(self.url, name, vouch=beach_voucher(self.beach_url, self.tokens[name], "beachblox"))
+
     def test_beach_round(self):
-        a = ClawbloxAdapter(self.url, "Sandy")
-        b = ClawbloxAdapter(self.url, "Pebble")
-        b.look()  # adapters join lazily: bring Pebble onto the beach first
+        a = self.adapter("Sandy")
+        b = self.adapter("Pebble")
+        b.look()  # adapters join lazily: bring Pebble onto the beach first (the door admits them)
         self.assertIn("castle plots", a.map_card())
         self.assertEqual(a.rules.world, "beach")
-        self.assertIn("Pebble", a.look())  # named even if Pebble is behind Sandy
+        self.assertIn("Pebble", a.look())  # named, by the Beach's door, even if Pebble is behind Sandy
         # Kick the soccer ball from just south of it.
         self.assertIn("arrived", a.act("MoveTo", {"position": [0, 0, -2.2]}))
         res = a.act("Kick", {"direction": [0, 0, 1], "power": 0.5})

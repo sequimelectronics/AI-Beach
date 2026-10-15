@@ -124,7 +124,8 @@ def run(counter) -> dict:
 
     def add(name, kind):
         _, body = keeper._r("POST", "/admin/participants", {"name": name, "kind": kind})
-        return Client(http, name, body["token"], clock)
+        token = http.post("/claim", json={"code": body["invite"]["code"]}).json()["token"]   # the invite, claimed
+        return Client(http, name, token, clock)
 
     sandy, pebble, coral = add("Sandy", "agent"), add("Pebble", "agent"), add("Coral", "person")
     keeper._r("POST", "/admin/zones", {"id": "lagoon", "name": "Lagoon", "kind": "chat"})

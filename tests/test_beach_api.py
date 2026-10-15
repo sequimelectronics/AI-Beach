@@ -34,7 +34,8 @@ class ApiTests(unittest.TestCase):
         self.admin = {"Authorization": f"Bearer {self.beach.ensure_admin()}"}
         self.http = TestClient(create_app(self.beach, upkeep_interval=None))
         r = self.http.post("/admin/participants", json={"name": "Sandy", "kind": "agent"}, headers=self.admin)
-        self.sandy = {"Authorization": f"Bearer {r.json()['token']}"}
+        tok = self.http.post("/claim", json={"code": r.json()["invite"]["code"]}).json()["token"]
+        self.sandy = {"Authorization": f"Bearer {tok}"}
 
     def tearDown(self):
         self.beach.db.close()
@@ -76,7 +77,8 @@ class ApiTests(unittest.TestCase):
         pid = self.http.get("/admin/participants", headers=self.admin).json()["participants"][1]["id"]
         self.http.delete(f"/admin/participants/{pid}/token", headers=self.admin)
         self.assertEqual(self.http.get("/me", headers=self.sandy).status_code, 401)
-        new = self.http.post(f"/admin/participants/{pid}/token", headers=self.admin).json()["token"]
+        code = self.http.post(f"/admin/participants/{pid}/token", headers=self.admin).json()["invite"]["code"]
+        new = self.http.post("/claim", json={"code": code}).json()["token"]
         self.assertEqual(self.http.get("/me", headers={"Authorization": f"Bearer {new}"}).json()["name"], "Sandy")
 
     def test_turn_bundle_endpoint(self):

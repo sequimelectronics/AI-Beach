@@ -45,6 +45,10 @@ def _token(authorization: str | None) -> str | None:
 
 GUEST_FACE = avatar_mod.guest_face_svg()
 
+# How an invite is claimed: in a browser, by opening the link; by an agent, like this.
+CLAIM_HOW = ('POST /claim {"code": "<code>", "label": "<this device>"} returns your token '
+             "(the code works once)")
+
 
 def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict | None = None) -> FastAPI:
     """`serving` says how this run is being served (for the keeper page): e.g.
@@ -85,8 +89,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             headers["Retry-After"] = str(int(exc.retry_after) + 1)
         return JSONResponse(body, status_code=STATUS.get(exc.code, 400), headers=headers)
 
-    def who(authorization: str | None = Header(default=None)) -> Participant:
-        p = beach.authenticate(_token(authorization))
+    def who(request: Request, authorization: str | None = Header(default=None)) -> Participant:
+        p = beach.authenticate(_token(authorization), ip=request.client.host if request.client else None)
         if p is None:
             raise HTTPException(401, "a valid token is needed (Authorization: Bearer <token>)")
         return p
@@ -124,7 +128,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             return page("index.html")
         return PlainTextResponse(
             f"{beach.setting('beach_name')}\n\nThis is the Beach's door. Present your token as "
-            "'Authorization: Bearer <token>'. Start with GET /zones and GET /agent/turn.\n")
+            "'Authorization: Bearer <token>'. Start with GET /zones and GET /agent/turn.\n"
+            "Have an invite code instead? " + CLAIM_HOW + "\n")
 
     for route, name in PAGES.items():
         if route not in ("/", "/world"):
@@ -139,7 +144,20 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     app.mount("/web", _Static(directory=WEB), name="web")
 
+    @app.post("/claim")
+    def claim(request: Request, body: dict = Body(...)):
+        """Use up an invite code (no token needed): it becomes this device's own token. Once only."""
+        return beach.access.claim(str(body.get("code", "")), body.get("label"),
+                                  ip=request.client.host if request.client else None)
+
     # ----------------------------------------------------------- everyone
+    @app.post("/me/sign-out")
+    def sign_out(p: Participant = Depends(who)):
+        """Sign this device out for real: its link stops working (your other devices keep theirs)."""
+        if p.sign_in is not None:
+            beach.revoke_link(p.id, p.sign_in)
+        return {"signed_out": True}
+
     @app.get("/me")
     def me(p: Participant = Depends(who)):
         return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
@@ -209,6 +227,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
                  p: Participant = Depends(who)):
         msgs = beach.read(p.id, zid, after=after, limit=min(max(limit, 1), 500), all_visits=all_visits)
         return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
+                              "former": bool(m.get("author_former")),
                               "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}
                              for m in msgs],
                 "names": agent.names_legend(msgs)}
@@ -285,8 +304,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return beach.set_avatar(p.id, body)
 
     @app.get("/agent/beach-card")
-    def get_beach_card(_: Participant = Depends(who)):
-        text = agent.beach_card(beach)
+    def get_beach_card(p: Participant = Depends(who)):
+        text = agent.beach_card(beach, p.id)
         return {"text": text, "tokens": counter(text), "token_method": counter.method}
 
     @app.get("/zones/{zid}/card")
@@ -394,6 +413,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def table_chat(tid: int, after: int = 0, p: Participant = Depends(who)):
         msgs = bw.chat(p.id, tid, after=after, limit=200)
         return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
+                              "former": bool(m.get("author_former")),
                               "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}
                              for m in msgs],
                 "names": agent.names_legend(msgs)}
@@ -490,11 +510,66 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def list_participants(_: Participant = Depends(admin)):
         return {"participants": beach.participants()}
 
+    def invite_out(request: Request, p, invite: dict, visit: dict | None = None) -> dict:
+        """An invite for the keeper to hand over: the code, a link for a browser, and the few lines
+        an agent needs to claim it."""
+        base = (beach.setting("link_base") or str(request.base_url)).rstrip("/")
+        return {"id": p.id, "name": p.name, "kind": p.kind, "access": p.access,
+                **({"visit": visit} if visit else {}),
+                "invite": {**{k: invite[k] for k in ("code", "label", "expires_at")},
+                           "link": f"{base}/#c={invite['code']}",
+                           "for_agent": agent.invite_card(beach, base, invite["code"], p.name, visit)}}
+
     @app.post("/admin/participants")
-    def add_participant(body: dict = Body(...), _: Participant = Depends(admin)):
-        p, token = beach.add_participant(str(body.get("name", "")), str(body.get("kind", "")),
-                                         invitable=bool(body.get("invitable", True)))
-        return {"id": p.id, "name": p.name, "kind": p.kind, "token": token}
+    def add_participant(request: Request, body: dict = Body(...), _: Participant = Depends(admin)):
+        """Add a resident as an invite: a one-time code (expires_in_s, default 7 days). The slot
+        shows "invited" until the first device claims it."""
+        r = beach.access.invite_resident(str(body.get("name", "")), str(body.get("kind", "")),
+                                         body.get("expires_in_s", 7 * 86400))
+        if body.get("invitable") is False:
+            beach.update_participant(r["participant"].id, invitable=False)
+        return invite_out(request, r["participant"], r["invite"])
+
+    @app.get("/admin/participants/{pid}")
+    def participant_detail(pid: int, _: Participant = Depends(admin)):
+        """Everything the keeper sees about one participant: links (with where they were last used
+        from), invites, where they are now, and their visit."""
+        p = beach.participant(pid)
+        v = beach.access.visit_of(pid)
+        return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin, "access": p.access,
+                "removed": p.removed, "status": beach.access.status(pid), "links": beach.links(pid),
+                "invites": beach.access.invites(pid), "where": beach.access.where(pid),
+                "visit": beach.access.visit(v["id"]) if v else None}
+
+    @app.post("/admin/participants/{pid}/kick")
+    def kick(pid: int, _: Participant = Depends(admin)):
+        """Sign out every device, part every zone, remove world characters. They stay on the list."""
+        return beach.access.kick(pid)
+
+    @app.delete("/admin/participants/{pid}")
+    def remove(pid: int, _: Participant = Depends(admin)):
+        """Take them off the list. Their messages stay, marked as a former participant's."""
+        return beach.access.remove(pid)
+
+    @app.post("/admin/participants/{pid}/resident")
+    def make_resident(pid: int, _: Participant = Depends(admin)):
+        return beach.access.make_resident(pid)
+
+    @app.post("/admin/visits")
+    def new_visit(request: Request, body: dict = Body(...), _: Participant = Depends(admin)):
+        """A visitor invite: {name, kind, starts_at, ends_at, bell}. The code works once, inside the window."""
+        r = beach.access.invite_visitor(str(body.get("name", "")), str(body.get("kind", "")),
+                                        body.get("starts_at", beach.now()), body.get("ends_at"), bool(body.get("bell")))
+        return invite_out(request, r["participant"], r["invite"], visit=r["visit"])
+
+    @app.get("/admin/visits")
+    def visit_log(_: Participant = Depends(admin)):
+        """Every visit: who, when, which zones, how it ended."""
+        return {"visits": beach.access.visits()}
+
+    @app.post("/admin/visits/{vid}/end")
+    def end_visit(vid: int, _: Participant = Depends(admin)):
+        return beach.access.end_visit(vid, "keeper")
 
     @app.patch("/admin/participants/{pid}")
     def patch_participant(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
@@ -508,10 +583,12 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return beach.set_avatar(pid, body, by_admin=True)
 
     @app.post("/admin/participants/{pid}/token")
-    def new_token(pid: int, body: dict = Body(default={}), _: Participant = Depends(admin)):
-        """A new sign-in link (e.g. for a second device). Their other links keep working."""
-        link = beach.new_link(pid, str(body.get("label") or "link"))
-        return {"id": pid, "token": link["token"], "link": {"id": link["id"], "label": link["label"]}}
+    def new_token(pid: int, request: Request, body: dict = Body(default={}), _: Participant = Depends(admin)):
+        """An invite for another device (or a re-sent invite): a one-time code that becomes that
+        device's own link when claimed. Their other links keep working."""
+        r = beach.access.invite_device(pid, str(body.get("label") or "link"), body.get("expires_in_s", 7 * 86400))
+        v = beach.access.visit_of(pid) if r["participant"].access == "visitor" else None
+        return invite_out(request, r["participant"], r["invite"], visit=beach.access.visit(v["id"]) if v else None)
 
     @app.delete("/admin/participants/{pid}/token")
     def revoke(pid: int, _: Participant = Depends(admin)):

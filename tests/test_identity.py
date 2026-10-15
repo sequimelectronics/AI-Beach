@@ -319,8 +319,7 @@ class BridgeDoorTests(unittest.TestCase):
         self.bridge_token = self.http.post("/admin/zones/beachblox/bridge-token", headers=self.admin).json()["token"]
         self.tok = {}
         for name in ("Sandy", "Pebble"):
-            self.tok[name] = self.http.post("/admin/participants", json={"name": name, "kind": "agent"},
-                                            headers=self.admin).json()["token"]
+            self.tok[name] = self.http.post("/claim", json={"code": self.http.post("/admin/participants", json={"name": name, "kind": "agent"}, headers=self.admin).json()["invite"]["code"]}).json()["token"]
         self.beach.set_avatar(self.beach.by_name("Sandy").id, {"theme": "sunset", "hair": "teal"})
         self.world = self.dir / "world"
         (self.world / ".clawblox").mkdir(parents=True)

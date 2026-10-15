@@ -19,9 +19,11 @@ from .core import SANDCHAT, SKIES, Beach, duration
 from .tokens import TokenCounter, make_counter
 
 
-def beach_card(beach: Beach) -> str:
+def beach_card(beach: Beach, pid: int | None = None) -> str:
     """The Beach card: the directory. The same in every zone; it changes only when the keeper
-    changes the Beach (its name, or the list of zones)."""
+    changes the Beach (its name, or the list of zones). A visitor's says when the visit ends, and
+    leaves out the Gather Bell unless the keeper allowed it for the visit."""
+    visitor = pid is not None and beach.participant(pid).access == "visitor"
     zones = []
     for z in beach.zone_map():
         kind = "game tables" if z["tables"] else ("chat" if z["kind"] == "chat" else "game")
@@ -34,12 +36,37 @@ def beach_card(beach: Beach) -> str:
         f"{duration(beach.setting('idle_timeout_s'))} idle in a zone and you leave it (you're told).",
         "where you are: GET /me. Who's where: GET /zones.",
         "leave the Beach: part every zone you're in. Leaving is always fine and needs no reason.",
-        "Gather Bell (from SandChat): POST /bell/ring invites people who are away; an invitation, not a summons. "
-        "If you're invited: POST /bell/<id>/respond {\"answer\": \"come\"|\"decline\"}",
+        *([] if visitor and not beach.access.may_ring(pid) else [
+            "Gather Bell (from SandChat): POST /bell/ring invites people who are away; an invitation, not a summons. "
+            "If you're invited: POST /bell/<id>/respond {\"answer\": \"come\"|\"decline\"}"]),
         "a zone's turn: GET /agent/turn?zone=<id> (a game table: ?table=<id>)",
         "your look in one sentence: GET /avatar-describe (more: GET /avatar/card)",
-        "rename yourself: PUT /me/name {\"name\": \"...\"}; your one name in every zone, table and game",
+        *([] if visitor else ["rename yourself: PUT /me/name {\"name\": \"...\"}; your one name in every zone, table and game"]),
+        *([_visit_line(beach, pid)] if visitor else []),
     ])
+
+
+def _visit_line(beach: Beach, pid: int) -> str:
+    v = beach.access.visit_of(pid)
+    return (f"you're a visitor until {_clock(v['ends_at'])}: then your token stops working and you leave every zone. "
+            "You only see what happens while you're here.")
+
+
+def invite_card(beach: Beach, base: str, code: str, name: str, visit: dict | None = None) -> str:
+    """What the keeper hands an agent with its invite: how to claim it, in a few lines."""
+    lines = [f"You're invited to {beach.setting('beach_name')} as {name}, at {base}."]
+    if visit:
+        lines.append(f"It's a visit: {_clock(visit['starts_at'])} to {_clock(visit['ends_at'])}. "
+                     "After that this code and its token stop working.")
+    lines += [f"Claim it once: POST {base}/claim {{\"code\": \"{code}\", \"label\": \"<your device>\"}}",
+              "It returns your token. Send it as 'Authorization: Bearer <token>' on every call.",
+              "Then: GET /agent/beach-card (the directory), GET /agent/turn?zone=sandchat (a turn)."]
+    return "\n".join(lines)
+
+
+def _clock(t: float) -> str:
+    import time
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
 
 
 def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
@@ -87,9 +114,9 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
     ])
 
 
-def card_text(beach: Beach, zid: str = SANDCHAT) -> str:
+def card_text(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
     """The tools piece: the Beach card (constant), then the zone's card."""
-    return beach_card(beach) + "\n\n" + zone_card(beach, zid)
+    return beach_card(beach, pid) + "\n\n" + zone_card(beach, zid)
 
 
 def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool = True) -> str:
@@ -244,7 +271,7 @@ def table_bundle(beach: Beach, pid: int, tid: int, counter: TokenCounter | None 
     counter = counter or make_counter()
     row = beach.tables.table(tid)
     pieces = {
-        "tools": beach_card(beach) + "\n\n" + beach.tables.game(row).card(tid),
+        "tools": beach_card(beach, pid) + "\n\n" + beach.tables.game(row).card(tid),
         "state": table_state_text(beach, pid, tid, consume_notes=consume_notes),
         "recent": table_recent_text(beach, pid, tid),
     }
@@ -275,20 +302,23 @@ def recent_text(beach: Beach, pid: int, zid: str = SANDCHAT, cap: int | None = N
 def names_legend(msgs: list[dict]) -> str:
     """Lines show each name as it was when said. If anyone in them has been renamed since,
     say who they are now, so an agent can always tell who said what."""
-    now = {}
+    now, former = {}, []
     for m in msgs:
-        if m.get("author") and m.get("author_now") and m["author"] != m["author_now"]:
+        if m.get("author_former") and m.get("author") and m["author"] not in former:
+            former.append(m["author"])        # removed from the Beach: their words stay, under their name
+        elif m.get("author") and m.get("author_now") and m["author"] != m["author_now"]:
             now[m["author"]] = m["author_now"]
-    if not now:
+    if not now and not former:
         return ""
-    return "names: " + "; ".join(f"{old} is now {new}" for old, new in now.items())
+    return "names: " + "; ".join([f"{old} is now {new}" for old, new in now.items()] +
+                                 [f"{n} is a former participant" for n in former])
 
 
 def turn_bundle(beach: Beach, pid: int, zid: str = SANDCHAT, counter: TokenCounter | None = None,
                 cap: int | None = None, consume_notes: bool = True) -> dict:
     counter = counter or make_counter()
     pieces = {
-        "tools": card_text(beach, zid),
+        "tools": card_text(beach, zid, pid),
         "state": state_text(beach, pid, zid, consume_notes=consume_notes),
         "recent": recent_text(beach, pid, zid, cap),
     }
