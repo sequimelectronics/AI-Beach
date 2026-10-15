@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // The words the Beach's pages show, in one place: a later translation means swapping this file.
 // One language per Beach (American English here). Plain JavaScript, no build step.
 //   T.t('bell_rang', { name: 'Pebble' })  ->  "Pebble rang the Gather Bell. Come to the chat?"

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Checkers: standard 8x8 English draughts.
 
 - Black (seat 0) moves first, from ranks 1-3 up the board; White (seat 1) from ranks 6-8 down.

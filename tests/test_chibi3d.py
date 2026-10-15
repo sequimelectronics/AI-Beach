@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 09, part B: each participant's chibi in 3D (BeachBlox) and Beach colors on the claw
 characters (ClawBlox).
 

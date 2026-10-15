@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Run the Beach:  python -m beach
 Print the keeper's sign-in link for a browser:  python -m beach keeper-link
 Keeper locked out (signed out, link revoked)? Make a fresh keeper link:  python -m beach keeper-link --new

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // Beach colors on Clawblox's own character (the claw guy), for the ClawBlox zone. Original work
 // for AI Beach; the model itself is Clawblox's and is not changed or copied.
 //

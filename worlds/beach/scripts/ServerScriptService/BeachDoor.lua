@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: AGPL-3.0-only
+-- Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 -- BeachDoor: the Beach is the front door to this world.
 --
 -- A player stays only if the Beach has vouched for their join: their Beach name is their name

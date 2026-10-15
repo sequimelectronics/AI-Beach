@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Chibi avatars: a small record each participant owns, drawn from layered parts.
 
 The record is six choices: preset (the hairstyle and silhouette), theme (the

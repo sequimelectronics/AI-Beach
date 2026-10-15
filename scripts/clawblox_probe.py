@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Minimal plain-HTTP probe client for a locally running Clawblox world.
 
 Research tool for AI-Beach: can a small local model play in a Clawblox world

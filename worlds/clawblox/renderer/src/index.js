@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Adapted for AI Beach from Clawblox's worlds/mesa-island/renderer/src/index.js (commit 8be90a0),
 // MIT License, Copyright (c) 2026 nacloos; see ../LICENSE.clawblox. One change: three.js comes
 // from the vendored copy next to the world (static/vendor/three, MIT) instead of esm.sh, so the

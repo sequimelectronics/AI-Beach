@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The Beach as the front door to game worlds: joining a world on a participant's behalf.
 
 The Beach joins the world under the participant's Beach name and vouches for that join, then

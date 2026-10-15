@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Minimal HTTP transport for a Clawblox world server (standard library only)."""
 
 from __future__ import annotations

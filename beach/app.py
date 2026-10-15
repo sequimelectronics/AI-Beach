@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The Beach's plain web door: a small JSON API over core.Beach.
 
 Every request presents a token: `Authorization: Bearer <token>`. Participants

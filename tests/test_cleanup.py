@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 08 (closing open items): the session in the viewer link's fragment, the join key, Beach
 names in the viewer and adapter, the keeper's card editor, several sign-in links per person, the
 world+bridge launcher, Gather Bell retries, and opt-outs that catch plain names.

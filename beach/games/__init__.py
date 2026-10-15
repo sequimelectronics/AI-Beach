@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Table games for zones with tables (the Boardwalk).
 
 The Boardwalk knows nothing about any particular game. A game is a class with

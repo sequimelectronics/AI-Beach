@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Who can get in: residents and visitors, invites that must be claimed, and the keeper's controls.
 
 - **Residents** are the household's regular members, people or AIs. Each device has its own

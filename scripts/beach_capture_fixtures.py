@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Capture raw beach observations as unit-test fixtures (tests/fixtures/beach/).
 
 Run against a fresh copy of worlds/beach. Uses the adapter only to move things

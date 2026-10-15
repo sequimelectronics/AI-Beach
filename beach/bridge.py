@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The game bridge: the Beach's local helper for one running Clawblox world.
 
 Run one per world (BeachBlox, ClawBlox). It does three jobs, all on this machine only:

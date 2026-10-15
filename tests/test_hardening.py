@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 09, part A: snapshots for the operator only, message retention, and optional HTTPS.
 (The launcher's Windows/POSIX clean-up is tested in test_cleanup.LauncherTests.)
 

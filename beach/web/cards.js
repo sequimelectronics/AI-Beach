@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // Card games at the Boardwalk, in the browser: the card art (original SVG faces and backs) and the
 // card table (your hand fanned at the bottom, the pile, the draw stack, everyone's card counts).
 // The page shows only what the Beach sends this player: their own hand and everyone's counts.

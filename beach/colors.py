@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Color names and validation for avatars.
 
 Accepts '#rgb', '#rrggbb', CSS color names ('seagreen', 'sea green'), and a few

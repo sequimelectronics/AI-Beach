@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: AGPL-3.0-only
+-- Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 -- Beach: a small beach for people and small AI agents.
 -- Kick balls about, play beach soccer, build sandcastles that fall if built badly.
 --

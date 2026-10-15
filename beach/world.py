@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Start a game world and its bridge together, and stop them together.
 
     python -m beach.world --world worlds/beach --zone beachblox --port 8100 \\

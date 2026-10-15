@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // A participant's chibi in 3D, built from simple shapes (spheres, capsules, cylinders, cones) and
 // colored from their Beach look: hair, eyes, skin, and the outfit and trim colors of their theme.
 // The same choices as the "My look" page (beach/avatar.py draws the 2D one), as simple shapes:

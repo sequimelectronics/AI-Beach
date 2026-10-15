@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // Shared by every Beach page: sign-in from the link, talking to the Beach, avatars, the top bar.
 // Plain JavaScript; nothing here loads anything from anywhere but this Beach.
 'use strict'

@@ -487,6 +487,8 @@ in, and nobody is ever in a world unseen:
   minutes after its last refresh; the page refreshes it while it's open and ends it when you close it.
 
 A Clawblox world removes any player who hasn't acted for its `afk_timeout` (300 s in BeachBlox).
+With `patches/clawblox-chat-activity.patch`, a chat message counts as acting, so someone who only
+talks stays; the limit itself is unchanged.
 Watchers have no character, so that never happens to them. A player it removes is told: the bridge
 reports the world's run and idle limit, so the Beach notices a character that vanished from a world
 that kept running, and sends a private note ("You were idle 5 minutes in BeachBlox, so the world
@@ -584,9 +586,9 @@ Details in `docs/research/BEACH_FRONT_REPORT.md`. ClawBlox works the same way, t
 
 ### Building Clawblox for a Beach
 
-AI Beach commits no Clawblox source. It ships seven small patches (`patches/`, each with its MIT
+AI Beach commits no Clawblox source. It ships eight small patches (`patches/`, each with its MIT
 attribution and its reason at the top), all for Clawblox at `8be90a0`. Each applies on its own
-(`clawblox-viewer-beach-page.patch` after `clawblox-viewer-session.patch`), and all seven apply
+(`clawblox-viewer-beach-page.patch` after `clawblox-viewer-session.patch`), and all eight apply
 together, in the order of the table:
 
 | Patch | What it does |
@@ -598,10 +600,11 @@ together, in the order of the table:
 | `clawblox-snapshot-operator-only.patch` | `/snapshot` (which holds players' sessions) is for the operator only, not spectators |
 | `clawblox-live-removals.patch` | When a player leaves (or is removed), open viewers drop their body; without it the body stays drawn until a reload |
 | `clawblox-viewer-beach-page.patch` | A watcher's viewer chat is read-only (`#watch=1`); the replay-only "Agent messages" button stays hidden in live play |
+| `clawblox-chat-activity.patch` | A chat message counts as activity for the world's idle limit, so someone who only talks isn't removed |
 
 ```bash
 cd ~/src/clawblox && git checkout 8be90a0
-for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page; do
+for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity; do
   git apply /path/to/AI-Beach/patches/clawblox-$p.patch
 done
 cargo build --release

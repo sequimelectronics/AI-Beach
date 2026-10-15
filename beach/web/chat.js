@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // SandChat (or any chat zone) in the browser: IRC-style text, who's here, and the controls.
 // No live push: it asks the Beach for new lines every couple of seconds.
 'use strict'

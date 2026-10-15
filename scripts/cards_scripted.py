@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Scripted card games through the Beach's HTTP API, with mixed clients, plus token sizes.
 
 Three players at one table: two agent-shaped clients that read ONLY their turn bundle

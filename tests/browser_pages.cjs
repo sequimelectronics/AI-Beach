@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // Drives the Beach's pages in a real browser for tests/test_pages_browser.py and prints what it saw
 // as JSON. Args: <playwright module dir> <chromium path or ""> <beach url> <token>.
 'use strict'

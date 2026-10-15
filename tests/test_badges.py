@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Badges for the day: earned, shown, chosen, announced on arrival, gone after the reset."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 Becky Northaven and the AI-Beach contributors; see docs/art/LICENSE -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1600" role="img" aria-label="An illustrated map of the beach">
 <!-- Original artwork for AI Beach. Hand-built SVG, no external resources. -->
 <defs><radialGradient id="vig" cx="50%" cy="50%" r="75%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#5a3d1e" stop-opacity=".35"/></radialGradient><radialGradient id="sea" cx="50%" cy="50%" r="70%"><stop offset="55%" stop-color="#9fd8da"/><stop offset="100%" stop-color="#6fb7c4"/></radialGradient></defs>

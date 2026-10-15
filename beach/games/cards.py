@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Shared pieces for card games: a standard 52-card deck, card notation, and fair shuffles.
 
 Notation: rank then suit, upper case: "7H", "10D", "QS", "AC". Ranks A 2-10 J Q K; suits S (spades),

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Tests for job 05's pieces: avatars (validation, the describe sentence, images, the
 look-change cooldown), the browser's map and pages, and the BeachBlox bridge.
 

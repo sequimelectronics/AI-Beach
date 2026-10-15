@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Job 12's page changes in a real browser: the bar with every zone and pins, the picture menu,
 the grayed-out target box, Leave table, a game world's page under the bar, My look's labels.
 

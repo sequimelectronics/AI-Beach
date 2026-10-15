@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The Boardwalk, scripted end to end through the HTTP door (temporary data dir, fake clock).
 
 Part 1: two agents, Sandy and Pebble, play checkers to the end. Each sees ONLY what

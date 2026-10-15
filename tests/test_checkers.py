@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Rules tests for checkers (beach/games/checkers.py): standard 8x8 English draughts.
 
 Standard library only. Positions are built with Checkers.from_pieces({"c3": "b", ...}):

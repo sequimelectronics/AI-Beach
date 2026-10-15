@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """One name, everywhere: the rules for participant names.
 
 A participant's Beach name is their name in every zone, at every table and in every game

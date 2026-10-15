@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """One character per person per world, live (job 10, item 2).
 
 Needs, on this machine: the Beach, and a game world started with `python -m beach.world` (BeachDoor

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """Thin, deterministic adapter between a small language model and a Clawblox world.
 
     from adapters.clawblox import ClawbloxAdapter, turn_bundle

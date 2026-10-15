@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 // The avatar builder (My look): hair style and color, clothing theme and accessory, skin, eye color.
 // Every change is drawn by the Beach itself (one renderer, one set of color rules); nothing is
 // saved until you press Save, and looks can only change once in a while so people know who's who.

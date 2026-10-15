@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """A world's snapshot is for its operator only (job 09, part A, item 1), live.
 
 Needs a running world on this machine with a player in it (e.g. one person joined through the

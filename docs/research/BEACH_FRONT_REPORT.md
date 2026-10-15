@@ -24,7 +24,7 @@ tokenizer: **Gemma 4 E4B** (`google/gemma-4-E4B-it`, as in jobs 02–04) · Claw
   them to the Beach, maps in-game names to participants, and hands the renderer each player's
   colors. It talks only to addresses on this machine.
 - **The offline viewer.**
-  - three.js 0.160.0 and lucide 0.468.0 are vendored with their licences
+  - three.js 0.160.0 and lucide 0.468.0 are vendored with their licenses
     (`worlds/beach/static/vendor/`), and the renderer bundles the vendored three.js.
   - Clawblox's own viewer page needs a 10-line change, supplied as
     `patches/clawblox-offline-frontend.patch` with attribution. No engine source is committed.
@@ -276,7 +276,7 @@ What Job 01 found, precisely:
   - the replay page's two esm.sh preloads are dropped.
 - **Why point at `static/vendor/`?** Clawblox already serves each world's `static/` folder. So the
   libraries live with the world, in our repo, and the engine change stays URL-only. The beach world
-  ships them, with licences and a README saying exactly what each file is.
+  ships them, with licenses and a README saying exactly what each file is.
 - **Verified:** the patch applies cleanly at `8be90a0` (`git apply --check`), and the patched build
   ran the offline end-to-end test above.
 - **What still depends on the patch:** the engine's own page. Without it, our world bundles three.js

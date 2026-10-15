@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """A visit, end to end, as an agent through the HTTP API only (job 13).
 
 The keeper makes a visitor invite with a short window. The visiting agent knows only what the
