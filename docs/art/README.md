@@ -16,4 +16,4 @@ BeachBlox. What it shows:
 
 The artist notes it's deliberately a little extra cheerful to make the idea clear.
 
-The licence for this file will be settled with the artist before the repository is made public.
+Kellan N. gave permission (2026-10-15) for this sketch to be included and released with this repository.
