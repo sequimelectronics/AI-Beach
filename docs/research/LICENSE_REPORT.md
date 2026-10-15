@@ -1,36 +1,29 @@
 # License and chat activity report (job 14)
 
-**Coverage.** Everything in the brief is done except one item. The `LICENSE` file (the full AGPL v3
-text) is **not** in this change. The environment's network policy refused `www.gnu.org`, the
-brief's required source, so I stopped that item as the brief says. I did not type it or rebuild it
-from memory. Everything else is done: SPDX headers on every source file we wrote, the MIT files left as
-they are, `docs/LICENSES.md` with every dependency, the art license and credits, the README License
-section, `CONTRIBUTING.md`, the SPDX check, the engine patch that makes chat count as activity, and a
-live test for it. **Don't merge until `LICENSE` is added** (it's one command; see below), because the
-README and `docs/LICENSES.md` point to it.
+**Coverage.** Everything in the brief is done:
+- the full AGPL v3 `LICENSE`, fetched from the official source;
+- SPDX headers on every source file we wrote, with the Clawblox-derived files left under their MIT
+  notice;
+- `docs/LICENSES.md`, listing every dependency;
+- the art license and credits;
+- the README License section and `CONTRIBUTING.md`;
+- the SPDX check;
+- the engine patch that makes chat count as activity, with a live test.
 
-## 1. The LICENSE file: not done (network blocked)
+The licenses of three conditional packages are still unchecked (see "Not finished").
 
-- Source the brief requires: `https://www.gnu.org/licenses/agpl-3.0.txt`.
-- Result, tried twice (once at the start and once before this report): `curl: (56) CONNECT tunnel
-  failed, response 403`. The session's proxy reports `www.gnu.org:443 connect_rejected`. It is the
-  environment's network policy, not the site.
-- SHA-256: none, since nothing was fetched.
-- To finish it: allow `www.gnu.org` in the cloud environment's settings (the environment menu in the
-  session's title bar → Edit → Network access, add it under Allowed domains). Or, on any computer that
-  can reach the site, from the repository's root:
+## 1. The LICENSE file
 
-  ```bash
-  curl -fsSL -o LICENSE https://www.gnu.org/licenses/agpl-3.0.txt
-  sha256sum LICENSE        # record this in the commit message
-  head -3 LICENSE          # "GNU AFFERO GENERAL PUBLIC LICENSE" / "Version 3, 19 November 2007"
-  ```
+- **Source:** `https://www.gnu.org/licenses/agpl-3.0.txt`, fetched with
+  `curl -fsSL -o LICENSE https://www.gnu.org/licenses/agpl-3.0.txt`.
+- **First tries:** the environment's network policy refused `www.gnu.org`, so I stopped the item, as
+  the brief says. The keeper then allowed the host, and the next fetch succeeded.
+- **The file:** "GNU AFFERO GENERAL PUBLIC LICENSE, Version 3, 19 November 2007", 661 lines,
+  committed as fetched (no header, no edits).
+- **SHA-256:** `0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0`
 
-  Commit it unchanged: no header and no edits.
-
-The CC BY-SA 4.0 legal code wasn't fetched either, for the same reason. The brief allows its official
-name and link instead, so `docs/art/LICENSE` gives the name, the SPDX identifier, and the official
-summary and legal-code links.
+The CC BY-SA 4.0 legal code wasn't fetched. As the brief allows, `docs/art/LICENSE` gives the
+license's official name, its SPDX identifier, and the official summary and legal-code links.
 
 ## 2. SPDX headers and the check
 
@@ -162,6 +155,5 @@ license. The licenses come from each installed package's own metadata.
 
 ## Not finished
 
-- `LICENSE` (section 1). This is the one blocker before merging.
 - Confirming the license for three conditional packages (exceptiongroup, tomli, colorama) from
   installed metadata. They're not installed in this environment.
