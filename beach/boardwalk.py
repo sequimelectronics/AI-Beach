@@ -11,8 +11,13 @@ and the move history. The rules here are the game-independent ones:
   keeper's notification hook, and in their private events), and at most one per
   turn_notify_gap_s across all their tables. Never repeated.
 - A game nobody has touched for table_abandon_s ends as abandoned: nobody wins or loses.
-- Resigning and offering a draw are always available to a seated player. A draw offer stands
-  until the opponent accepts, declines, or plays on (playing on declines it).
+- Resigning is always available to a seated player. In a two-player game the other player wins;
+  in a bigger card game the one who resigns leaves and the rest play on. Where the game allows
+  draws (checkers), a draw offer stands until the opponent accepts, declines, or plays on
+  (playing on declines it).
+- Hidden information stays hidden: each seat is shown only `game.view/text(state, seat)`, the
+  move history keeps only what the game marks public, and what only the mover may know (the card
+  they drew) goes back to the mover alone, in the reply to their move.
 - When a game finishes, SandChat may hear the result (announce_results); never mid-game.
 - Table chat is a thread in the zone's own chat: the same messages, presence rules, deletes
   and opt-outs as any chat, tagged with the table.
@@ -51,6 +56,16 @@ class Boardwalk:
     def game(self, row):
         return GAMES[row["game"]]
 
+    def state(self, row) -> dict:
+        """The table's game state, with the players' current names filled in (card games use them:
+        moves like "ask Pebble 7s" name the player, and names can change between turns)."""
+        state = json.loads(row["state"])
+        if "names" in state:
+            seats = self.seats(row["id"])
+            state["names"] = [self._name(seats[s]) if s in seats else ""
+                              for s in range(self.game(row).seat_count(state))]
+        return state
+
     def seats(self, tid: int) -> dict[int, int]:
         return {r["seat"]: r["participant_id"]
                 for r in self.db.q("SELECT seat, participant_id FROM table_seats WHERE table_id = ?", (tid,))}
@@ -83,8 +98,9 @@ class Boardwalk:
 
     # ---------------------------------------------------------------- tables
 
-    def open(self, pid: int, zid: str, game: str, seat: int | None = 0) -> dict:
-        """Open a table. The opener sits at `seat` (default 0, who moves first); seat=None to just open it."""
+    def open(self, pid: int, zid: str, game: str, seat: int | None = 0, options: dict | None = None) -> dict:
+        """Open a table. The opener sits at `seat` (default 0, who moves first); seat=None to just open it.
+        `options`: {"players": 2-5} for the card games."""
         self._zone_with_tables(zid)
         if game not in GAMES:
             raise self._err("invalid", f"the games here are: {', '.join(GAMES)}")
@@ -95,7 +111,7 @@ class Boardwalk:
             raise self._err("rate_limited", "you already have 3 tables waiting for players")
         self._arrive(pid, zid)
         now = self.beach.now()
-        state = g.new({"quiet_limit": self.beach.setting("checkers_quiet_limit")})
+        state = g.new({**(options or {}), "quiet_limit": self.beach.setting("checkers_quiet_limit")})
         tid = self.db.run("INSERT INTO game_tables (zone_id, game, state, created_by, created_at, last_activity)"
                           " VALUES (?, ?, ?, ?, ?, ?)", (zid, game, json.dumps(state), pid, now, now))
         self._line(self.table(tid), f"{self._name(pid)} opened a table for {g.title}")
@@ -110,9 +126,10 @@ class Boardwalk:
         if row["status"] != "waiting":
             raise self._err("conflict", "this game has already started; you can watch it")
         taken = self.seats(tid)
+        n = g.seat_count(json.loads(row["state"]))
         if pid in taken.values():
             raise self._err("conflict", "you're already sitting at this table")
-        free = [s for s in range(g.seats) if s not in taken]
+        free = [s for s in range(n) if s not in taken]
         if seat is None:
             seat = free[0] if free else None
         if seat is None or seat not in free:
@@ -122,8 +139,9 @@ class Boardwalk:
         self.db.run("INSERT INTO table_seats VALUES (?, ?, ?)", (tid, seat, pid))
         self.db.run("DELETE FROM table_watchers WHERE table_id = ? AND participant_id = ?", (tid, pid))
         self.db.run("UPDATE game_tables SET last_activity = ? WHERE id = ?", (now, tid))
-        self._line(row, f"{self._name(pid)} sat down as {g.seat_names[seat]}")
-        if len(taken) + 1 == g.seats:
+        self._line(row, f"{self._name(pid)} sat down " + (f"as {g.seat_names[seat]}" if g.seat_names
+                                                          else f"({len(taken) + 1} of {n})"))
+        if len(taken) + 1 == n:
             self.db.run("UPDATE game_tables SET status = 'playing', started_at = ?, turn_since = ? WHERE id = ?",
                         (now, now, tid))
             self._line(row, "the game has started")
@@ -170,7 +188,7 @@ class Boardwalk:
     def move(self, pid: int, tid: int, move: str) -> dict:
         row, seat = self._playing_seat(pid, tid)
         g = self.game(row)
-        state = json.loads(row["state"])
+        state = self.state(row)
         if g.to_move(state) != seat:
             other = self.seats(tid).get(g.to_move(state))
             raise self._err("conflict", f"it's {self._name(other) if other else 'the other side'}'s turn")
@@ -180,6 +198,7 @@ class Boardwalk:
             legal = g.legal_moves(state)
             raise self._err("invalid", f"{e.reason}. Legal moves: {', '.join(legal)}",
                             data={"reason": e.reason, "legal": legal}) from None
+        private = info.pop("private", None)      # only for the mover: never stored, never shown to others
         self._arrive(pid, row["zone_id"])
         now = self.beach.now()
         ply = state.get("ply", 0) + 1
@@ -193,18 +212,39 @@ class Boardwalk:
         out = g.outcome(new)
         if out:
             self._finish(tid, out)
-        return {"moved": info["move"], "captured": info.get("captured", []), "crowned": info.get("crowned", False),
-                "over": out}
+        reply = {"moved": info["move"], "captured": info.get("captured", []),
+                 "crowned": info.get("crowned", False), "over": out}
+        if info.get("text"):
+            reply["text"] = info["text"]
+        if private:
+            reply["private"] = private
+        return reply
 
     def resign(self, pid: int, tid: int) -> dict:
         row, seat = self._playing_seat(pid, tid)
         g = self.game(row)
-        winner = (seat + 1) % g.seats if g.seats == 2 else None
-        self._finish(tid, {"winner": winner, "reason": f"{self._name(pid)} resigned"})
+        name = self._name(pid)
+        new, out = g.resign(self.state(row), seat)
+        if out is not None:
+            out = dict(out)
+            if not out.get("reason"):
+                out["reason"] = f"{name} resigned"
+            if new.get("over"):
+                new["over"] = out
+        now = self.beach.now()
+        self.db.run("UPDATE game_tables SET state = ?, last_activity = ?, turn_since = ?, notified_ply = NULL"
+                    " WHERE id = ?", (json.dumps(new), now, now, tid))
+        if out is None:
+            self._line(row, f"{name} left the game; the others play on")
+        else:
+            self._finish(tid, out)
         return self.view(pid, tid)
 
     def draw(self, pid: int, tid: int, action: str) -> dict:
         row, seat = self._playing_seat(pid, tid)
+        g = self.game(row)
+        if not g.draws:
+            raise self._err("invalid", f"there are no draw offers in {g.title}; you can resign to leave the game")
         offer = row["draw_offer"]
         now = self.beach.now()
         name = self._name(pid)
@@ -241,16 +281,20 @@ class Boardwalk:
             from .core import SANDCHAT
             zone = self.beach.zone(row["zone_id"])["name"]
             self.beach._post(SANDCHAT, None, "notice",
-                             f"{' and '.join(names)} finished a game of {g.title} on {zone}: {verdict}.")
+                             f"{_and(names)} finished a game of {g.title} on {zone}: {verdict}.")
 
     def result_text(self, g, seats: dict, outcome: dict, status: str = "finished") -> str:
         if status == "abandoned":
             return "the game was set aside unfinished"
         w = outcome.get("winner")
         reason = outcome.get("reason", "")
+        both = outcome.get("winners") or []
+        if w is None and len(both) > 1:
+            who = _and([self._name(seats[s]) if s in seats else f"seat {s + 1}" for s in both])
+            return f"{who} shared the win" + (f" ({reason})" if reason else "")
         if w is None:
             return f"a draw ({reason})" if reason and reason != "a draw by agreement" else "a draw"
-        who = self._name(seats[w]) if w in seats else g.seat_names[w]
+        who = self._name(seats[w]) if w in seats else f"seat {w + 1}"
         return f"{who} won" + (f" ({reason})" if reason else "")
 
     # ---------------------------------------------------------------- upkeep
@@ -270,7 +314,7 @@ class Boardwalk:
         for row in self.db.q("SELECT * FROM game_tables WHERE status = 'playing' AND notified_ply IS NULL"
                              " AND turn_since <= ?", (now - after,)):
             g = self.game(row)
-            state = json.loads(row["state"])
+            state = self.state(row)
             seat = g.to_move(state)
             pid = self.seats(row["id"]).get(seat)
             if pid is None:
@@ -319,9 +363,10 @@ class Boardwalk:
         state = json.loads(row["state"])
         to_move = g.to_move(state) if row["status"] == "playing" else None
         out = {"id": row["id"], "game": row["game"], "title": g.title, "status": row["status"],
-               "seats": [{"seat": s, "name": g.seat_names[s], "player": self._who(seats[s]) if s in seats else None}
-                         for s in range(g.seats)],
-               "to_move": to_move,
+               "seats": [{"seat": s, "name": g.seat_label(state, s),
+                          "player": self._who(seats[s]) if s in seats else None}
+                         for s in range(g.seat_count(state))],
+               "to_move": to_move, "draws": g.draws,
                "watchers": self.db.one("SELECT COUNT(*) AS n FROM table_watchers WHERE table_id = ?",
                                        (row["id"],))["n"]}
         if row["result"]:
@@ -340,7 +385,7 @@ class Boardwalk:
         """Everything the browser shows at a table, as this participant may see it."""
         row = self.table(tid)
         g = self.game(row)
-        state = json.loads(row["state"])
+        state = self.state(row)
         seat = self.seat_of(tid, pid)
         out = self.summary(row)
         out.update({"zone": row["zone_id"], "my_seat": seat, "position": g.view(state, seat),
@@ -359,3 +404,8 @@ class Boardwalk:
     def chat(self, pid: int, tid: int, after: int = 0, limit: int | None = None) -> list[dict]:
         row = self.table(tid)
         return self.beach.read(pid, row["zone_id"], after=after, limit=limit, table_id=tid)
+
+
+def _and(names: list[str]) -> str:
+    """"Sandy", "Sandy and Pebble", "Sandy, Pebble and Coral"."""
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]

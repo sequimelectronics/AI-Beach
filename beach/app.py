@@ -297,13 +297,16 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.get("/zones/{zid}/tables")
     def tables(zid: str, _: Participant = Depends(who)):
         from .games import GAMES
-        return {"zone": zid, "games": {k: {"title": g.title, "seats": list(g.seat_names)} for k, g in GAMES.items()},
+        return {"zone": zid, "games": {k: {"title": g.title, "seats": list(g.seat_names),
+                                          "players": [getattr(g, "min_seats", g.seats), g.seats]}
+                                      for k, g in GAMES.items()},
                 "tables": bw.list(zid)}
 
     @app.post("/zones/{zid}/tables")
     def open_table(zid: str, body: dict = Body(default={}), p: Participant = Depends(who)):
         seat = body.get("seat", 0)
-        return bw.open(p.id, zid, str(body.get("game", "checkers")), None if seat is None else int(seat))
+        options = {"players": body["players"]} if "players" in body else {}   # never a seed from outside
+        return bw.open(p.id, zid, str(body.get("game", "checkers")), None if seat is None else int(seat), options)
 
     @app.get("/tables/{tid}")
     def table_view(tid: int, p: Participant = Depends(who)):

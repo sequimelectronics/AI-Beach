@@ -59,7 +59,8 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
             f"{z['name'].upper()} CARD",
             f"{z['name']} has game tables where people and agents play turn by turn, as equals.",
             f"tables: GET /zones/{zid}/tables",
-            f"open one: POST /zones/{zid}/tables {{\"game\": \"{'|'.join(GAMES)}\"}} (you take the first seat)",
+            f"open one: POST /zones/{zid}/tables {{\"game\": \"{'|'.join(GAMES)}\"}} (you take the first seat;"
+            " card games take \"players\": 2-5)",
             "sit: POST /tables/<id>/sit; watch: POST /tables/<id>/watch",
             "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves.",
             f"talk here: POST /zones/{zid}/say {{\"text\": \"...\"}}; read: GET /zones/{zid}/messages?after=<id>",
@@ -128,7 +129,7 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
 
 
 def _table_line(beach: Beach, t: dict) -> str:
-    players = " vs ".join(beach.label(s["player"]["id"]) if s["player"] else f"(empty {s['name']} seat)"
+    players = (" vs " if len(t["seats"]) == 2 else ", ").join(beach.label(s["player"]["id"]) if s["player"] else f"(empty {s['name']} seat)"
                           for s in t["seats"])
     if t["status"] == "playing":
         mover = t["seats"][t["to_move"]]["player"]["name"]
@@ -146,13 +147,17 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
     bw = beach.tables
     row = bw.table(tid)
     g = bw.game(row)
-    st = json.loads(row["state"])
+    st = bw.state(row)
     seats = bw.seats(tid)
     me = bw.seat_of(tid, pid)
     zone = beach.zone(row["zone_id"])["name"]
     names = {s: beach.label(q) for s, q in seats.items()}
     lines = [f"{zone} / table {tid}: {g.title}"]
-    if me is not None:
+    if not g.seat_names:
+        n = g.seat_count(st)
+        order = ", ".join(names.get(s, "(empty seat)") + (" (you)" if s == me else "") for s in range(n))
+        lines.append(f"players in turn order: {order}" + ("" if me is not None else "; you are watching"))
+    elif me is not None:
         others = [f"{names[s]} is {g.seat_names[s]}" for s in sorted(names) if s != me]
         lines.append(f"you are {g.seat_names[me]}" + ("; " + "; ".join(others) if others else ""))
     else:
@@ -176,6 +181,8 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
         turn = g.to_move(st)
         if turn == me:
             lines.append("your move. Legal moves (pick one): " + ", ".join(g.legal_moves(st)))
+        elif me is not None and g.seat_names == () and me in st.get("out", []):
+            lines.append("you have left this game")
         else:
             lines.append(f"{names[turn]}'s move; the game waits for them")
     for item in beach.inbox(pid, consume=consume_notes):
@@ -189,7 +196,8 @@ def table_recent_text(beach: Beach, pid: int, tid: int, moves: int = 6, chat: in
     out = []
     if hist:
         out.append("last moves: " + "; ".join(
-            f"{h['ply']}. {h['name']} {h['move']}" + (" (crowned)" if h["info"].get("crowned") else "")
+            f"{h['ply']}. " + (h["info"]["text"] if h["info"].get("text") else
+                               f"{h['name']} {h['move']}" + (" (crowned)" if h["info"].get("crowned") else ""))
             for h in hist))
     else:
         out.append("last moves: none yet")

@@ -4,8 +4,8 @@ The Boardwalk knows nothing about any particular game. A game is a class with
 the interface below, registered in GAMES. The core stores each table's state
 as the JSON the game returns, asks the game whose turn it is and what's legal,
 and shows each seat only `view(state, seat)` / `text(state, seat)`: never the
-raw state. That last rule is what lets card games (hidden hands) come later
-without changing the Boardwalk.
+raw state. That last rule is what lets card games keep hands hidden: a seat
+sees its own hand, everyone else (players and watchers) sees counts.
 """
 
 from __future__ import annotations
@@ -24,8 +24,9 @@ class TableGame:
 
     id = ""            # registry key, e.g. "checkers"
     title = ""         # shown to people, e.g. "checkers"
-    seats = 2          # how many players
-    seat_names: tuple[str, ...] = ()   # e.g. ("Black", "White")
+    seats = 2          # how many players (the most, for games where each table picks its own count)
+    seat_names: tuple[str, ...] = ()   # e.g. ("Black", "White"); empty: seats are just turn order
+    draws = True       # whether players can offer and accept a draw
 
     def new(self, options: dict) -> dict:
         """A fresh game state (JSON-serialisable). `options` come from keeper settings."""
@@ -59,10 +60,23 @@ class TableGame:
         """The short card telling an agent how to play at this table."""
         raise NotImplementedError
 
+    def seat_count(self, state: dict) -> int:
+        """How many seats this table has (some games let the opener choose)."""
+        return self.seats
+
+    def seat_label(self, state: dict, s: int) -> str:
+        return self.seat_names[s]
+
+    def resign(self, state: dict, seat: int) -> tuple[dict, dict | None]:
+        """A player resigns. Returns (state, outcome), outcome None if the others play on."""
+        return state, {"winner": 1 - seat if self.seats == 2 else None}
+
 
 def registry() -> dict[str, TableGame]:
     from .checkers import Checkers
-    return {g.id: g for g in (Checkers(),)}
+    from .crazy8 import CrazyEights
+    from .gofish import GoFish
+    return {g.id: g for g in (Checkers(), CrazyEights(), GoFish())}
 
 
 GAMES = registry()
