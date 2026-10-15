@@ -1,5 +1,6 @@
 // The Boardwalk in the browser: the tables (open one, sit, watch), and a table's game.
 // Checkers: tap a piece, then where it goes; for a capture, tap each landing square in turn.
+// Card games (cards.js): tap a card in your hand to play it, or the stack to draw.
 // Only legal moves can be made: the Beach sends the list, the page just offers it.
 'use strict'
 ;(() => {
@@ -42,7 +43,7 @@
       return el('div', { class: 'seat' }, avatar(s.player), el('span', {}, el('strong', { text: s.player.name }), ' ', el('span', { class: 'hint', text: s.name })))
     }
     return el('div', { class: 'seat empty' },
-      el('span', { class: 'hint', text: s.name + ' seat is free' }),
+      el('span', { class: 'hint', text: t.game === 'checkers' ? s.name + ' seat is free' : 'A free seat' }),
       t.status === 'waiting' && !t.seats.some(x => x.player && x.player.id === me.id)
         ? el('button', { class: 'primary', type: 'button', text: 'Sit here', onclick: () => sit(t.id, s.seat) }) : null)
   }
@@ -62,7 +63,21 @@
     let data
     try { data = await api('GET', '/zones/' + encodeURIComponent(zid) + '/tables') } catch (e) { main.replaceChildren(el('p', { class: 'error', text: e.message })); return }
     const games = Object.entries(data.games)
-    const pick = el('select', { 'aria-label': 'Game' }, games.map(([k, g]) => el('option', { value: k, text: g.title })))
+    const HINTS = {
+      checkers: 'You take the first seat (Black moves first).',
+      crazy8: 'Match the suit or the rank; eights are wild. First to empty their hand wins.',
+      gofish: 'Ask each other for cards; four of a kind make a book. Most books wins.'
+    }
+    const players = el('select', { 'aria-label': 'Players' }, [2, 3, 4, 5].map(n => el('option', { value: n, text: n + ' players' })))
+    const playersLabel = el('label', {}, 'Players', players)
+    const hint = el('p', { class: 'hint' })
+    const pick = el('select', { 'aria-label': 'Game', onchange: () => syncPick() }, games.map(([k, g]) => el('option', { value: k, text: g.title[0].toUpperCase() + g.title.slice(1) })))
+    function syncPick () {
+      const g = data.games[pick.value]
+      playersLabel.hidden = g.players[1] <= 2
+      hint.textContent = (HINTS[pick.value] || '') + ' Games wait for whoever\'s turn it is, even for days. Leaving never forfeits.'
+    }
+    syncPick()
     const list = el('ul', { class: 'table-list' }, data.tables.length ? data.tables.map(t => el('li', { class: 'card table-card ' + t.status },
       el('div', { class: 'row' }, el('strong', { text: 'Table ' + t.id + ' · ' + t.title }), el('span', { class: 'hint', text: statusText(t) })),
       el('div', { class: 'seats' }, t.seats.map(s => seatButton(t, s))),
@@ -79,12 +94,14 @@
           onsubmit: async (ev) => {
             ev.preventDefault()
             try {
-              const t = await api('POST', '/zones/' + encodeURIComponent(zid) + '/tables', { game: pick.value })
+              const body = { game: pick.value }
+              if (!playersLabel.hidden) body.players = Number(players.value)
+              const t = await api('POST', '/zones/' + encodeURIComponent(zid) + '/tables', body)
               location.href = tableUrl(t.id)
             } catch (e) { toast(e.message) }
           }
-        }, el('label', {}, 'Game', pick), el('button', { class: 'primary', type: 'submit', text: 'Open a table' })),
-        el('p', { class: 'hint', text: 'You take the first seat (Black moves first). Games wait for whoever\'s turn it is, even for days. Leaving never forfeits.' })),
+        }, el('label', {}, 'Game', pick), playersLabel, el('button', { class: 'primary', type: 'submit', text: 'Open a table' })),
+        hint),
       list)
   }
 
@@ -94,6 +111,8 @@
   let picked = []          // the path chosen so far, e.g. ['c3'] or ['a1', 'c3']
   let lastKey = ''
   let chatAfter = 0
+  let chosenRank = null    // Go Fish: the rank picked from your hand, before choosing whom to ask
+  const isCards = () => view && view.position.kind === 'cards'
 
   function candidates () { return view && view.your_turn ? view.legal.filter(m => pathOf(m).slice(0, picked.length).join() === picked.join()) : [] }
 
@@ -183,15 +202,24 @@
     if (view.status === 'waiting') return el('p', { class: 'turn-banner wait', text: 'Waiting for someone to sit down.' })
     if (view.status !== 'playing') return el('p', { class: 'turn-banner over', text: 'Game over: ' + (view.result_text || view.status) + '.' })
     if (view.your_turn) {
+      if (isCards()) {
+        const p = view.position
+        let tip = view.game === 'crazy8'
+          ? (p.drawn ? ' You drew a card: play it, or pass.' : view.legal.includes('draw') ? ' Nothing fits: draw a card.' : view.legal.includes('pass') ? ' Nothing to play or draw: pass.' : ' Tap a card to play it.')
+          : (view.legal.includes('draw') ? ' Draw from the pond.' : chosenRank ? ' Now choose who to ask.' : ' Tap a card, then choose who to ask.')
+        return el('p', { class: 'turn-banner mine', text: 'Your turn.' + tip })
+      }
       const caps = view.legal.length && view.legal[0].includes('x')
       return el('p', { class: 'turn-banner mine', text: 'Your move.' + (caps ? ' You must capture.' : '') })
     }
     const who = view.seats[view.to_move].player.name
-    return el('p', { class: 'turn-banner wait', text: (view.my_seat === null ? '' : 'Waiting for ') + who + (view.my_seat === null ? ' to move.' : '. The game waits as long as it takes.') })
+    const verb = isCards() ? '\'s turn.' : ' to move.'
+    return el('p', { class: 'turn-banner wait', text: view.my_seat === null ? who + verb : 'Waiting for ' + who + '. The game waits as long as it takes.' })
   }
 
   function controls () {
     if (view.my_seat === null) {
+      if (view.status === 'waiting' && !view.draws) return el('div', { class: 'row' }, el('button', { class: 'primary', type: 'button', text: 'Sit down', onclick: () => sit(view.id) }))
       if (view.status === 'waiting') return el('div', { class: 'row' }, view.seats.filter(s => !s.player).map(s => el('button', { class: 'primary', type: 'button', text: 'Sit as ' + s.name, onclick: () => sit(view.id, s.seat) })))
       return el('div', { class: 'row' }, el('button', { class: 'quiet', type: 'button', text: view.watching ? 'Stop watching' : 'Watch', onclick: () => act(view.watching ? 'unwatch' : 'watch') }))
     }
@@ -200,6 +228,14 @@
     const offer = view.draw_offer
     const theirs = offer !== null && offer !== view.my_seat
     const row = el('div', { class: 'row' })
+    if (!view.draws) {
+      const left = view.position.out && view.position.out.includes(view.my_seat)
+      if (!left) {
+        const many = view.seats.length - view.position.out.length > 2
+        row.append(el('button', { class: 'danger', type: 'button', text: many ? 'Leave the game' : 'Resign', onclick: () => { if (confirm(many ? 'Leave this game? The others play on.' : 'Resign this game?')) act('resign') } }))
+      }
+      return row
+    }
     if (theirs) {
       row.append(el('span', { class: 'draw-offer', text: view.seats[offer].player.name + ' offers a draw.' }),
         el('button', { class: 'primary', type: 'button', text: 'Accept draw', onclick: () => act('draw', { action: 'accept' }) }),
@@ -218,15 +254,42 @@
   }
 
   function historyList () {
-    const items = view.history.slice(-40).map(h => el('li', {},
+    const items = view.history.slice(-40).map(h => h.info.text ? el('li', {}, el('span', { class: 'hint', text: h.ply + '. ' }), h.info.text) : el('li', {},
       el('span', { class: 'hint', text: h.ply + '. ' }), el('strong', { text: h.name }), ' ', el('code', { text: h.move }),
       h.info.captured && h.info.captured.length ? el('span', { class: 'hint', text: ' takes ' + h.info.captured.length }) : null,
       h.info.crowned ? el('span', { class: 'crowned', text: ' crowned' }) : null))
     return items.length ? items : [el('li', { class: 'hint', text: 'No moves yet.' })]
   }
 
+  async function cardMove (text) {
+    try {
+      const r = await api('POST', '/tables/' + view.id + '/move', { move: text })
+      chosenRank = null
+      if (r.private && r.private.drew) toast('You drew the ' + BeachCards.cardLabel(r.private.drew) + '.')
+    } catch (e) { toast(e.message) }
+    await refresh(true)
+  }
+
+  function renderCards () {
+    BeachCards.render({
+      view,
+      root: ui.board,
+      selected: chosenRank,
+      move: cardMove,
+      select: (rank) => { chosenRank = rank; renderCards(); ui.banner.replaceChildren(banner()) }
+    })
+  }
+
   function render () {
     ui.title.textContent = 'Table ' + view.id + ' · ' + view.title
+    if (isCards()) {
+      ui.banner.replaceChildren(banner())
+      ui.controls.replaceChildren(controls())
+      ui.history.replaceChildren(...historyList())
+      ui.history.scrollTop = ui.history.scrollHeight
+      renderCards()
+      return
+    }
     const top = view.my_seat === null ? 1 : 1 - view.my_seat
     ui.top.replaceChildren(playerStrip(top))
     ui.bottom.replaceChildren(playerStrip(1 - top))
@@ -241,7 +304,10 @@
     try {
       const v = await api('GET', '/tables/' + tableId)
       const key = [v.status, v.position.ply, v.draw_offer, v.watchers, v.seats.map(s => s.player && s.player.id).join()].join('|')
-      if (force || key !== lastKey) { view = v; lastKey = key; if (!force) picked = []; render() }
+      if (force || key !== lastKey) {
+        if (view && v.position.ply !== view.position.ply) chosenRank = null
+        view = v; lastKey = key; if (!force) picked = []; render()
+      }
     } catch (e) { if (!view) document.querySelector('main').replaceChildren(el('p', { class: 'error', text: e.message })) }
   }
 
@@ -261,7 +327,9 @@
 
   function buildTable (main) {
     ui.title = el('h1', {})
-    ui.board = el('div', { class: 'board', role: 'grid', 'aria-label': 'Checkerboard' })
+    ui.board = isCards()
+      ? el('div', { class: 'card-table', 'aria-label': 'The card table' })
+      : el('div', { class: 'board', role: 'grid', 'aria-label': 'Checkerboard' })
     ui.top = el('div', {})
     ui.bottom = el('div', {})
     ui.banner = el('div', { 'aria-live': 'polite' })
@@ -281,8 +349,8 @@
     main.replaceChildren(
       el('div', { class: 'chat-head' }, ui.title, el('a', { class: 'button quiet', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: 'All tables' })),
       el('div', { class: 'table-layout' },
-        el('section', { class: 'board-col', 'aria-label': 'The game' }, ui.top, ui.board, ui.bottom),
-        el('aside', { class: 'side-col' }, ui.banner, ui.controls,
+        el('section', { class: 'board-col', 'aria-label': 'The game' }, ...(isCards() ? [ui.banner, ui.board] : [ui.top, ui.board, ui.bottom])),
+        el('aside', { class: 'side-col' }, isCards() ? null : ui.banner, ui.controls,
           el('h2', { text: 'Moves' }), ui.history,
           el('h2', { text: 'Table chat' }), ui.chat, form)))
   }
@@ -302,9 +370,12 @@
       setInterval(() => { if (!document.hidden) renderLobby(main) }, 5000)
       return
     }
+    try { view = await api('GET', '/tables/' + tableId) } catch (e) { main.replaceChildren(el('p', { class: 'error', text: e.message })); return }
     buildTable(main)
     await refresh(true)
     pollChat()
+    let width = window.innerWidth
+    window.addEventListener('resize', () => { if (isCards() && window.innerWidth !== width) { width = window.innerWidth; renderCards() } })
     setInterval(() => { if (!document.hidden) refresh(false) }, 2000)
     setInterval(() => { if (!document.hidden) pollChat() }, 3000)
   })
