@@ -3,6 +3,7 @@
 ;(() => {
   const { el, api, avatar, toast } = Beach
   let settings = {}
+  let BADGE_LIST = []
 
   // Durations shown in friendly units; stored in seconds.
   const SETTINGS = [
@@ -300,6 +301,18 @@
       el('p', {}, el('label', { for: 'set-keep-forever' }, forever, ' Keep messages forever')),
       el('p', { class: 'hint', text: 'Old messages are removed the way "delete" removes one: the text is gone from the database. ' +
         'The audit log notes each removal and is never trimmed.' }))
+    // Badges for the day: each one on or off, and when yesterday's are gone.
+    const badgeBoxes = {}
+    const resetHour = el('input', { type: 'number', min: '0', max: '23', step: '1', id: 'set-badge-reset', value: String(settings.badge_reset_hour) })
+    const badgeGroup = el('fieldset', { class: 'settings-group badge-settings' },
+      el('legend', { text: 'Badges for the day' }),
+      el('p', { class: 'hint', text: 'Small marks of something done today, worn on the avatar and gone at the reset. No counts, no history, no leaderboard.' }),
+      el('div', { class: 'badge-toggles' }, BADGE_LIST.map(b => {
+        badgeBoxes[b.id] = el('input', { type: 'checkbox', id: 'badge-' + b.id, checked: !(settings.badges_off || []).includes(b.id) })
+        return el('label', { for: 'badge-' + b.id }, badgeBoxes[b.id], ' ', Beach.badgeIcon ? Beach.badgeIcon(b.id) : null, ' ', el('strong', { text: b.words }), el('span', { class: 'hint', text: ' ' + b.for }))
+      })),
+      el('label', { for: 'set-badge-reset' }, 'New day starts at',
+        el('span', { class: 'unit' }, resetHour, 'o\'clock (0-23, this computer\'s time)')))
     return el('section', { class: 'card' },
       el('h2', { text: 'Settings' }),
       el('form', {
@@ -309,9 +322,11 @@
           for (const [key, , unit] of SETTINGS) body[key] = Math.round(Number(inputs[key].value) * FACTOR[unit])
           for (const key of Object.keys(toggles)) body[key] = toggles[key].checked
           body.message_retention_days = forever.checked ? null : Math.max(1, Math.round(Number(days.value)))
+          body.badges_off = BADGE_LIST.map(b => b.id).filter(id => !badgeBoxes[id].checked)
+          body.badge_reset_hour = Math.min(23, Math.max(0, Math.round(Number(resetHour.value))))
           try { settings = await api('PATCH', '/admin/settings', body); toast('Saved.') } catch (e) { toast(e.message) }
         }
-      }, grid, boxes, retention, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
+      }, grid, boxes, retention, badgeGroup, el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save settings' }))))
   }
 
   // ------------------------------------------------------------- HTTPS
@@ -365,6 +380,7 @@
     const main = document.querySelector('main')
     if (!map.me.admin) { main.replaceChildren(el('h1', { text: 'Keeper' }), el('p', { text: 'This page is for the Beach-keeper.' })); return }
     settings = await api('GET', '/admin/settings')
+    BADGE_LIST = (await api('GET', '/admin/badges')).badges
     main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await zoneSection(), settingsSection(), await httpsSection())
   })
 })()

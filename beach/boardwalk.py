@@ -200,6 +200,8 @@ class Boardwalk:
                             data={"reason": e.reason, "legal": legal}) from None
         private = info.pop("private", None)      # only for the mover: never stored, never shown to others
         self._arrive(pid, row["zone_id"])
+        if row["game"] == "checkers":
+            self.beach.badges.award(pid, "checkers")
         now = self.beach.now()
         ply = state.get("ply", 0) + 1
         offer = row["draw_offer"]
@@ -276,6 +278,14 @@ class Boardwalk:
         seats = self.seats(tid)
         names = [self._name(seats[s]) for s in sorted(seats)]
         verdict = self.result_text(g, seats, outcome, status)
+        if status == "finished" and not g.seat_names:      # a card game, played to its end
+            out = json.loads(row["state"]).get("out", [])
+            for s, q in seats.items():
+                if s not in out:
+                    self.beach.badges.award(q, "card-game")
+            for s in outcome.get("winners") or ([outcome["winner"]] if outcome.get("winner") is not None else []):
+                if s in seats:
+                    self.beach.badges.award(seats[s], "card-win")
         self._line(row, verdict[0].upper() + verdict[1:])
         if status == "finished" and self.beach.setting("announce_results") and len(names) >= 2:
             from .core import SANDCHAT

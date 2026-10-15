@@ -417,7 +417,7 @@ class BundleTests(BeachTestCase):
         self.assertEqual(set(b) - {"total_tokens", "token_method"}, {"tools", "state", "recent"})
         self.assertIn("hello Pebble", b["recent"]["text"])
         self.assertNotIn("before Pebble", b["recent"]["text"])
-        self.assertIn("here: Sandy (agent), Pebble (agent)", b["state"]["text"])
+        self.assertIn("here: Sandy (agent, wearing hello shell), Pebble (agent)", b["state"]["text"])
         self.assertEqual(b["total_tokens"], sum(b[k]["tokens"] for k in ("tools", "state", "recent")))
 
     def test_private_notes_appear_once(self):

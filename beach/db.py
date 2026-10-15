@@ -218,6 +218,21 @@ CREATE TABLE IF NOT EXISTS avatars (
     set_at REAL NOT NULL,
     set_by_admin INTEGER NOT NULL DEFAULT 0
 );
+
+-- Badges for the day (badges.py): what each participant earned TODAY, and nothing older. Rows
+-- from before the keeper's daily reset are deleted: there are no counts and no history.
+CREATE TABLE IF NOT EXISTS badges (
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    badge TEXT NOT NULL,
+    day TEXT NOT NULL,                    -- the Beach day it was earned (see badges.day())
+    earned_at REAL NOT NULL,
+    PRIMARY KEY (participant_id, badge)
+);
+-- Which badge a participant chose to wear ("none" for none). No row: the newest one.
+CREATE TABLE IF NOT EXISTS badge_worn (
+    participant_id INTEGER PRIMARY KEY REFERENCES participants(id),
+    badge TEXT NOT NULL
+);
 """
 
 

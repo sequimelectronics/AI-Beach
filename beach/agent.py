@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 
 
+from .badges import words
 from .core import SANDCHAT, SKIES, Beach
 from .tokens import TokenCounter, make_counter
 
@@ -95,9 +96,14 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
     lines.append(f"{beach.setting('beach_name')} / {z['name']}; sky: {sky}")
     here = beach.present(zid)
     if here:
-        lines.append("here: " + ", ".join(f"{beach.label(p.id)} ({p.kind})" for p in here))
+        lines.append("here: " + ", ".join(f"{beach.label(p.id)} ({_kind_and_badge(beach, p)})" for p in here))
     else:
         lines.append("here: nobody")
+    mine = beach.badges.today(pid)
+    if mine:
+        worn = beach.badges.worn(pid)
+        lines.append("your badges today: " + ", ".join(words(b) + (" (wearing)" if b == worn else "") for b in mine)
+                     + ('; wear another: PUT /me/badges {"wear": "<badge>"}' if len(mine) > 1 else ""))
     lines.append(beach.zone_map_text())
     arrival = beach.arrival_line(pid)
     if arrival:
@@ -126,6 +132,12 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
     for item in beach.inbox(pid, consume=consume_notes):
         lines.append(f"private: {item['text']}")
     return "\n".join(lines)
+
+
+def _kind_and_badge(beach: Beach, p) -> str:
+    """"agent", or "person, wearing goal-scorer ribbon": a badge is a few words, never a picture."""
+    b = beach.badges.worn(p.id)
+    return p.kind + (f", wearing {words(b)}" if b else "")
 
 
 def _table_line(beach: Beach, t: dict) -> str:

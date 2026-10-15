@@ -71,6 +71,9 @@ DEFAULT_SETTINGS: dict = {
     "turn_notify_gap_s": 3600,       # at most one such notice per participant per this long
     "announce_results": True,        # finished games are announced in SandChat
     "checkers_quiet_limit": 40,      # a draw after this many moves each with no capture
+    # Badges for the day (badges.py)
+    "badge_reset_hour": 4,           # local time when yesterday's badges are gone (0-23)
+    "badges_off": [],                # badge ids the keeper has switched off, e.g. ["goal"]
 }
 
 DEFAULT_ACTIONS: dict[str, tuple[bool, list[str]]] = {
@@ -135,6 +138,8 @@ class Beach:
         self._seed()
         from .boardwalk import Boardwalk
         self.tables = Boardwalk(self)
+        from .badges import Badges
+        self.badges = Badges(self)
 
     # ------------------------------------------------------------------ setup
 
@@ -238,6 +243,12 @@ class Beach:
                                             "or null to keep messages forever")
             if k == "https" and not isinstance(v, bool):
                 raise BeachError("invalid", "https is true or false")
+            if k == "badge_reset_hour" and (not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 23):
+                raise BeachError("invalid", "badge_reset_hour is an hour of the day, 0 to 23")
+            if k == "badges_off":
+                from .badges import BADGES
+                if not isinstance(v, list) or any(b not in BADGES for b in v):
+                    raise BeachError("invalid", f"badges_off is a list of badge ids: {', '.join(BADGES)}")
             if k == "https_port" and (not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= 65535):
                 raise BeachError("invalid", "https_port is a port number")
             if k in ("https_cert", "https_key") and v is not None:
@@ -485,13 +496,15 @@ class Beach:
         their join (see vouch()); anyone else is a guest, shown under a guest label."""
         z = self.zone(zid)
         if z["kind"] == "chat":
-            return [{"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id)}
+            return [{"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id),
+                     "badge": self.badges.shown(p.id)}
                     for p in self.present(zid)]
         out = []
         for key in self.players_in(zid):
             if key.startswith("p:"):
                 p = self.participant(int(key[2:]))
-                out.append({"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id)})
+                out.append({"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id),
+                            "badge": self.badges.shown(p.id)})
             else:
                 out.append({"id": None, "name": key, "kind": "guest", "v": 0})
         return out
@@ -773,7 +786,12 @@ class Beach:
             self.db.run("UPDATE zones SET occupied_since = ? WHERE id = ?", (now, zid))
         self.db.run("INSERT INTO visits (participant_id, zone_id, joined_at, last_active) VALUES (?, ?, ?, ?)",
                     (pid, zid, now, now))
-        self._post(zid, None, "presence", f"{p.name} joined")
+        worn = self.badges.worn(pid)
+        if worn:
+            from .badges import words
+            self._post(zid, None, "presence", f"{p.name} arrives, wearing today's {words(worn)}.")
+        else:
+            self._post(zid, None, "presence", f"{p.name} joined")
         self._answer_open_bells(pid, zid)
         return {"zone": zid, "already_here": False, "arrival": self.arrival_line(pid)}
 
@@ -861,6 +879,8 @@ class Beach:
         self._rate_check(p, zid)
         mid = self._post(zid, pid, "say", text, table_id=table_id)
         self.touch(pid, zid)
+        if zid == SANDCHAT and table_id is None:
+            self.badges.award(pid, "hello")
         return {"posted": True, "id": mid}
 
     def read(self, pid: int, zid: str, after: int = 0, limit: int | None = None,
@@ -1016,6 +1036,8 @@ class Beach:
         self._rate_check(p, zid)
         mid = self._post(zid, pid, "action", text, action_key=key, table_id=table_id)
         self.touch(pid, zid)
+        if zid == SANDCHAT and table_id is None:
+            self.badges.award(pid, "hello")
         return {"posted": True, "id": mid, "text": text}
 
     def set_optout(self, pid: int, zid: str, all_actions: bool | None = None,
@@ -1137,6 +1159,7 @@ class Beach:
                 self.db.run("UPDATE bells SET status = 'answered' WHERE id = ?", (b["id"],))
             self._note(b["ringer_id"], f"{self.participant(pid).name} came to the bell", kind="event",
                        data={"event": "bell_answered", "bell_id": b["id"]})
+            self.badges.award(b["ringer_id"], "bell")
 
     def sweep_bells(self) -> int:
         """Close bells whose wait is over. Pending invites lapse; queued notices are dropped."""
@@ -1282,6 +1305,7 @@ class Beach:
         self.sweep_idle()
         self.deliver_notices()
         self.tables.sweep()
+        self.badges.purge()
         if self.now() - getattr(self, "_retention_at", float("-inf")) >= 600:
             self._retention_at = self.now()
             self.sweep_retention()

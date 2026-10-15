@@ -153,6 +153,24 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def events(p: Participant = Depends(who)):
         return {"events": beach.inbox(p.id, consume=True)}
 
+    @app.get("/me/badges")
+    def my_badges(p: Participant = Depends(who)):
+        """Today's badges, and which one you're wearing. They're gone at the daily reset."""
+        return beach.badges.mine(p.id)
+
+    @app.put("/me/badges")
+    def wear_badge(body: dict = Body(...), p: Participant = Depends(who)):
+        """{"wear": "<badge id or words>"}, {"wear": null} for none, or {"wear": "newest"}."""
+        w = body.get("wear")
+        return beach.badges.wear(p.id, None if w is None else str(w))
+
+    @app.get("/badges")
+    def badge_list(_: Participant = Depends(who)):
+        """Every badge the keeper has switched on, and what it's for."""
+        from .badges import BADGES
+        return {"badges": [beach.badges.describe(b) for b in BADGES if beach.badges.enabled(b)],
+                "resets_at_hour": beach.setting("badge_reset_hour")}
+
     @app.put("/me/optout")
     def optout(body: dict = Body(...), zone: str = SANDCHAT, p: Participant = Depends(who)):
         return beach.set_optout(p.id, zone, body.get("all"), body.get("actions"))
@@ -407,6 +425,18 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return {"zone": zid, "playing": n, "names": ", ".join(w["name"] for w in beach.who_in(zid)),
                 "looks": beach.game_looks(zid), "guest_face": GUEST_FACE}
 
+    @app.post("/zones/{zid}/events")
+    def world_events(zid: str, body: dict = Body(...), authorization: str | None = Header(default=None)):
+        """A game bridge reports what happened in its world (a goal, a sandcastle) for badges."""
+        tok = _token(authorization)
+        p = beach.authenticate(tok)
+        if beach.bridge_zone(tok) != zid and not (p and p.is_admin):
+            raise HTTPException(403, "this needs the zone's bridge token")
+        events = body.get("events", [])
+        if not isinstance(events, list):
+            raise HTTPException(400, "events must be a list")
+        return {"zone": zid, "badges_given": beach.badges.report_events(zid, events)}
+
     @app.get("/zones/{zid}/world")
     def world_info(zid: str, p: Participant = Depends(who)):
         """How a participant gets into a game world as themselves: where it is, and how to watch."""
@@ -458,6 +488,12 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.get("/admin/settings")
     def get_settings(_: Participant = Depends(admin)):
         return beach.settings()
+
+    @app.get("/admin/badges")
+    def all_badges(_: Participant = Depends(admin)):
+        """Every badge, on or off (the keeper switches them with the badges_off setting)."""
+        from .badges import BADGES
+        return {"badges": [dict(beach.badges.describe(b), on=beach.badges.enabled(b)) for b in BADGES]}
 
     @app.patch("/admin/settings")
     def patch_settings(body: dict = Body(...), _: Participant = Depends(admin)):
