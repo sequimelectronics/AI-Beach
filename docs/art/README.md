@@ -32,7 +32,8 @@ BeachBlox. What it shows:
 
 The artist notes it's deliberately a little extra cheerful to make the idea clear.
 
-Kellan N. gave permission (2026-10-15) for this sketch to be included and released with this repository.
+Kellan N. gave permission (2026-10-15) for this sketch to be included and released with this repository. Her sketches are
+licensed CC BY-SA 4.0 (confirmed 2026-10-15).
 
 ## cheerful-face-sketch-2.png
 

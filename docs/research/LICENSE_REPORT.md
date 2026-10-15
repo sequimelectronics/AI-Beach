@@ -101,11 +101,10 @@ license. The licenses come from each installed package's own metadata.
 - **Clawblox's Rust crates weren't reviewed.** AI-Beach doesn't ship Clawblox. Whoever distributes a
   Clawblox build is responsible for those crates' licenses.
 - **Some art is drawn by code.** The avatars, cards and badges are drawn by our code. The code is
-  AGPL, and the pictures it draws are CC BY-SA 4.0. That split is common, but **the keeper should
-  confirm that's what's intended**.
+  AGPL, and the pictures it draws are CC BY-SA 4.0. **Confirmed by the keeper (2026-10-15).**
 - **Kellan N.'s sketches.** Her earlier permission was for the sketches "to be included and
-  released with this repository". **Please confirm with her that CC BY-SA 4.0 specifically is fine
-  for them.** Under it, others can reuse and adapt the sketches, with credit.
+  released with this repository". **CC BY-SA 4.0 for the sketches confirmed by the keeper
+  (2026-10-15).** Under it, others can reuse and adapt the sketches, with credit.
 
 ## 5. Art
 
