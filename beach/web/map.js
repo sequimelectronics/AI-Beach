@@ -28,60 +28,54 @@
   const MAX_SHOWN = 6
 
   function countText (z) {
-    if (!z.open) return 'closed'
-    if (z.kind === 'game') return z.here + ' playing'
-    return z.here === 0 ? 'nobody here' : z.here + ' here'
+    if (!z.open) return T.t('closed')
+    if (z.kind === 'game') return T.t('n_playing', { n: z.here }) + (z.watching ? ' · ' + T.t('n_watching', { n: z.watching }) : '')
+    return z.here === 0 ? T.t('nobody_here') : T.t('n_here', { n: z.here })
   }
 
-  function go (z) {
+  // A game world opens on its own Beach page (the bar stays; Play, Watch and Leave are there).
+  function go (z, what) {
     if (!z.open) return
-    if (z.tables) location.href = '/boardwalk?zone=' + encodeURIComponent(z.id)
-    else if (z.kind === 'chat') location.href = '/chat?zone=' + encodeURIComponent(z.id)
-    else play(z)
+    location.href = Beach.zoneHref(z) + (what ? '&do=' + what : '')
   }
 
-  // A game world: one character per person. Play puts yours in (the Beach joins under your Beach
-  // name, or hands back the character you already have there) and opens the viewer, whose chat
-  // panel plays as you. If the world isn't connected to the Beach, you can still watch.
-  async function play (z) {
-    try {
-      const r = await Beach.api('POST', '/zones/' + encodeURIComponent(z.id) + '/play')
-      location.href = r.viewer
-    } catch (e) {
-      if (z.viewer_url) { Beach.toast(e.message + ' Opening it to watch.'); setTimeout(() => { location.href = z.viewer_url }, 1500) }
-      else Beach.toast(e.message)
-    }
-  }
-
-  // Leave takes your character out of the world; the button turns back to Play.
+  // Leave a zone you're in: a chat (part), a world you play in, or a world you watch.
   async function leave (z, button) {
     if (button) button.disabled = true
+    const id = encodeURIComponent(z.id)
     try {
-      await Beach.api('DELETE', '/zones/' + encodeURIComponent(z.id) + '/play')
-      Beach.toast('You left ' + z.name + '.')
+      if (z.you === 'playing') await api('DELETE', '/zones/' + id + '/play')
+      else if (z.you === 'watching') await api('DELETE', '/zones/' + id + '/watch')
+      else await api('POST', '/zones/' + id + '/part')
+      Beach.toast(z.you === 'watching' ? T.t('world_stopped_watching', { zone: z.name }) : T.t('world_left', { zone: z.name }))
     } catch (e) { Beach.toast(e.message) }
     refresh()
+    Beach.refreshBar()
   }
 
-  // The Play / Leave button for a game zone: only ever one of the two, showing whether you have a
-  // character there now.
-  function playButton (z, cls) {
-    if (z.kind !== 'game' || !z.open) return null
-    const b = el('button', {
-      class: cls + (z.playing ? ' leaving' : ''),
-      type: 'button',
-      text: z.playing ? 'Leave' : 'Play',
-      'aria-label': (z.playing ? 'Leave ' : 'Play in ') + z.name,
-      onclick: (ev) => { ev.stopPropagation(); if (z.playing) leave(z, ev.currentTarget); else play(z) }
-    })
-    return b
+  // The buttons under a zone: if you're there, that you're there plus Leave; else the way in
+  // (Play and Watch for a world).
+  function buttons (z, cls) {
+    if (!z.open) return []
+    const stop = (fn) => (ev) => { ev.stopPropagation(); fn(ev) }
+    if (z.you) {
+      return [
+        cls === 'play-pill' ? null : el('span', { class: 'you-are' }, Beach.pin(z.you), T.t('you_' + z.you)),
+        el('button', { class: cls + ' leaving', type: 'button', text: z.you === 'watching' ? T.t('stop_watching') : T.t('leave'),
+          'aria-label': (z.you === 'watching' ? T.t('stop_watching') : T.t('leave')) + ' ' + z.name, onclick: stop(ev => leave(z, ev.currentTarget)) })]
+    }
+    if (z.kind === 'game') {
+      return [el('button', { class: cls, type: 'button', text: T.t('play'), 'aria-label': T.t('play') + ' ' + z.name, onclick: stop(() => go(z, 'play')) }),
+        el('button', { class: cls + ' watch', type: 'button', text: T.t('watch'), 'aria-label': T.t('watch') + ' ' + z.name, onclick: stop(() => go(z, 'watch')) })]
+    }
+    return [el('button', { class: cls, type: 'button', text: z.tables ? T.t('play') : T.t('go_in'), onclick: stop(() => go(z)) })]
   }
 
   function crowd (z) {
     const box = el('div', { class: 'crowd' })
     const who = z.who || []
     for (const w of who.slice(0, MAX_SHOWN)) {
-      const label = w.kind === 'guest' ? w.name + ' (guest)' : w.name
+      const label = w.kind === 'guest' ? w.name + ' (guest)' : w.watching ? w.name + ' (' + T.t('watching_tag') + ')' : w.name
       const full = label + (w.badge ? ', wearing today\'s ' + w.badge.words : '')
       const b = el('button', {
         class: 'who',
@@ -89,7 +83,8 @@
         title: full,
         'aria-label': full,
         onclick: (ev) => { ev.currentTarget.classList.toggle('show') }
-      }, avatar(w, { twitch: true }), el('span', { class: 'name-tag', text: label }))
+      }, avatar(w, { twitch: !w.watching }), el('span', { class: 'name-tag', text: label }))
+      if (w.watching) b.classList.add('watching')
       box.append(b)
     }
     if (who.length > MAX_SHOWN) box.append(el('span', { class: 'more', text: '+' + (who.length - MAX_SHOWN) }))
@@ -104,32 +99,45 @@
       onclick: () => go(z)
     },
     el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : z.kind] || ICON.chat), z.name),
-    el('span', { class: 'count', text: countText(z) }))
+    el('span', { class: 'count', text: countText(z) }),
+    z.you ? el('span', { class: 'you-line' }, Beach.pin(z.you), T.t('you_' + z.you)) : null)
     sign.querySelector('svg').setAttribute('class', 'kind-icon')
-    const m = el('div', { class: 'zone' + (z.open ? '' : ' closed'), 'data-zone': z.id }, crowd(z), sign,
-      playButton(z, 'play-pill'))
+    const m = el('div', { class: 'zone' + (z.open ? '' : ' closed') + (z.you ? ' in' : ''), 'data-zone': z.id }, crowd(z), sign,
+      el('div', { class: 'pills' }, buttons(z, 'play-pill')))
     m.style.left = (slot[0] * 100) + '%'
     m.style.top = (slot[1] * 100) + '%'
     return m
   }
 
+  function names (z) {
+    return (z.who || []).map(w => w.kind === 'guest' ? w.name + ' (guest)' : w.watching ? w.name + ' (' + T.t('watching_tag') + ')' : w.name)
+  }
+
+  // Phones (and zones beyond the map's spots): a card per zone, with its buttons.
   function listItem (z) {
-    const names = (z.who || []).map(w => w.kind === 'guest' ? w.name + ' (guest)' : w.name)
-    return el('li', { class: 'card' + (z.open ? '' : ' closed') },
+    const who = names(z)
+    return el('li', { class: 'card' + (z.open ? '' : ' closed') + (z.you ? ' in' : '') },
       el('div', { class: 'row' },
-        el('strong', { text: z.name }),
+        el('strong', { text: z.name }), z.you ? Beach.pin(z.you) : null,
         el('span', { class: 'hint', text: (z.kind === 'game' ? 'game · ' : '') + countText(z) })),
-      names.length ? el('div', { class: 'names', text: names.join(', ') }) : null,
-      z.open ? el('div', { class: 'row' }, z.kind === 'game' && !z.tables
-        ? [playButton(z, 'primary'), z.playing ? el('button', { type: 'button', onclick: () => play(z), text: 'Open' }) : null]
-        : el('button', { class: 'primary', type: 'button', onclick: () => go(z), text: z.tables ? 'Play' : 'Go in' })) : null)
+      who.length ? el('div', { class: 'names', text: who.join(', ') }) : null,
+      z.open ? el('div', { class: 'row' }, z.you ? el('a', { class: 'button', href: Beach.zoneHref(z), text: T.t('open') }) : null,
+        buttons(z, 'primary')) : null)
   }
 
-  function order (zones) {
-    return zones.slice().sort((a, b) => (a.kind === 'chat' && a.id === 'sandchat' ? -1 : b.kind === 'chat' && b.id === 'sandchat' ? 1 : a.created_at - b.created_at))
+  // Wide screens: the markers already show each zone and its buttons, so Who's where is only
+  // the names, beside the map (and a card for any zone the map has no spot for).
+  function whoLine (z) {
+    const who = names(z)
+    if (!who.length) return null
+    return el('li', {}, el('strong', { text: z.name + ': ' }), who.join(', '))
   }
 
-  let mapBox, listBox, arrival, badgesBox
+  const order = Beach.zoneOrder
+  // Wide screens put the map beside a column (who's where, your badges); phones stack them.
+  const WIDE = window.matchMedia('(min-width: 1000px) and (orientation: landscape)')
+
+  let mapBox, listBox, whoBox, whoTitle, arrival, badgesBox
   let badgesKey = ''
 
   // Today's badges: yours to wear (one at a time), gone at the Beach's daily reset.
@@ -163,7 +171,15 @@
     const img = mapBox.querySelector('img')
     if (img.getAttribute('src') !== art) img.setAttribute('src', art)
     zones.slice(0, slots().length).forEach((z, i) => mapBox.append(marker(z, slots()[i])))
-    listBox.replaceChildren(...zones.map(listItem))
+    if (WIDE.matches) {
+      whoBox.replaceChildren(...zones.slice(0, slots().length).map(whoLine).filter(Boolean))
+      listBox.replaceChildren(...zones.slice(slots().length).map(listItem))
+    } else {
+      whoBox.replaceChildren()
+      listBox.replaceChildren(...zones.map(listItem))
+    }
+    // Nobody anywhere: the line above the list already says the beach is quiet.
+    whoTitle.hidden = !whoBox.childElementCount && !listBox.childElementCount
   }
 
   async function refresh () {
@@ -186,14 +202,20 @@
       el('div', { class: 'map-sky' }),
       el('div', { class: 'map-title', role: 'heading', 'aria-level': '1' }))
     listBox = el('ul', { class: 'zone-list', 'aria-label': 'Zones' })
+    whoBox = el('ul', { class: 'who-where' })
+    whoTitle = el('h2', { class: 'who-title', text: "Who's where" })
     arrival = el('p', { class: 'arrival' })
     badgesBox = el('section', { class: 'card my-badges', hidden: true, 'aria-label': 'Your badges today' })
-    main.replaceChildren(mapBox, arrival, badgesBox, el('h2', { text: "Who's where" }), listBox)
+    document.body.classList.add('map-page')
+    main.replaceChildren(el('div', { class: 'map-layout' }, mapBox,
+      el('aside', { class: 'map-side' }, arrival, whoTitle, whoBox, listBox, badgesBox)))
     render(data)
     let last = data
     refresh()
     setInterval(refresh, 5000)
-    // Turning the phone redraws the map the other way round.
-    PORTRAIT.addEventListener('change', () => { api('GET', '/map').then(d => { last = d; render(d) }).catch(() => render(last)) })
+    // Turning the phone (or resizing the window) redraws the map to fit.
+    const redraw = () => { api('GET', '/map').then(d => { last = d; render(d) }).catch(() => render(last)) }
+    PORTRAIT.addEventListener('change', redraw)
+    WIDE.addEventListener('change', redraw)
   })
 })()

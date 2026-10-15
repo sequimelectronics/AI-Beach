@@ -8,7 +8,7 @@
 --      own DataStore: store "BeachDoor", key "grant:<UserId>".
 --   3. This script admits the player when a claim for their UserId names the name they joined
 --      under; it labels them with their CURRENT Beach name, and follows renames live.
--- Anyone else is kicked after WAIT_S, or, if the keeper allows guests, labelled "Guest N".
+-- Anyone else is kicked after WAIT_S, or, if the keeper allows guests, labeled "Guest N".
 -- Shared by the beach world and ClawBlox (scripts/clawblox_world.py copies it there).
 
 local Players = game:GetService("Players")

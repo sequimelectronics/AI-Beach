@@ -12,17 +12,17 @@ tokenizer: **Gemma 4 E4B** (`google/gemma-4-E4B-it`, as in jobs 02–04) · Claw
   - All the art is original: hand-built SVG for the map, the icons and the avatar parts.
 - **Sign-in by link.** `/#t=<token>` stores the token in the browser and tidies the address bar.
   `python -m beach keeper-link` prints the keeper's own link.
-- **Avatars** (`beach/avatar.py`, `beach/colours.py`, core and API):
-  - the record and its validation (hex codes or colour names, with suggestions);
+- **Avatars** (`beach/avatar.py`, `beach/colors.py`, core and API):
+  - the record and its validation (hex codes or color names, with suggestions);
   - the describe sentence;
   - SVG and PNG pictures, the PNG drawn without any image library;
   - the look-change cooldown (a keeper setting);
   - the avatar card (143 tokens, offered on request);
   - the keeper can set anyone's look;
-  - BeachBlox characters tinted with their owner's colours.
+  - BeachBlox characters tinted with their owner's colors.
 - **The BeachBlox bridge** (`python -m beach.bridge`): reads the running world's players and reports
   them to the Beach, maps in-game names to participants, and hands the renderer each player's
-  colours. It talks only to addresses on this machine.
+  colors. It talks only to addresses on this machine.
 - **The offline viewer.**
   - three.js 0.160.0 and lucide 0.468.0 are vendored with their licences
     (`worlds/beach/static/vendor/`), and the renderer bundles the vendored three.js.
@@ -32,10 +32,10 @@ tokenizer: **Gemma 4 E4B** (`google/gemma-4-E4B-it`, as in jobs 02–04) · Claw
 
 **Tested**
 - `tests/test_beach_front.py`: **30 new tests**, all against a temporary data directory with a fake clock:
-  - colour validation;
+  - color validation;
   - the describe text;
   - every style × accessory draws;
-  - a recolour changes only its own layers;
+  - a recolor changes only its own layers;
   - PNG validity;
   - the cooldown (first change free, then hourly; keeper exempt; a refused change costs nothing);
   - names as settings;
@@ -77,7 +77,7 @@ with test participants (Sandy, Pebble, Kelp are agents; Coral, Drift, Shell, Cha
 
 **The zone map.** People in SandChat, The Lagoon and BeachBlox (BeachBlox's three come from the
 bridge; one is a guest who isn't a Beach participant, drawn as a plain figure). "Tide Pool Games" is
-closed, so it's grey. One name tag is showing (tap or hover).
+closed, so it's gray. One name tag is showing (tap or hover).
 
 ![Zone map](front_map.png)
 
@@ -87,7 +87,7 @@ avatars, and the controls.
 
 ![SandChat](front_sandchat.png)
 
-**The avatar builder**, with an invented colour typed in: "'sea grean' isn't a colour I know. Did
+**The avatar builder**, with an invented color typed in: "'sea grean' isn't a color I know. Did
 you mean 'sea green'?" The preview keeps the last valid look.
 
 ![Avatar builder](front_avatar_builder.png)
@@ -99,7 +99,7 @@ box (the token belongs to the throwaway development Beach).
 
 **The BeachBlox viewer with the network off.** Kelp wears seafoam with teal hair and Shell wears
 night-tide navy with sunset-orange hair, both from their Beach looks. Visitor9, a guest, keeps a
-colour chosen from their name. Every request went to 127.0.0.1.
+color chosen from their name. Every request went to 127.0.0.1.
 
 ![Viewer offline](front_viewer_offline.png)
 
@@ -133,10 +133,10 @@ At phone width (390 px), no page scrolls sideways: `front_map_phone.png` and
   address.
 - **Names and messages are never parsed as HTML.** Every piece of text goes in as text. The only
   markup inserted is SVG the Beach drew itself, and it's parsed as SVG (`DOMParser`), with scripts
-  and `foreignObject` stripped as a second line of defence.
+  and `foreignObject` stripped as a second line of defense.
 - **`/` still answers agents.**
   - A browser (which sends `Accept: text/html`) gets the map.
-  - Anything else gets the same one-line door text as before, so job 04's agent behaviour is
+  - Anything else gets the same one-line door text as before, so job 04's agent behavior is
     unchanged.
 
 ### Readable first
@@ -148,7 +148,7 @@ At phone width (390 px), no page scrolls sideways: `front_map_phone.png` and
   - the idle animation respects "reduce motion".
 - **SandChat:**
   - it is a monospace log with times, `<Name>` says, `* ` actions in italic purple, and `— `
-    notices in grey;
+    notices in gray;
   - private notes (e.g. "Coral isn't taking actions right now") appear dashed, marked "only you can
     see this" for screen readers;
   - the sky changes the page's background, but the conversation panel stays near-opaque cream, so
@@ -182,7 +182,7 @@ At phone width (390 px), no page scrolls sideways: `front_map_phone.png` and
   - Each twitches happily: a little hop and tilt, with its own random rhythm, so a crowd doesn't
     bob in sync.
   - Names show on hover, on keyboard focus, or on tap (a tap toggles).
-- **Closed zones** are grey, report "closed", don't open, and show nobody.
+- **Closed zones** are gray, report "closed", don't open, and show nobody.
 - **The sky** in SandChat tints the whole map slightly (rosy at dawn, deep blue at night).
 
 ### Signing in
@@ -204,7 +204,7 @@ At phone width (390 px), no page scrolls sideways: `front_map_phone.png` and
   - shadow, hair-behind, body, outfit, head (with cheeks and mouth), eyes, hair-in-front, accessory.
   - Every part is a list of ellipses and polygons (curves are flattened when the parts are built).
   - Each layer is its own `<g class="av-…">`.
-  - **A colour change is a recolour of one layer.** A test checks that changing the hair changes
+  - **A color change is a recolor of one layer.** A test checks that changing the hair changes
     only the two hair layers.
 - **One renderer, two outputs:**
   - The same shapes become SVG for browsers, or a PNG for agents that look at images.
@@ -212,20 +212,20 @@ At phone width (390 px), no page scrolls sideways: `front_map_phone.png` and
     outlines by dilation, and `zlib` for the file. It needs no Pillow and no image library.
   - **A 96 px PNG is 3.3 KB and takes 0.05 s to draw** (cached afterwards).
   - The builder asks the Beach to draw each preview, so there is exactly one drawing and one set
-    of colour rules, not a JavaScript copy that could disagree.
-- **The record:** preset (hairstyle), theme (outfit colours), hair, eyes, skin, accessory.
+    of color rules, not a JavaScript copy that could disagree.
+- **The record:** preset (hairstyle), theme (outfit colors), hair, eyes, skin, accessory.
   - Skin isn't in the brief's list. A chibi needs one, and a fixed set of six tones, as its own
     choice, keeps it respectful and simple.
   - Everyone has a default look from their id until they choose, so the map never shows blanks.
-- **Colour validation.** Small models invent colour codes, so nothing is guessed:
+- **Color validation.** Small models invent color codes, so nothing is guessed:
   - accepted: `#rgb`, `#rrggbb`, a bare six-digit hex, any of the 148 CSS names (spaces and
     hyphens ignored: "sea green" = "seagreen"), and 24 beach names ("sunset orange", "seafoam",
     "sand", "lagoon", …);
-  - anything else is refused with the nearest names: "'seafome' isn't a colour I know. Did you mean
+  - anything else is refused with the nearest names: "'seafome' isn't a color I know. Did you mean
     'seafoam'?";
   - an invalid change saves nothing and doesn't spend the free first change.
 - **The describe sentence** keeps names people gave ("sea green") and turns hex codes into the
-  nearest of 40 plain colour words ("#ffbf00" → "amber"). For example: *"A chibi with teal hair in
+  nearest of 40 plain color words ("#ffbf00" → "amber"). For example: *"A chibi with teal hair in
   a bun, amber eyes, a navy-and-gold outfit and a floppy sun hat."*
 - **The cooldown.** The first change is free; after that, once per `avatar_cooldown_s` (default
   3600). A refused change returns 429 with `Retry-After` and "try again in about N min". A look the
@@ -249,10 +249,10 @@ At phone width (390 px), no page scrolls sideways: `front_map_phone.png` and
   otherwise their Beach name is used, ignoring case. Players matching no one appear as guests,
   with a plain figure and their in-game name.
 - **Tints.**
-  - The Beach's reply to each report includes each matched player's colours. The bridge writes
+  - The Beach's reply to each report includes each matched player's colors. The bridge writes
     them to `<world>/static/tints.json`, which Clawblox already serves at `/static/`.
-  - The renderer reads that file every 10 s. Each capsule's body becomes the outfit colour, under a
-    new "hair" cap in the hair colour, so both main colours of the look show.
+  - The renderer reads that file every 10 s. Each capsule's body becomes the outfit color, under a
+    new "hair" cap in the hair color, so both main colors of the look show.
   - This needs no engine change, and the Beach is never contacted by the viewer.
   - Names still float above every character.
 - **Local by construction.** The bridge refuses any address that isn't 127.0.0.1, ::1 or localhost,
@@ -332,7 +332,7 @@ preset: short bob long bun spiky curly
 theme: lagoon sunset driftwood seafoam night-tide coral-reef sailor
 skin: porcelain peach sand honey bronze umber
 accessory: none sunhat flower headphones bow sunglasses starfish bandana
-hair, eyes: #rrggbb or a colour name (sea green)
+hair, eyes: #rrggbb or a color name (sea green)
 changes: once per 60 min; the first is free
 ```
 
@@ -353,7 +353,7 @@ An agent set its whole look in one call, through the real server:
     several tokens per participant (one per device). That's a schema change to the core.
   - Until then, "New link" is the remedy, and it signs the person out everywhere.
 - **Avatars in the game are tints, not pictures.**
-  - BeachBlox players are capsules wearing the look's outfit and hair colours.
+  - BeachBlox players are capsules wearing the look's outfit and hair colors.
   - Drawing the chibi in 3D (a billboard sprite of the avatar, say) is possible: the renderer
     could load `/avatars/<id>.png`. But it would need the viewer to hold a Beach token, so I left
     it out.

@@ -231,6 +231,56 @@ class BeachActTests(unittest.TestCase):
         self.assertRegex(res, r"nothing within 1\.5 of \(3,0\.6,3\); nearest is SoccerBall")
 
 
+class WatchAndGoneTests(unittest.TestCase):
+    """Job 12: who's watching (a folder the beach world publishes); a character the world removed."""
+
+    def test_watchers_are_a_few_words_in_the_view(self):
+        raw = load("spawn.json")
+        raw["world"]["entities"].append({"id": 99901, "name": "Watchers", "entity_type": "folder", "position": [0, 0, 0],
+                                         "size": [0, 0, 0], "anchored": True,
+                                         "attributes": {"Spot": "the lifeguard chair", "Names": '["Coral", "Drift"]'}})
+        s = parse_observation(raw)
+        from adapters.clawblox.world import watchers
+        self.assertEqual(watchers(s), ("the lifeguard chair", ["Coral", "Drift"]))
+        text = view_text(compact_view(s, s.statics, {}, BEACH_RULES))
+        self.assertIn("watching from the lifeguard chair: Coral, Drift", text)
+        empty = parse_observation(load("spawn.json"))
+        self.assertNotIn("watching", view_text(compact_view(empty, empty.statics, {}, BEACH_RULES)))
+
+    def test_a_removed_character_is_said_not_silently_replaced(self):
+        from adapters.clawblox.adapter import CharacterGone
+
+        class Gone:
+            def __init__(self):
+                self.calls = []
+
+            def request(self, method, path, body=None, session=None):
+                self.calls.append((method, path, session))
+                return 400, "Not in any instance of this game"
+        t = Gone()
+        a = beach_adapter(t)
+        with self.assertRaises(CharacterGone) as e:
+            a.look()
+        self.assertIn("no longer in the world", str(e.exception))
+        self.assertIsNone(a.session)                      # forgotten: the next action joins again
+        self.assertEqual([c[1] for c in t.calls], ["/observe"])
+
+    def test_the_beach_says_why_before_a_new_character(self):
+        import io
+        import urllib.error
+        from unittest import mock
+        from adapters.clawblox import front_door
+        body = json.dumps({"error": "conflict", "message": "You were idle 5 minutes in BeachBlox, so the world took "
+                           "your character out (its idle limit). Play again to come back as a new character.",
+                           "removed": "idle"}).encode()
+        err = urllib.error.HTTPError("http://127.0.0.1:8765/zones/beachblox/play", 409, "Conflict", {}, io.BytesIO(body))
+        with mock.patch.object(front_door._OPENER, "open", side_effect=err):
+            with self.assertRaises(front_door.BeachSaid) as e:
+                front_door.beach_joiner("http://127.0.0.1:8765", "tok", "beachblox")("Sandy")
+        self.assertEqual(e.exception.removed, "idle")
+        self.assertIn("Play again", str(e.exception))
+
+
 class WorldScriptTests(unittest.TestCase):
     """Static checks on worlds/beach that the brief asks for."""
 
@@ -252,6 +302,26 @@ class WorldScriptTests(unittest.TestCase):
         self.assertIn("MIT License", (r / "LICENSE.clawblox").read_text())
         self.assertIn("Derived from Clawblox", (r / "src" / "index.js").read_text())
         self.assertTrue((ROOT / "worlds" / "beach" / "NOTICE.md").exists())
+
+    def test_the_watch_spot(self):
+        # The lifeguard chair stands behind the land wall, off the sand, and nothing in it collides:
+        # a watcher never blocks a ball or a build. New watchers are announced; agents get a folder.
+        spot = self.lua[self.lua.index("-- The lifeguard chair: the watch spot."):self.lua.index("-- MAP INFO for agents")]
+        self.assertEqual(spot.count("CanCollide = false"), 2)          # every chair part, and the sign
+        x = float(re.search(r"watch = \{ name = \"the lifeguard chair\", x = (-?[\d.]+)", self.lua).group(1))
+        land_wall = float(re.search(r"land_wall_x = (-?[\d.]+)", self.lua).group(1))
+        self.assertLessEqual(x + 3.5, land_wall)                      # its dune ends behind the wall
+        loop = self.lua[self.lua.index("-- WATCHERS:"):self.lua.index("-- JOIN / LEAVE")]
+        self.assertIn('announce(n .. " is watching from " .. CONFIG.watch.name)', loop)
+        self.assertIn('watchersInfo:SetAttribute("Names"', loop)
+
+    def test_the_renderer_draws_no_departed_player(self):
+        # A character whose player isn't listed any more is skipped (and so removed from the scene),
+        # even on an engine without patches/clawblox-live-removals.patch.
+        js = (ROOT / "worlds" / "beach" / "renderer" / "src" / "index.js").read_text()
+        self.assertIn("new Set(present.map(p => p.root_part_id))", js)
+        self.assertIn("typeof entity.attributes.PlayerUserId === 'number' && !roots.has(entity.id)) continue", js)
+        self.assertIn("role === 'WatchSign'", js)                  # the board above the chair
 
     def test_no_real_names_in_test_players(self):
         for f in (ROOT / "scripts").glob("beach_*.py"):

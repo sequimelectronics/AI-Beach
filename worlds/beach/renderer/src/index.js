@@ -302,8 +302,8 @@ function nameColor(name) {
 
 // Beach looks: the Beach bridge writes static/tints.json ({players: {name: {preset, hair, eyes,
 // skin, outfit, trim, accessory, face}}, guest_face}), so each character is its participant's chibi
-// in their own colours, wearing their own 2D face. Guests and players without a look get a plain
-// chibi in a colour picked from their name, with the Beach's plain guest face.
+// in their own colors, wearing their own 2D face. Guests and players without a look get a plain
+// chibi in a color picked from their name, with the Beach's plain guest face.
 // Read from this same server, never pushed.
 let tints = {}
 let guestFace = null
@@ -348,7 +348,7 @@ function syncPlayer(obj, name, size) {
   if (u.lookKey !== lookKey) {
     if (u.chibi) {
       obj.remove(u.chibi)
-      disposeChibi(u.chibi)                   // its merged shapes; the colours are shared
+      disposeChibi(u.chibi)                   // its merged shapes; the colors are shared
     }
     u.chibi = buildChibi(look)
     obj.add(u.chibi)
@@ -365,6 +365,50 @@ function syncPlayer(obj, name, size) {
     obj.add(u.label)
     u.playerName = name
   }
+}
+
+// Who's watching, written above the watch spot: "Watching" and up to five names.
+function makeWatchSprite(names) {
+  const shown = names.slice(0, 5)
+  if (names.length > 5) shown[4] = '+' + (names.length - 4) + ' more'
+  const canvas = document.createElement('canvas')
+  canvas.width = 320
+  canvas.height = 56 + 40 * Math.max(1, shown.length)
+  const g = canvas.getContext('2d')
+  g.fillStyle = '#b02626'
+  g.fillRect(0, 0, canvas.width, canvas.height)
+  g.strokeStyle = '#ffffff'
+  g.lineWidth = 6
+  g.strokeRect(3, 3, canvas.width - 6, canvas.height - 6)
+  g.fillStyle = '#ffffff'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.font = 'bold 30px sans-serif'
+  g.fillText('Watching', 160, 30)
+  g.font = 'bold 30px sans-serif'
+  shown.forEach((n, i) => g.fillText(n.slice(0, 18), 160, 76 + 40 * i))
+  if (!shown.length) { g.font = 'italic 26px sans-serif'; g.fillText('nobody', 160, 76) }
+  const map = new THREE.CanvasTexture(canvas)
+  map.colorSpace = THREE.SRGBColorSpace
+  // Not lit or tone-mapped: the board reads the same in any light.
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false, toneMapped: false }))
+  sprite.scale.set(6, 6 * canvas.height / canvas.width, 1)
+  return sprite
+}
+
+function syncWatchSign(obj, text) {
+  const u = obj.userData
+  if (u.watchText === text) return
+  if (u.label) {
+    obj.remove(u.label)
+    u.label.material.map.dispose()
+    u.label.material.dispose()
+  }
+  const names = text ? text.split(', ').filter(Boolean) : []
+  u.label = makeWatchSprite(names)
+  u.label.position.set(0, 1.2 + u.label.scale.y / 2, 0)
+  obj.add(u.label)
+  u.watchText = text
 }
 
 function makeLabelSprite(text) {
@@ -532,6 +576,19 @@ function createEntityVisual(entity) {
   }
 
   const attrs = entity.attributes || {}
+
+  // The watch spot's board: the names of whoever is watching, above the lifeguard chair.
+  if (role === 'WatchSign') {
+    const group = new THREE.Group()
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(size[0], size[1], size[2]),
+      new THREE.MeshStandardMaterial({ color: 0xfff4dc, roughness: 0.8 }),
+    )
+    board.castShadow = true
+    group.add(board)
+    group.userData.isWatchSign = true
+    return group
+  }
 
   if (attrs.PlayerName) {
     const group = new THREE.Group()
@@ -774,7 +831,13 @@ export function createRenderer(ctx) {
       }
     }
 
+    // A character whose player has left is never drawn, even if a live update hasn't said it's
+    // gone (patches/clawblox-live-removals.patch fixes that in the engine; this guards older ones).
+    const present = Array.isArray(obs.players) ? obs.players : []
+    const roots = present.every(p => typeof p?.root_part_id === 'number') ? new Set(present.map(p => p.root_part_id)) : null
+
     for (const entity of obs.entities || []) {
+      if (roots && entity.attributes && typeof entity.attributes.PlayerUserId === 'number' && !roots.has(entity.id)) continue
       activeIds.add(entity.id)
       let obj = entityObjects.get(entity.id)
       if (!obj) {
@@ -788,6 +851,7 @@ export function createRenderer(ctx) {
       else obj.quaternion.identity()
       obj.visible = !(entity.render && entity.render.visible === false)
       applyEntityAppearance(obj, entity)
+      if (obj.userData.isWatchSign) syncWatchSign(obj, String((entity.attributes || {}).WatchNames || ''))
       if (obj.userData.isPlayer && entity.attributes && entity.attributes.PlayerName) {
         syncPlayer(obj, String(entity.attributes.PlayerName), entity.size || [2, 5, 2])
       }

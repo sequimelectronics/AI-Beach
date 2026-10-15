@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from beach import avatar, colours  # noqa: E402
+from beach import avatar, colors  # noqa: E402
 from beach.core import SANDCHAT, Beach, BeachError  # noqa: E402
 
 try:
@@ -40,29 +40,29 @@ class FakeClock:
         self.t += seconds
 
 
-class ColourTests(unittest.TestCase):
+class ColorTests(unittest.TestCase):
     def test_accepts_hex_and_names(self):
-        self.assertEqual(colours.parse("#2A9D8F"), ("#2a9d8f", "#2a9d8f"))
-        self.assertEqual(colours.parse("#abc"), ("#aabbcc", "#aabbcc"))
-        self.assertEqual(colours.parse("2a9d8f")[1], "#2a9d8f")
-        self.assertEqual(colours.parse("Sea Green"), ("sea green", "#2e8b57"))
-        self.assertEqual(colours.parse("seagreen")[1], "#2e8b57")
-        self.assertEqual(colours.parse("sunset orange")[1], "#fd5e53")
-        self.assertEqual(colours.parse("dark-slate-grey")[1], "#2f4f4f")
+        self.assertEqual(colors.parse("#2A9D8F"), ("#2a9d8f", "#2a9d8f"))
+        self.assertEqual(colors.parse("#abc"), ("#aabbcc", "#aabbcc"))
+        self.assertEqual(colors.parse("2a9d8f")[1], "#2a9d8f")
+        self.assertEqual(colors.parse("Sea Green"), ("sea green", "#2e8b57"))
+        self.assertEqual(colors.parse("seagreen")[1], "#2e8b57")
+        self.assertEqual(colors.parse("sunset orange")[1], "#fd5e53")
+        self.assertEqual(colors.parse("dark-slate-gray")[1], "#2f4f4f")
 
-    def test_refuses_invented_colours_with_a_hint(self):
+    def test_refuses_invented_colors_with_a_hint(self):
         for bad in ["#ggg", "#12345", "#1234567", "", "   ", "blurple", "sea grean", "rgb(1,2,3)",
                     "x" * 50, None, 12, ["teal"]]:
-            with self.assertRaises(colours.ColourError, msg=repr(bad)):
-                colours.parse(bad)
-        with self.assertRaises(colours.ColourError) as cm:
-            colours.parse("sea grean")
+            with self.assertRaises(colors.ColorError, msg=repr(bad)):
+                colors.parse(bad)
+        with self.assertRaises(colors.ColorError) as cm:
+            colors.parse("sea grean")
         self.assertIn("sea green", str(cm.exception))
 
     def test_hex_described_in_plain_words(self):
-        self.assertEqual(colours.words("#ffbf00", "#ffbf00"), "amber")
-        self.assertEqual(colours.words("#008080", "#008080"), "teal")
-        self.assertEqual(colours.words("sunset orange", "#fd5e53"), "sunset orange")
+        self.assertEqual(colors.words("#ffbf00", "#ffbf00"), "amber")
+        self.assertEqual(colors.words("#008080", "#008080"), "teal")
+        self.assertEqual(colors.words("sunset orange", "#fd5e53"), "sunset orange")
 
 
 class AvatarTests(unittest.TestCase):
@@ -80,7 +80,7 @@ class AvatarTests(unittest.TestCase):
 
     def test_validate_refuses_bad_fields(self):
         for bad in [{"hair": "#zzz"}, {"preset": "mohawk"}, {"theme": "neon"}, {"skin": "green"},
-                    {"accessory": "crown"}, {"colour": "red"}, {"eyes": None}, "teal"]:
+                    {"accessory": "crown"}, {"color": "red"}, {"eyes": None}, "teal"]:
             with self.assertRaises(avatar.AvatarError, msg=repr(bad)):
                 avatar.validate(bad, self.base)
 
@@ -103,7 +103,7 @@ class AvatarTests(unittest.TestCase):
                     self.assertIn(f'class="av-{layer}"', s)
         self.assertNotIn("<script", s)
 
-    def test_recolour_changes_only_its_layer(self):
+    def test_recolor_changes_only_its_layer(self):
         a = avatar.validate({"hair": "teal"}, self.base)
         b = avatar.validate({"hair": "coral"}, self.base)
         la, lb = dict(avatar.layers(a)), dict(avatar.layers(b))
@@ -229,7 +229,7 @@ class FrontApiTests(unittest.TestCase):
         self.assertIn("Retry-After", again.headers)
         bad = self.http.put("/me/avatar", headers=self.sandy, json={"eyes": "#12g"})
         self.assertEqual(bad.status_code, 400)
-        self.assertIn("isn't a colour code", bad.json()["message"])
+        self.assertIn("isn't a color code", bad.json()["message"])
 
     def test_images_on_request(self):
         svg = self.http.get("/me/avatar.svg", headers=self.sandy)

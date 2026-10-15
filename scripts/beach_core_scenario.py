@@ -189,12 +189,12 @@ def run(counter) -> dict:
                                                                            counter=counter).items() if k in ("tools", "state", "recent")}
     results["sizes"]["typical"]["total"] = sum(results["sizes"]["typical"].values())
 
-    # 7a. Desk Bell: Coral is away, Sandy rings, Coral comes.
+    # 7a. Gather Bell: Coral is away, Sandy rings, Coral comes.
     coral.part()
     st, ring = sandy.ring()
     beach.deliver_notices()
     invited = sorted(p["invitee"] for p in sent)
-    checks["bell_notice_in_room"] = "- Sandy rang the desk bell" in pebble.lines()
+    checks["bell_notice_in_room"] = "- Sandy rang the Gather Bell" in pebble.lines()
     checks["bell_invites_only_those_away"] = invited == ["Coral"]
     clock.advance(40)
     came = coral.respond(ring["bell_id"], "come")
@@ -216,7 +216,7 @@ def run(counter) -> dict:
     checks["nobody_free_event"] = [e["text"] for e in ev] == ["nobody's free right now"]
     checks["nobody_free_names_no_one"] = not any(n in json.dumps(ev) for n in ("Sandy", "Coral"))
     seen = pebble.lines()
-    after_ring = seen[seen.index("- Pebble rang the desk bell"):]
+    after_ring = seen[seen.index("- Pebble rang the Gather Bell"):]
     results["room_after_unanswered_ring"] = after_ring
     checks["decline_never_shown_to_room"] = not any("declin" in s.lower() or "Sandy" in s for s in after_ring)
     checks["decline_recorded_for_decliner"] = sandy.me()["invites"][0]["status"] == "declined"

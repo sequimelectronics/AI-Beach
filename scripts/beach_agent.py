@@ -209,7 +209,7 @@ def run(base: str, counter, name: str = "Sandy") -> dict:
             break
     goals["ball_retrieved_from_sea"] = retrieved
 
-    # 3. A good castle: three blocks, then a flag, centred in plot 1.
+    # 3. A good castle: three blocks, then a flag, centered in plot 1.
     px, pz = plots[1]
     p.go(px + 3.2, pz)
     y = 0.0
@@ -223,7 +223,7 @@ def run(base: str, counter, name: str = "Sandy") -> dict:
     goals["good_castle_3_high_standing"] = bool(good and good["height"] >= 3 and good["standing"]
                                                and good["falls"] == 0)
 
-    # 4. A bad castle: a wall balanced off-centre on a tower, in plot 4.
+    # 4. A bad castle: a wall balanced off-center on a tower, in plot 4.
     bx, bz = plots[4]
     p.go(bx + 3.2, bz)
     p.turn("act", "Mold", {"shape": "tower"})

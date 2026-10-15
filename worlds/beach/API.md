@@ -43,7 +43,7 @@ All scenery (sand, sea, walls, goal posts, plot markers) is tagged Static, so it
 
 - `world.entities` holds the **balls** (`Kind`: soccer ball, volleyball, beach ball),
   **sand pieces** (`PieceKind`; `InPlot` is the plot number when one sits in a plot),
-  and **characters** (`HumanoidRootPart`, labelled with `PlayerName`).
+  and **characters** (`HumanoidRootPart`, labeled with `PlayerName`).
 - The folder **`BeachMap`** has a `Layout` attribute: JSON with the sand bounds, shoreline,
   walls, goals, plots and spawn points.
 - The folder **`Score`** has `North` and `South` goal counts.
@@ -61,7 +61,7 @@ All scenery (sand, sea, walls, goal posts, plot markers) is tagged Static, so it
   pieces that end up in the sea dissolve.
 - **Goals:** posts at x = -3 and 3, bar 3 high, goal lines at z = 28 (north) and
   z = -28 (south). A ball that crosses a goal line between the posts scores; the world
-  announces it and returns the ball to the centre (0, 0) after 3 seconds.
+  announces it and returns the ball to the center (0, 0) after 3 seconds.
 - **Balls:** the soccer ball is medium weight with a moderate bounce. The volleyball is
   light and bouncy. The beach ball floats and drifts. The engine has no air resistance,
   so the beach ball's floatiness is approximated: a lift that cancels 80% of gravity,
@@ -76,7 +76,11 @@ All scenery (sand, sea, walls, goal posts, plot markers) is tagged Static, so it
   counts for everyone who put one down, and a castle 4 high standing for 3 seconds "stood
   tall". The world only records which join did it; the Beach gives the badges.
 - **Spawn points:** six, spread along the middle of the sand. Idle players are removed
-  after 5 minutes.
+  after 5 minutes (when the world runs with an AI Beach, they're told).
+- **Watchers** (when the world runs with an AI Beach): people and agents can watch instead of
+  playing. They have no character; their names are on a board above the lifeguard chair, west of
+  the land wall at z = 0, out of reach, and the world announces each one ("Coral is watching from
+  the lifeguard chair"). The folder **`Watchers`** has `Spot` and `Names` (a JSON list).
 
 ## Endpoints
 

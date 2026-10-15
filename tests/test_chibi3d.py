@@ -1,9 +1,9 @@
-"""Job 09, part B: each participant's chibi in 3D (BeachBlox) and Beach colours on the claw
+"""Job 09, part B: each participant's chibi in 3D (BeachBlox) and Beach colors on the claw
 characters (ClawBlox).
 
 The look travels Beach -> bridge -> the world's static/tints.json -> the renderer. The 3D chibi is
 built by worlds/beach/renderer/src/chibi.js; when Node.js is installed, these tests build every
-hairstyle and accessory with it (no browser needed) and check the colours, the hairstyles'
+hairstyle and accessory with it (no browser needed) and check the colors, the hairstyles'
 shapes and the triangle budget.
 """
 
@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from beach import avatar, colours  # noqa: E402
+from beach import avatar, colors  # noqa: E402
 from beach.bridge import Bridge  # noqa: E402
 from beach.core import Beach  # noqa: E402
 
@@ -37,7 +37,7 @@ class LookRouteTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def test_game_look_has_style_and_colours(self):
+    def test_game_look_has_style_and_colors(self):
         rec = avatar.validate({"preset": "bun", "theme": "night-tide", "hair": "sea green", "eyes": "amber",
                                "skin": "umber", "accessory": "flower"}, avatar.default_record(1))
         look = avatar.game_look(rec)
@@ -120,7 +120,7 @@ class FaceDrawingTests(unittest.TestCase):
         eyes, cheeks, mouth = (dict(avatar.layers(self.rec))[k] for k in ("eyes", "cheeks", "mouth"))
         shines = [geo for kind, geo, fill, line, a in eyes if kind == "e" and fill == "#ffffff" and geo[2] > 2]
         self.assertEqual(len(shines), 2)
-        self.assertEqual({round(cx - centre, 1) for (cx, *_), centre in zip(shines, (39, 61))}, {-1.6})
+        self.assertEqual({round(cx - center, 1) for (cx, *_), center in zip(shines, (39, 61))}, {-1.6})
         lowest_eye = max(y for kind, geo, fill, *_ in eyes if kind == "p" for _, y in geo)
         self.assertLess(min(cy - ry for kind, (cx, cy, rx, ry), *_ in cheeks), lowest_eye)   # cheeks reach the eyes
         self.assertEqual(len(mouth), 2)                                                     # an open smile, with tongue
@@ -164,7 +164,7 @@ const shades = JSON.parse(readFileSync(new URL('./shades.json', import.meta.url)
 const faceTexture = (svg) => { const t = new THREE.Texture(); t.userData.svg = svg; return t }
 const out = looks.map((L) => {
   const g = buildChibi(L, { faceTexture })
-  const colours = new Set(), shapes = []
+  const colors = new Set(), shapes = []
   let face = null, outline = 0, lit = 0, toneMapped = 0, earFront = 0
   g.traverse((m) => {
     if (!m.isMesh) return
@@ -172,17 +172,17 @@ const out = looks.map((L) => {
     if (m.material.toneMapped) toneMapped++
     if (m.userData.face) {
       const p = m.geometry.attributes.position, uv = m.geometry.attributes.uv
-      let centre = null, right = null
+      let center = null, right = null
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), y = p.getY(i), z = p.getZ(i)
-        if (!centre || Math.hypot(x, y) < Math.hypot(centre.x, centre.y)) centre = { x, y, z, u: uv.getX(i), v: uv.getY(i) }
+        if (!center || Math.hypot(x, y) < Math.hypot(center.x, center.y)) center = { x, y, z, u: uv.getX(i), v: uv.getY(i) }
         if (!right || x > right.x) right = { x, u: uv.getX(i) }
       }
-      face = { svg: m.material.map.userData.svg, centre, right, transparent: m.material.transparent }
+      face = { svg: m.material.map.userData.svg, center, right, transparent: m.material.transparent }
       return
     }
-    if (m.material.side === THREE.BackSide) { outline++; colours.add('outline:#' + m.material.color.getHexString()); return }
-    colours.add('#' + m.material.color.getHexString())
+    if (m.material.side === THREE.BackSide) { outline++; colors.add('outline:#' + m.material.color.getHexString()); return }
+    colors.add('#' + m.material.color.getHexString())
     if ('#' + m.material.color.getHexString() === L.hair.toLowerCase()) {
       // Hair beside the face at ear height, in front of the ear (the ears sit at x = +-1.17, z = 0).
       const p = m.geometry.attributes.position, v = new THREE.Vector3()
@@ -198,7 +198,7 @@ const out = looks.map((L) => {
                 [...bb.min.toArray(), ...bb.max.toArray()].map(v => v.toFixed(2)).join(','))
   })
   let meshes = 0; g.traverse((m) => { if (m.isMesh) meshes++ })
-  return { preset: L.preset, accessory: L.accessory, triangles: triangles(g), meshes, colours: [...colours],
+  return { preset: L.preset, accessory: L.accessory, triangles: triangles(g), meshes, colors: [...colors],
            shapes: shapes.sort().join('|'), face, outline, lit, toneMapped, earFront }
 })
 const guest = buildChibi({ hair: '#336699', outfit: '#3366cc' }, { faceTexture })
@@ -216,12 +216,12 @@ console.log(JSON.stringify({ out, ink: INK, guestFace, shades: shades.map(([h, f
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def test_every_look_builds_in_its_colours(self):
+    def test_every_look_builds_in_its_colors(self):
         for look, got in zip(self.looks, self.result["out"]):
             for part in ("hair", "skin", "outfit", "trim"):
-                self.assertIn(look[part], got["colours"], f"{part} missing for {look['preset']}/{look['accessory']}")
+                self.assertIn(look[part], got["colors"], f"{part} missing for {look['preset']}/{look['accessory']}")
             if look["preset"] in ("short", "bob", "long", "curly"):      # these have the 2D's darker back hair
-                self.assertIn(colours.shade(look["hair"], 0.8), got["colours"])
+                self.assertIn(colors.shade(look["hair"], 0.8), got["colors"])
 
     def test_the_face_is_the_2d_face_painted_on(self):
         for look, got in zip(self.looks, self.result["out"]):
@@ -229,21 +229,21 @@ console.log(JSON.stringify({ out, ink: INK, guestFace, shades: shades.map(([h, f
             self.assertIsNotNone(face)
             self.assertEqual(face["svg"], look["face"])              # exactly the 2D drawing
             self.assertTrue(face["transparent"])
-            self.assertLess(face["centre"]["z"], 0)                   # on the front of the head (-Z)
-            self.assertAlmostEqual(face["centre"]["u"], 0.5, places=1)  # the face box's middle at the front
-            self.assertAlmostEqual(face["centre"]["v"], 0.5, places=1)
+            self.assertLess(face["center"]["z"], 0)                   # on the front of the head (-Z)
+            self.assertAlmostEqual(face["center"]["u"], 0.5, places=1)  # the face box's middle at the front
+            self.assertAlmostEqual(face["center"]["v"], 0.5, places=1)
             self.assertLess(face["right"]["u"], 0.1)                  # mirrored: the head's +x is the drawing's left
 
     def test_flat_cartoon_shading_with_an_outline(self):
         for got in self.result["out"]:
             self.assertEqual(got["lit"], 0)                 # no lit (glossy) materials
-            self.assertEqual(got["toneMapped"], 0)          # colours exactly as in 2D
+            self.assertEqual(got["toneMapped"], 0)          # colors exactly as in 2D
             self.assertEqual(got["outline"], 1)             # one outline mesh per character
-            self.assertIn("outline:" + self.result["ink"], got["colours"])
-        self.assertEqual(self.result["ink"], avatar.INK)    # the 2D avatar's ink colour
+            self.assertIn("outline:" + self.result["ink"], got["colors"])
+        self.assertEqual(self.result["ink"], avatar.INK)    # the 2D avatar's ink color
 
     def test_no_strip_of_hair_in_front_of_an_ear(self):
-        # Job 10's spiky hair (and bun) showed a strip of hair colour by the ear from a turned angle:
+        # Job 10's spiky hair (and bun) showed a strip of hair color by the ear from a turned angle:
         # the side hair hung down in front of the ear. Now it stops above the ears beside the face.
         # (Bob and long hair have locks in front of the ears on purpose; curly is a cloud all round.)
         for got in self.result["out"]:
@@ -263,7 +263,7 @@ console.log(JSON.stringify({ out, ink: INK, guestFace, shades: shades.map(([h, f
         self.assertEqual(len(set(shapes.values())), len(avatar.ACCESSORIES))
 
     def test_few_draw_calls(self):
-        # Parts merged into one mesh per colour, plus the face and one outline: about a dozen.
+        # Parts merged into one mesh per color, plus the face and one outline: about a dozen.
         self.assertLessEqual(max(r["meshes"] for r in self.result["out"]), 16)
 
     def test_triangle_budget(self):
@@ -273,7 +273,7 @@ console.log(JSON.stringify({ out, ink: INK, guestFace, shades: shades.map(([h, f
 
     def test_shading_matches_the_2d_avatar(self):
         for (hexcode, f), got in zip(self.shades, self.result["shades"]):
-            self.assertEqual(got, colours.shade(hexcode, f))
+            self.assertEqual(got, colors.shade(hexcode, f))
 
 
 if __name__ == "__main__":

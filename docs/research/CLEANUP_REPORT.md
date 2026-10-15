@@ -23,7 +23,7 @@ committed.
 
 **Tests.**
 
-- `tests/test_cleanup.py` has 26 tests, covering every item that has behaviour.
+- `tests/test_cleanup.py` has 26 tests, covering every item that has behavior.
 - The full suite has 236 tests and passes:
   - in the venv: 2 skipped;
   - with plain `python3`, without FastAPI: 28 skipped, as before.
@@ -190,7 +190,7 @@ waiting 17s (past the BeachDoor script's 15 s)... players: Coral, Pebble, Sandy
   - The old column is then emptied.
   - It runs in one transaction and is safe to run again.
   - Tested on a database built with the previous schema.
-- **One behaviour change.** "New link" on the keeper page used to cut off the old link. Now it
+- **One behavior change.** "New link" on the keeper page used to cut off the old link. Now it
   adds one. To cut a link off, revoke it.
 
 ## 6. A world and its bridge start and stop together: done

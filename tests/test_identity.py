@@ -217,7 +217,7 @@ class DoorTests(Case):
         agent = str(uuid.uuid4())
         b.vouch(self.sandy.id, "beachblox", agent, "Sandy")
         # Pebble claims Sandy's join (Pebble saw its id while spectating): allowed, but harmless,
-        # because the world honours only the claim whose name is the one the join used.
+        # because the world honors only the claim whose name is the one the join used.
         b.vouch(self.pebble.id, "beachblox", agent, "Pebble")
         door = b.door("beachblox")
         self.assertFalse(door["guests"])
@@ -386,6 +386,36 @@ class BridgeDoorTests(unittest.TestCase):
         # The world also learned the address the Beach may join it at (for people), on this machine.
         self.assertEqual(self.beach.zone("beachblox")["world_url"], "http://127.0.0.1:8100")
         self.assertEqual(self.beach.zone("beachblox")["watch_token"], "spec-tok")
+
+    def test_watchers_reach_the_world_and_a_removed_player_is_told(self):
+        # Job 12. The world's idle limit comes from its world.toml.
+        from beach.bridge import WorldStore
+        (self.world / "world.toml").write_text('name = "Beach"\nafk_timeout = 300\n')
+        b = self.bridge()
+        ws = WorldStore(self.world / ".clawblox" / "local-8100.db")
+        pebble = {"Authorization": f"Bearer {self.tok['Pebble']}"}
+        self.http.post("/zones/beachblox/watch", headers=pebble)
+        b.sync_door()
+        self.assertEqual(ws.read("run1", "watchers"), {"names": ["Pebble"]})     # the chair shows Pebble
+        self.http.delete("/zones/beachblox/watch", headers=pebble)
+        b.sync_door()
+        self.assertEqual(ws.read("run1", "watchers"), {"names": []})
+        # Sandy plays, then the world drops Sandy (idle) while it keeps running: Sandy is told.
+        agent = str(uuid.uuid4())
+        sandy = {"Authorization": f"Bearer {self.tok['Sandy']}"}
+        self.http.post("/zones/beachblox/vouch", json={"agent_id": agent, "name": "Sandy"}, headers=sandy)
+        self.players = [{"id": agent, "name": "Sandy", "attributes": {"BeachDoor": "ok"}}]
+        b.step()
+        self.players = []
+        b.step()
+        ev = self.http.get("/me/events", headers=sandy).json()["events"]
+        self.assertEqual([e["data"]["event"] for e in ev], ["world_removed"])
+        self.assertIn("idle 5 minutes in BeachBlox", ev[0]["text"])
+        # A world that stops answering, or restarts, drops nobody's character with a "you were idle".
+        self.http.post("/zones/beachblox/vouch", json={"agent_id": str(uuid.uuid4()), "name": "Sandy"}, headers=sandy)
+        self.up = False
+        b.step()
+        self.assertEqual(self.http.get("/me/events", headers=sandy).json()["events"], [])
 
     def test_guest_policy_reaches_the_world(self):
         from beach.bridge import WorldStore

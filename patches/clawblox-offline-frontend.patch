@@ -8,7 +8,7 @@ Written for AI Beach. Apply in a Clawblox checkout and rebuild:
     git apply /path/to/AI-Beach/patches/clawblox-offline-frontend.patch
     cargo build --release
 
-What it changes (URLs only, no behaviour):
+What it changes (URLs only, no behavior):
 - frontend_runtime/dist/index.html: the import map points "three", "three/" and
   "lucide" at ./static/vendor/... (served by Clawblox from the world's static/ folder)
   instead of https://esm.sh/.

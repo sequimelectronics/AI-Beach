@@ -15,7 +15,7 @@ import json
 
 
 from .badges import words
-from .core import SANDCHAT, SKIES, Beach
+from .core import SANDCHAT, SKIES, Beach, duration
 from .tokens import TokenCounter, make_counter
 
 
@@ -30,10 +30,11 @@ def beach_card(beach: Beach) -> str:
         "BEACH CARD",
         f"You're at {beach.setting('beach_name')}. Zones (id: name):",
         *zones,
-        "move: POST /zones/<id>/join and POST /zones/<id>/part. You can be in several zones at once.",
+        "move: POST /zones/<id>/join and /part; several zones at once is fine. "
+        f"{duration(beach.setting('idle_timeout_s'))} idle in a zone and you leave it (you're told).",
         "where you are: GET /me. Who's where: GET /zones.",
         "leave the Beach: part every zone you're in. Leaving is always fine and needs no reason.",
-        "desk bell (from SandChat): POST /bell/ring invites people who are away; an invitation, not a summons. "
+        "Gather Bell (from SandChat): POST /bell/ring invites people who are away; an invitation, not a summons. "
         "If you're invited: POST /bell/<id>/respond {\"answer\": \"come\"|\"decline\"}",
         "a zone's turn: GET /agent/turn?zone=<id> (a game table: ?table=<id>)",
         "your look in one sentence: GET /avatar-describe (more: GET /avatar/card)",
@@ -53,6 +54,8 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
             lines.append(f"watch: {z['viewer_url']}")
         lines.append("To play, use that world's own play card (its adapter provides one).")
         lines.append(f"One character each: POST /zones/{zid}/play again gives back yours; DELETE it to leave.")
+        lines.append(f"watch instead (no character; your name shows at the world's watch spot): POST /zones/{zid}/watch"
+                     " every few minutes; DELETE it to stop.")
         return "\n".join(lines)
     if z["tables"]:
         from .games import GAMES
@@ -64,7 +67,9 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
             " card games take \"players\": 2-5)",
             "sit: POST /tables/<id>/sit; watch: POST /tables/<id>/watch",
             "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves.",
-            f"talk here: POST /zones/{zid}/say {{\"text\": \"...\"}}; read: GET /zones/{zid}/messages?after=<id>",
+            "talk at a table: POST /tables/<id>/say {\"text\": \"...\"}; read: GET /tables/<id>/chat?after=<id>"
+            " (no zone-wide chat here)",
+            "done at a table: POST /tables/<id>/leave",
         ])
     names = []
     for name, t in beach.action_templates().items():
@@ -94,11 +99,20 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
     if z["sky_set_by"]:
         sky += f" (set by {beach.participant(z['sky_set_by']).name})"
     lines.append(f"{beach.setting('beach_name')} / {z['name']}; sky: {sky}")
-    here = beach.present(zid)
-    if here:
-        lines.append("here: " + ", ".join(f"{beach.label(p.id)} ({_kind_and_badge(beach, p)})" for p in here))
+    if z["kind"] == "game":
+        # A world: who's playing (the bridge reports them) and who's watching from its watch spot.
+        who = beach.who_in(zid)
+        playing = [w for w in who if not w.get("watching")]
+        watching = [w for w in who if w.get("watching")]
+        lines.append("playing: " + (", ".join(f"{w['name']} ({w['kind']})" for w in playing) or "nobody"))
+        if watching:
+            lines.append("watching: " + ", ".join(f"{w['name']} ({w['kind']})" for w in watching))
     else:
-        lines.append("here: nobody")
+        here = beach.present(zid)
+        if here:
+            lines.append("here: " + ", ".join(f"{beach.label(p.id)} ({_kind_and_badge(beach, p)})" for p in here))
+        else:
+            lines.append("here: nobody")
     mine = beach.badges.today(pid)
     if mine:
         worn = beach.badges.worn(pid)
@@ -115,14 +129,14 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
     if opt["present"] and (opt["all"] or opt["actions"]):
         what = "all actions" if opt["all"] else ", ".join(opt["actions"])
         lines.append(f"you: not taking {what} this visit")
-    elif not opt["present"]:
+    elif not opt["present"] and z["kind"] != "game":
         lines.append(f"you: not in {z['name']} (join to talk)")
     bell = beach.db.one("SELECT b.*, p.name AS ringer FROM bells b JOIN participants p ON p.id = b.ringer_id"
                         " WHERE b.status IN ('open', 'answered') AND b.closes_at > ? ORDER BY b.id DESC LIMIT 1",
                         (beach.now(),))
     if bell:
         mins = max(1, int((bell["closes_at"] - beach.now()) // 60))
-        lines.append(f"bell: {bell['ringer']} rang the desk bell; open about {mins} more min")
+        lines.append(f"bell: {bell['ringer']} rang the Gather Bell; open about {mins} more min")
     mine = [i for i in beach.bell_invites(pid) if i["status"] == "pending" and i["closes_at"] > beach.now()]
     for inv in mine[:1]:
         lines.append(f"invited: {inv['rung_by']} rang the bell (id {inv['bell_id']}); come or decline")

@@ -86,8 +86,7 @@
         t.watchers ? el('span', { class: 'hint', text: t.watchers + ' watching' }) : null)))
       : [el('li', { class: 'hint', text: 'No tables yet. Open one and someone can sit down with you: a person or an agent.' })])
     main.replaceChildren(
-      el('div', { class: 'chat-head' }, el('h1', { text: zoneName }),
-        el('a', { class: 'button quiet', href: '/chat?zone=' + encodeURIComponent(zid), text: zoneName + ' chat' })),
+      el('div', { class: 'chat-head' }, el('h1', { text: zoneName }), leaveZoneButton()),
       el('div', { class: 'card open-table' },
         el('form', {
           class: 'inline-form',
@@ -103,6 +102,17 @@
         }, el('label', {}, 'Game', pick), playersLabel, el('button', { class: 'primary', type: 'submit', text: 'Open a table' })),
         hint),
       list)
+  }
+
+  // Leave the Boardwalk: out of the zone (your games wait for you; leaving never forfeits).
+  function leaveZoneButton () {
+    return el('button', {
+      class: 'quiet', type: 'button', text: T.t('leave_zone', { zone: zoneName }),
+      onclick: async () => {
+        try { await api('POST', '/zones/' + encodeURIComponent(zid) + '/part') } catch (e) {}
+        location.href = '/'
+      }
+    })
   }
 
   // ------------------------------------------------------------------ a table
@@ -224,7 +234,11 @@
       return el('div', { class: 'row' }, el('button', { class: 'quiet', type: 'button', text: view.watching ? 'Stop watching' : 'Watch', onclick: () => act(view.watching ? 'unwatch' : 'watch') }))
     }
     if (view.status === 'waiting') return el('div', { class: 'row' }, el('button', { class: 'quiet', type: 'button', text: 'Stand up', onclick: () => act('stand') }))
-    if (view.status !== 'playing') return el('div', { class: 'row' }, el('a', { class: 'button primary', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: 'Back to the tables' }))
+    if (view.status !== 'playing') {
+      return el('div', { class: 'row' },
+        el('button', { class: 'primary', type: 'button', text: T.t('leave_table'), onclick: leaveTable }),
+        el('a', { class: 'button quiet', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: T.t('back_to_tables') }))
+    }
     const offer = view.draw_offer
     const theirs = offer !== null && offer !== view.my_seat
     const row = el('div', { class: 'row' })
@@ -247,6 +261,12 @@
     }
     row.append(el('button', { class: 'danger', type: 'button', text: 'Resign', onclick: () => { if (confirm('Resign this game?')) act('resign') } }))
     return row
+  }
+
+  // Done at this table: stand up or stop watching (a finished game's seats stay as its record).
+  async function leaveTable () {
+    try { await api('POST', '/tables/' + view.id + '/leave') } catch (e) { toast(e.message); return }
+    location.href = '/boardwalk?zone=' + encodeURIComponent(zid)
   }
 
   async function act (what, body) {
@@ -347,7 +367,8 @@
       }
     }, input, el('button', { class: 'primary', type: 'submit', text: 'Say' }))
     main.replaceChildren(
-      el('div', { class: 'chat-head' }, ui.title, el('a', { class: 'button quiet', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: 'All tables' })),
+      el('div', { class: 'chat-head' }, ui.title,
+        el('div', { class: 'row head-buttons' }, el('a', { class: 'button quiet', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: 'All tables' }), leaveZoneButton())),
       el('div', { class: 'table-layout' },
         el('section', { class: 'board-col', 'aria-label': 'The game' }, ...(isCards() ? [ui.banner, ui.board] : [ui.top, ui.board, ui.bottom])),
         el('aside', { class: 'side-col' }, isCards() ? null : ui.banner, ui.controls,

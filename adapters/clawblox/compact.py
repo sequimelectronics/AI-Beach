@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 
 from .world import (
-    MESA_RULES, Entity, Player, Rules, Snapshot, beach_layout, direction_to, dist3, fmt_vec,
+    MESA_RULES, Entity, Player, Rules, Snapshot, beach_layout, direction_to, dist3, fmt_vec, watchers,
     held_object, r1, resting_on, standing_on,
 )
 
@@ -165,6 +165,7 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
     rows.sort(key=lambda r: r["dist"])
     on = standing_on(snap, statics, rules)
     score = snap.folders.get("Score")
+    spot, watching = watchers(snap)
     return {
         "tick": snap.tick,
         "me": [r1(v) for v in snap.me],
@@ -181,6 +182,7 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
              "in_view": p.in_view}
             for p in players_in_radius(snap, names_by_entity)
         ],
+        "watching": {"spot": spot, "names": watching} if watching else None,
     }
 
 
@@ -229,6 +231,8 @@ def view_text(v: dict) -> str:
         lines.append("players: " + "; ".join(ps))
     else:
         lines.append("players: nobody else nearby")
+    if v.get("watching"):
+        lines.append(f"watching from {v['watching']['spot']}: {', '.join(v['watching']['names'])}")
     return "\n".join(lines)
 
 
@@ -286,7 +290,7 @@ def map_card_text(snap: Snapshot, rules: Rules = MESA_RULES) -> str:
             edge.append("z=" + "/".join(f"{z:g}" for z in zs))
         lines.append(f"invisible walls at {', '.join(edge)} keep you on the island")
     if platforms:
-        lines.append(f"platforms (name: centre x,z; size x*z; top y). Ledges up to ~{rules.jump_rise - 0.5:g} high can be jumped:")
+        lines.append(f"platforms (name: center x,z; size x*z; top y). Ledges up to ~{rules.jump_rise - 0.5:g} high can be jumped:")
         for p in sorted(platforms, key=lambda s: (s.pos[0], s.pos[2])):
             on = [q for q in platforms if q is not p and q.contains_xz(p.pos) and q.top < p.top]
             under = f" (rises from {on[0].name})" if on else ""
@@ -322,6 +326,7 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
     """Map card for worlds that publish their layout (the beach)."""
     sand = layout["sand"]
     walls = layout.get("walls", {})
+    center = layout.get("center") or layout.get("centre")   # older worlds say "centre"  # spelling: kept
     lines = ["MAP (beach; x = east, z = north, y = up; distances in studs)"]
     lines.append(f"sand: flat, y={sand['top_y']:g}, x {sand['x'][0]:g}..{sand['x'][1]:g}, "
                  f"z {sand['z'][0]:g}..{sand['z'][1]:g}")
@@ -334,7 +339,7 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
         lines.append("goals: " + "; ".join(
             f"{x['name']} goal line z={x['line_z']:g} between posts x={x['x'][0]:g}..{x['x'][1]:g}"
             for x in goals) + f" (bar {g['height']:g} high). A ball over the line between the posts "
-            f"scores; it returns to the centre {fmt_vec((layout['centre'][0], 0, layout['centre'][1]))}")
+            f"scores; it returns to the center {fmt_vec((center[0], 0, center[1]))}")
     plots = layout.get("plots", [])
     if plots:
         size = plots[0]["half"] * 2

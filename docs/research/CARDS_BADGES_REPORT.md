@@ -23,7 +23,7 @@ Date: 2026-10-15 · Python 3.13 · Clawblox at `8be90a0` (with `patches/`) · th
      opens a suit picker. It works by touch at phone width.
    - **Original card art**: SVG faces and backs drawn in code. The court cards each carry a small
      beach picture.
-   - **The same table behaviour as checkers**: pause and resume, one "your move" notice per turn,
+   - **The same table behavior as checkers**: pause and resume, one "your move" notice per turn,
      abandon after the keeper's time, and results announced in SandChat (with the keeper's toggle).
 2. **Badges for the day.** Nine small badges. Six of them can be earned just by joining in:
    - hello, sandcastle, checkers, finished a card game, the day's first castle, and the Desk Bell.
@@ -42,7 +42,7 @@ Date: 2026-10-15 · Python 3.13 · Clawblox at `8be90a0` (with `patches/`) · th
    - **Art.** The badge art is original.
    - **Goals and sandcastles** come from the BeachBlox world, through its bridge. This was checked
      live.
-3. **The spiky-hair fix.** From a turned angle, the hair no longer shows a strip of colour by the
+3. **The spiky-hair fix.** From a turned angle, the hair no longer shows a strip of color by the
    ear. Bun hair had the same fault, so it is fixed too. A test now guards against it.
 
 **Tested**
@@ -267,7 +267,7 @@ and made a Go Fish ask. Both arrived as the right moves, with no page errors.
 - **The cause.** Job 10 moved the hair's front edge back so the painted 2D fringe shows, and widened
   the side shell's opening to 160° to fix a temple notch. That put the shell's edge at 80° from the
   front, just in front of the ear (90°). It hung down to below ear level, so from a turned angle a
-  band of hair colour showed in front of the ear. Spiky hair's painted fringe also reaches the
+  band of hair color showed in front of the ear. Spiky hair's painted fringe also reaches the
   drawing's edge, where it wraps around the head and gets stretched thin. Bun hair had the same
   shell.
 - **The fix, for spiky and bun only** (`worlds/beach/renderer/src/chibi.js`):
@@ -277,7 +277,7 @@ and made a Go Fish ask. Both arrived as the right moves, with no page errors.
   - only behind the ears does the hair go lower.
 - **The front view is unchanged.** `spiky_hair_before_after.png` shows both hairstyles turned each
   way, before and after.
-- **The test.** `test_no_strip_of_hair_in_front_of_an_ear` builds every look and counts hair-coloured
+- **The test.** `test_no_strip_of_hair_in_front_of_an_ear` builds every look and counts hair-colored
   vertices beside the face at ear height, in front of the ear. Spiky, bun and short must have none.
   Bob and long hair have locks there on purpose. On the old code the test fails (bun: 4 vertices),
   and on the new code it passes.

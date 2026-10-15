@@ -79,8 +79,8 @@ class Case(unittest.TestCase):
         self.beach.db.close()
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def play(self, who):
-        return self.beach.play(who.id, "beachblox", joiner=self.world.join, alive=self.world.alive)
+    def play(self, who, **kw):
+        return self.beach.play(who.id, "beachblox", joiner=self.world.join, alive=self.world.alive, **kw)
 
     def report(self, *players):
         """What the world's bridge reports: the players in the world, by the joins they were."""
@@ -117,7 +117,11 @@ class OneCharacterTests(Case):
     def test_after_a_world_restart_play_joins_afresh(self):
         first = self.play(self.coral)
         self.world.restart()                                     # the old character is gone
-        second = self.play(self.coral)
+        with self.assertRaises(BeachError) as told:              # never a new character in silence
+            self.play(self.coral)
+        self.assertIn("no longer in BeachBlox", told.exception.message)
+        self.assertEqual(len(self.world.joins), 1)
+        second = self.play(self.coral)                           # asking again makes the new one
         self.assertFalse(second["existing"])
         self.assertNotEqual(second["session"], first["session"])
         # Only the new join counts; the old grant is retired, so the world's door would drop it.
@@ -181,7 +185,7 @@ class ButtonStateTests(Case):
         self.world.restart()
         self.report()                                                     # the restarted world has nobody
         self.assertFalse(b.playing(self.coral.id, "beachblox"))          # Play again
-        self.play(self.coral)
+        self.play(self.coral, again=True)                                 # (the page says why first)
         self.assertTrue(b.playing(self.coral.id, "beachblox"))
 
     def test_the_bridge_going_quiet_means_play(self):
@@ -192,8 +196,11 @@ class ButtonStateTests(Case):
 
     def test_map_page_shows_the_button(self):
         js = (ROOT / "beach" / "web" / "map.js").read_text()
-        self.assertIn("text: z.playing ? 'Leave' : 'Play'", js)
-        self.assertIn("'DELETE', '/zones/' + encodeURIComponent(z.id) + '/play'", js)
+        # Job 12: you're playing -> "You're playing" and Leave; else Play and Watch.
+        self.assertIn("if (z.you) {", js)
+        self.assertIn("T.t('play')", js)
+        self.assertIn("T.t('watch')", js)
+        self.assertIn("if (z.you === 'playing') await api('DELETE', '/zones/' + id + '/play')", js)
 
 
 @unittest.skipUnless(HAVE_FASTAPI, "fastapi/httpx not installed")

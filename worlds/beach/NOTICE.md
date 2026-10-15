@@ -13,8 +13,8 @@ commit `8be90a0`:
 `main.lua` is new; its Pickup / Place / Throw handlers follow the same pattern as
 mesa-island's `main.lua`.
 
-Clawblox's licence text is in `renderer/LICENSE.clawblox`. No Clawblox assets
+Clawblox's license text is in `renderer/LICENSE.clawblox`. No Clawblox assets
 (e.g. `player.glb`) are included.
 
 `static/vendor/` holds unchanged (or bundled) copies of three.js 0.160.0 (MIT) and
-lucide 0.468.0 (ISC), each with its licence; see `static/vendor/README.md`.
+lucide 0.468.0 (ISC), each with its license; see `static/vendor/README.md`.

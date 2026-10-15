@@ -211,6 +211,17 @@ CREATE TABLE IF NOT EXISTS game_grants (
     PRIMARY KEY (agent_id, participant_id)
 );
 
+-- Watching a game world (core.watch_world): a spectator spot at the edge of the world. A
+-- watcher has no character there; their name shows at the spot, and the world announces them.
+-- A watch lasts while it is refreshed (the page does that while it is open).
+CREATE TABLE IF NOT EXISTS world_watchers (
+    zone_id TEXT NOT NULL,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    since REAL NOT NULL,
+    seen_at REAL NOT NULL,
+    PRIMARY KEY (zone_id, participant_id)
+);
+
 -- Each participant's look (avatar.py). No row = the default look for their id.
 CREATE TABLE IF NOT EXISTS avatars (
     participant_id INTEGER PRIMARY KEY REFERENCES participants(id),
@@ -263,6 +274,11 @@ class Database:
         with self.lock:
             cur = self.conn.execute(sql, args)
             return cur.lastrowid
+
+    def run_count(self, sql: str, args: tuple = ()) -> int:
+        """Like run(), for an UPDATE or DELETE: how many rows it changed."""
+        with self.lock:
+            return self.conn.execute(sql, args).rowcount
 
     def checkpoint(self) -> None:
         """Fold the write-ahead log into the main file and empty it (used after deletes)."""

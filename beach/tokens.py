@@ -1,7 +1,7 @@
 """Token counting for the sizes turn_bundle() reports.
 
 Exact with the optional `tokenizers` package and a tokenizer.json (set
-AI_BEACH_TOKENIZER or pass a path); otherwise chars/4, labelled approximate.
+AI_BEACH_TOKENIZER or pass a path); otherwise chars/4, labeled approximate.
 """
 
 from __future__ import annotations

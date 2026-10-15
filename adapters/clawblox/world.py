@@ -36,10 +36,10 @@ class Rules:
     world: str = "mesa-island"
     actions: tuple = ("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw")
     play_card: str = "PLAY_CARD.md"  # relative to adapters/clawblox/
-    pickup_reach: float = 6.0        # from your centre
+    pickup_reach: float = 6.0        # from your center
     place_reach: float = 7.0
     pickup_match: float = 1.5        # target point must be this close to the object
-    hold_offset_y: float = 3.5       # held object floats this far above your centre
+    hold_offset_y: float = 3.5       # held object floats this far above your center
     throw_speed_cap: float = 10.0    # silently clamped by the world
     half_height: float = 2.5         # character root part is 2 x 5 x 2
     radius: float = 1.0
@@ -274,6 +274,21 @@ def beach_layout(snap: Snapshot) -> dict | None:
         return json.loads(f.attrs["Layout"])
     except ValueError:
         return None
+
+
+def watchers(snap: Snapshot) -> tuple[str, list[str]]:
+    """Who's watching the world from its watch spot (a world behind a Beach shows them on a
+    folder): (the spot, their names). Watchers have no character there."""
+    import json
+    f = snap.folders.get("Watchers")
+    if f is None:
+        return "", []
+    try:
+        names = json.loads(f.attrs.get("Names") or "[]")
+    except ValueError:
+        names = []
+    names = [str(n) for n in names] if isinstance(names, list) else []
+    return str(f.attrs.get("Spot") or "the watch spot"), names
 
 
 def announcements(snap: Snapshot) -> list[tuple[int, str]]:

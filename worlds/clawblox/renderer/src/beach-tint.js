@@ -1,12 +1,12 @@
-// Beach colours on Clawblox's own character (the claw guy), for the ClawBlox zone. Original work
+// Beach colors on Clawblox's own character (the claw guy), for the ClawBlox zone. Original work
 // for AI Beach; the model itself is Clawblox's and is not changed or copied.
 //
-// The model's colours are painted into one texture, shown unlit (an emissive map): a red shell
+// The model's colors are painted into one texture, shown unlit (an emissive map): a red shell
 // with gold plates, dark lines and eyes. To tell players apart, each player's model gets its own
 // copy of the material with a few lines added to its shader: the shell becomes the participant's
-// outfit colour and the plates their trim colour, with the painted shading kept. Dark lines, eyes
-// and highlights (anything grey or nearly black) stay as painted. Players without a Beach look
-// keep the original colours.
+// outfit color and the plates their trim color, with the painted shading kept. Dark lines, eyes
+// and highlights (anything gray or nearly black) stay as painted. Players without a Beach look
+// keep the original colors.
 import * as THREE from '../../static/vendor/three/build/three.module.min.js'
 
 let tints = {}
@@ -29,13 +29,13 @@ export function startTints () {
   timer = setInterval(refresh, 10000)
 }
 
-// '#rrggbb' -> the colour's sRGB components as numbers 0..1 (the shader works in sRGB).
+// '#rrggbb' -> the color's sRGB components as numbers 0..1 (the shader works in sRGB).
 function srgb (hex) {
   const n = parseInt(String(hex).slice(1), 16)
   return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
 }
 
-const RECOLOUR = `
+const RECOLOR = `
 uniform vec3 beachShell;
 uniform vec3 beachPlate;
 uniform float beachOn;
@@ -46,7 +46,7 @@ vec3 beachHsv (vec3 c) {
   float d = q.x - min(q.w, q.y);
   return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)), d / (q.x + 1e-10), q.x);
 }
-vec3 beachRecolour (vec3 lin) {
+vec3 beachRecolor (vec3 lin) {
   if (beachOn < 0.5) return lin;
   vec3 c = pow(max(lin, vec3(0.0)), vec3(1.0 / 2.2));       // to sRGB, to judge hues as painted
   vec3 hsv = beachHsv(c);
@@ -67,18 +67,18 @@ function tintable (material) {
     shader.uniforms.beachShell = m.userData.beach.shell
     shader.uniforms.beachPlate = m.userData.beach.plate
     shader.uniforms.beachOn = m.userData.beach.on
-    shader.fragmentShader = RECOLOUR + shader.fragmentShader.replace(
+    shader.fragmentShader = RECOLOR + shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',
       `#ifdef USE_EMISSIVEMAP
         vec4 emissiveColor = texture2D( emissiveMap, vEmissiveMapUv );
-        totalEmissiveRadiance *= beachRecolour( emissiveColor.rgb );
+        totalEmissiveRadiance *= beachRecolor( emissiveColor.rgb );
       #endif`)
   }
   m.customProgramCacheKey = () => 'ai-beach-claw-tint'   // one shader program for every player
   return m
 }
 
-// Give a loaded model (under `root`) a player's colours. Called every frame: it only walks the
+// Give a loaded model (under `root`) a player's colors. Called every frame: it only walks the
 // model's few nodes and changes nothing unless the look changed or the model was (re)loaded.
 export function tintModel (root, name) {
   const look = name ? tints[name] : null

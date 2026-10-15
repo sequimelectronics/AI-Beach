@@ -108,7 +108,7 @@ What I found in Clawblox (at `8be90a0`):
      - **If found,** the player is admitted. Their label becomes their current Beach name, and it
        is re-read every 2 s, so renames and revocations apply live.
      - **If not found within 15 s,** the player is kicked, or, when the keeper allows guests,
-       labelled "Guest N".
+       labeled "Guest N".
   5. **Presence.** The bridge reports only admitted players (by join) and guests. The Beach maps
      admitted joins to participants itself, so the map shows current Beach names and can't be fooled
      by a world name.
@@ -143,7 +143,7 @@ network can still do by talking to a world's port directly, and what would close
    - **What happens.** A direct `POST /join?name=Anything` succeeds at the engine and creates a
      player.
    - **How long, and what it can do.** That player is never admitted and is kicked after 15 s.
-     Until then it's labelled "..." and isn't on the map. In BeachBlox its actions are ignored.
+     Until then it's labeled "..." and isn't on the map. In BeachBlox its actions are ignored.
      In ClawBlox (mesa-island's script, which isn't ours) it could walk about for those 15 s.
    - **Where its name shows meanwhile.** In Clawblox's own player list and world chat.
    - **The cost of repeating it.** Each attempt takes a player slot for 15 s, so a determined
@@ -249,7 +249,7 @@ In step 5, the real Sandy's join still carries its original world name "Sandy", 
 everything the Beach shows say Sandcastle Sam (see "What's still open", item 2).
 
 **The ClawBlox world, by hand on the same stack:**
-- Pebble joined through the Beach and was admitted, labelled Pebble.
+- Pebble joined through the Beach and was admitted, labeled Pebble.
 - A direct impostor "Pebble" was kicked after 15 s.
 - Coral vouching for Pebble's join was refused: "join the world as Coral, exactly: your Beach name
   is your name there too".

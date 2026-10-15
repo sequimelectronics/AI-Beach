@@ -9,8 +9,8 @@ Date: 2026-10-15 · Python 3.13 · Clawblox at `8be90a0` (with `patches/`) · th
 
 1. **The 3D faces are friendly now.**
    - **Painted from the 2D face.** The head wears the 2D avatar's own face: one drawing, so the
-     two can't drift apart. It is painted onto the head, not modelled.
-   - **Drawn like 2D.** Flat colours with a dark outline, and no glossy lighting or tone mapping.
+     two can't drift apart. It is painted onto the head, not modeled.
+   - **Drawn like 2D.** Flat colors with a dark outline, and no glossy lighting or tone mapping.
    - **Bangs and proportions** come from the 2D drawing.
    - **The expression** follows Kellan N.'s reference sketch, toned down.
    - **Varied fringes.** Not everyone's fringe is spiky, as Kellan N. suggested on seeing the first
@@ -61,7 +61,7 @@ on a plain page so it can be seen close.
 ![Coral in 2D and 3D](chibi_closeup.png)
 
 **All eight dev participants, front on,** in their own looks: hairstyles, fringes, accessories,
-skin and eye colours.
+skin and eye colors.
 
 ![The 3D chibis, front on](faces_3d_front.png)
 
@@ -73,12 +73,12 @@ skin and eye colours.
 
 | What looked off before | Now |
 |---|---|
-| **The eyes.** The shine was a slanted sliver and the pupil a dark wedge, reading as a slit-pupil stare. | The eyes are the 2D eyes, painted on: a big round shine plus a small one, a round pupil, and the iris in the eye colour. |
+| **The eyes.** The shine was a slanted sliver and the pupil a dark wedge, reading as a slit-pupil stare. | The eyes are the 2D eyes, painted on: a big round shine plus a small one, a round pupil, and the iris in the eye color. |
 | **The mouth** was a small dark blob, reading as a gasp or pout. | The 2D smile, now an open smile: flatter on top, rounded below, with a tongue. |
-| **The shading** was glossy and realistic, darkening toward the chin: the uncanny-doll recipe. | Flat colours exactly as in 2D: unlit materials with tone mapping off. Every shape has an ink outline in the 2D avatar's own outline colour. |
+| **The shading** was glossy and realistic, darkening toward the chin: the uncanny-doll recipe. | Flat colors exactly as in 2D: unlit materials with tone mapping off. Every shape has an ink outline in the 2D avatar's own outline color. |
 | **The forehead** was a smooth cap leaving a big bare forehead, with the features set low. | The 2D fringe is painted on the forehead, and the hair cap starts behind it. The features sit where the 2D face has them. |
 
-### How the face can't drift: painted, not modelled
+### How the face can't drift: painted, not modeled
 
 - **One drawing for both.** `beach/avatar.py` now draws the face as layers of its own (eyes,
   cheeks, mouth), and the 2D avatar uses them as before. `face_svg()` takes exactly those layers,
@@ -126,7 +126,7 @@ spiky. Each hairstyle now has its own fringe, drawn once in 2D and so painted in
 
 The chibi is still simple shapes, with no rigging and no animation. The changes:
 
-- the modelled eye and mouth discs are gone;
+- the modeled eye and mouth discs are gone;
 - one face shell is added per character;
 - one outline mesh is added per character, sharing the merged shapes' buffers;
 - the hair cap moved back to show the painted fringe, and bun and spiky got side shells.
@@ -150,7 +150,7 @@ The chibi is still simple shapes, with no rigging and no animation. The changes:
 - **Side and back views.** The painted face and fringe are made for the front. From far to the
   side the fringe thins out, because a front-on projection gets stretched over the curve of the
   head. The hair shells cover the sides and back.
-- **The spiky style** still shows a small strip of hair colour by one ear in some turns.
+- **The spiky style** still shows a small strip of hair color by one ear in some turns.
 
 ## 2. Play becomes Leave: one character per person per world
 
@@ -245,7 +245,7 @@ py -m unittest discover -s tests -v
 | | |
 |---|---|
 | `beach/avatar.py` | The face as its own layers; the cheerful touches; per-style fringes; `face_svg`, `guest_face_svg`; the face in `game_look` |
-| `worlds/beach/renderer/src/chibi.js` | The painted face, flat unlit colours, the ink outline, the cap and shells for the fringe |
+| `worlds/beach/renderer/src/chibi.js` | The painted face, flat unlit colors, the ink outline, the cap and shells for the fringe |
 | `worlds/beach/renderer/src/index.js` | The guest face from `tints.json` |
 | `beach/core.py`, `beach/app.py`, `beach/front_door.py` | One character per world: `play` reuse, `leave_world`, `playing`, `session_alive`; `GET`/`DELETE /zones/<z>/play`; `playing` in `/map` |
 | `beach/bridge.py`, `worlds/beach/scripts/ServerScriptService/BeachDoor.lua` | "left" carried to the world; the door removes left characters |

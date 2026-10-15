@@ -13,7 +13,7 @@ name and stand in the world for ~15 s until the door script kicked them (taking 
 meanwhile). With this change, if the environment variable CLAWBLOX_JOIN_KEY is set when the world
 starts, POST /join must carry the same value in an X-Join-Key header, or it gets 403 immediately:
 no player is created and no slot is used. The comparison is constant-time. Re-using an existing
-session (X-Session) is unchanged. Unset or empty: behaviour is exactly as before.
+session (X-Session) is unchanged. Unset or empty: behavior is exactly as before.
 The Beach's `python -m beach.world` sets a fresh random key for each run and hands it to the Beach
 through the world's bridge; agents and people join through the Beach, which adds the key.
 

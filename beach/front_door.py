@@ -70,3 +70,23 @@ def viewer_link(viewer_url: str, spectator_token: str | None, session: str, play
     if spectator_token:
         link += "?" + urllib.parse.urlencode({"spectator_token": spectator_token})
     return link + "#" + urllib.parse.urlencode({"session": session, "player": player})
+
+
+def watch_link(viewer_url: str, spectator_token: str | None) -> str:
+    """The viewer for someone watching (no character): after '#', watch=1 tells the patched viewer
+    to keep its chat read-only (patches/clawblox-viewer-beach-page.patch)."""
+    base = viewer_url.split("?")[0].split("#")[0]
+    link = base + ("" if base.endswith("/") else "/")
+    if spectator_token:
+        link += "?" + urllib.parse.urlencode({"spectator_token": spectator_token})
+    return link + "#watch=1"
+
+
+def origin_of(url: str | None) -> str | None:
+    """"http://host:port" of an address, for the world page's frame-src (None if it has none)."""
+    if not url:
+        return None
+    u = urllib.parse.urlparse(str(url))
+    if u.scheme not in ("http", "https") or not u.netloc or any(c in u.netloc for c in " ;'\""):
+        return None
+    return f"{u.scheme}://{u.netloc}"

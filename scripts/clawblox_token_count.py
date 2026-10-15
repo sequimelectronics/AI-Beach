@@ -17,7 +17,7 @@ from tokenizers import Tokenizer
 
 
 def compact(obs: dict) -> dict:
-    """Drop derived geometry (rotation, aabb, obb corners, colour) and round to 0.1."""
+    """Drop derived geometry (rotation, aabb, obb corners, color) and round to 0.1."""
     def r(v):
         return [round(x, 1) for x in v]
     ents = []

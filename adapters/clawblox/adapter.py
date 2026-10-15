@@ -83,6 +83,17 @@ class DoorRefused(RuntimeError):
     """A world behind a Beach's front door didn't let this join in."""
 
 
+class CharacterGone(HttpError):
+    """The world no longer has this character (it was idle too long, or the world restarted).
+    The adapter forgets the session; the next action joins again, and a Beach says what
+    happened before it makes a new character."""
+
+    def __init__(self, status: int, body: str):
+        super().__init__(status, body)
+        self.args = (f"your character is no longer in the world (HTTP {status}: {body[:120]}); "
+                     "the next action joins again as a new character",)
+
+
 class ClawbloxAdapter:
     def __init__(self, base_url: str | None = None, name: str = "agent", *,
                  transport=None, rules: Rules | None = None,
@@ -129,6 +140,12 @@ class ClawbloxAdapter:
 
     def _call(self, method: str, path: str, body: dict | None = None) -> str:
         status, text = self.t.request(method, path, body, self.session)
+        gone = status in (401, 404) or (status == 400 and "not in any instance" in text.lower())
+        if gone and self.session and path.split("?")[0] in ("/observe", "/input", "/chat"):
+            # The session no longer names a character here: say so, never act as nobody.
+            self.session = None
+            self.agent_id = None
+            raise CharacterGone(status, text)
         if status >= 400:
             raise HttpError(status, text)
         return text
@@ -189,7 +206,7 @@ class ClawbloxAdapter:
             name = display_name(p)
             if p.get("id") and name:
                 self._names_by_agent[str(p["id"])] = name
-        for e in snap.entities:  # labelled characters, in view or not (the beach world tags them)
+        for e in snap.entities:  # labeled characters, in view or not (the beach world tags them)
             label, uid = e.attrs.get("PlayerName"), e.attrs.get("PlayerUserId")
             if isinstance(label, str) and label and label != "..." and isinstance(uid, (int, float)):
                 self._names_by_user[int(uid)] = label
@@ -671,7 +688,7 @@ class ClawbloxAdapter:
         if news:
             tail += "; " + " ".join(news)
             if scored:
-                tail += " The ball goes back to the centre."
+                tail += " The ball goes back to the center."
         return f"Kicked the {kind} {heading} (power {power:g}){clipped}{tail}"
 
     def _act_mold(self, data: dict) -> str:
