@@ -59,7 +59,7 @@ licenses were read from each installed package's own metadata, except where note
 | click | (8.5.0, via uvicorn) | BSD-3-Clause | yes |
 | h11 | (0.16.0) | MIT | yes |
 | exceptiongroup | (Python < 3.11 only; not installed here) | MIT, per the project; **not checked here** | yes, if so |
-| colorama | (Windows only, via click; not installed here) | BSD-3-Clause, per the project; **not checked here** | yes, if so |
+| colorama | (Windows only, via click) | BSD-3-Clause; checked on Windows 2026-10-15 (installed 0.4.6, BSD classifier) | yes |
 
 ### Tests
 
@@ -86,7 +86,7 @@ licenses were read from each installed package's own metadata, except where note
 | tqdm | (4.70.1) | MPL-2.0 AND MIT | yes (as certifi) |
 | httpx2, httpcore2 | (2.13.1) | BSD-3-Clause | yes |
 | truststore | (0.10.5) | MIT | yes |
-| tomli | (Python < 3.11 only; not installed here) | MIT, per the project; **not checked here** | yes, if so |
+| tomli | (Python < 3.11 only) | MIT; checked 2026-10-15 (installed 2.4.1 metadata: MIT) | yes |
 
 **Flag: the tokenizer file.** The Gemma tokenizer used to measure token counts
 (`tokenizer.json` from Google's Gemma models) is **not** part of this repository and must not be
