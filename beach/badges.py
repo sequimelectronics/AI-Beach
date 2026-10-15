@@ -1,7 +1,7 @@
 """Badges for the day: small, friendly marks of something that happened today.
 
 A badge is earned for something done today, worn on your avatar (one at a time, your choice;
-the newest by default), mentioned when you arrive in a zone ("Pebble arrives, wearing today's
+by default the most special one you have), mentioned when you arrive in a zone ("Pebble arrives, wearing today's
 goal-scorer ribbon."), and gone at the keeper's daily reset. There are no counts, no history and
 no leaderboard: the Beach keeps only today's badges and deletes the rest.
 
@@ -36,6 +36,9 @@ BADGES: dict[str, tuple[str, str]] = {
     "card-win": ("lucky-hand ribbon", "won a card game"),
     "bell": ("desk-bell badge", "rang the Desk Bell and someone came"),
 }
+# Which badge is worn when you haven't chosen: the first of yours in this order, so saying hello
+# after scoring a goal doesn't swap the goal-scorer ribbon for a hello shell.
+SHOWN_FIRST = ("card-win", "goal", "tall-castle", "first-castle", "bell", "card-game", "checkers", "castle", "hello")
 # Events a game world may report, and the badge each one earns.
 WORLD_EVENTS = {"goal": "goal", "castle": "castle", "tall_castle": "tall-castle"}
 
@@ -86,15 +89,15 @@ class Badges:
             return None
         if row and row["badge"] in have:
             return row["badge"]
-        return have[-1] if have else None
+        return min(have, key=SHOWN_FIRST.index) if have else None
 
     def wear(self, pid: int, badge: str | None) -> dict:
         """Choose which of today's badges to wear: an id or its words; None to wear none;
-        "newest" to go back to wearing the newest."""
+        "auto" to go back to the default (the most special one you have)."""
         from .core import BeachError
         if badge is None or badge == "none":
             self.db.run("INSERT OR REPLACE INTO badge_worn VALUES (?, 'none')", (pid,))
-        elif badge == "newest":
+        elif badge == "auto":
             self.db.run("DELETE FROM badge_worn WHERE participant_id = ?", (pid,))
         else:
             want = next((b for b, (w, _) in BADGES.items() if badge in (b, w)), None)

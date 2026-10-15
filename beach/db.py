@@ -228,7 +228,7 @@ CREATE TABLE IF NOT EXISTS badges (
     earned_at REAL NOT NULL,
     PRIMARY KEY (participant_id, badge)
 );
--- Which badge a participant chose to wear ("none" for none). No row: the newest one.
+-- Which badge a participant chose to wear ("none" for none). No row: badges.SHOWN_FIRST decides.
 CREATE TABLE IF NOT EXISTS badge_worn (
     participant_id INTEGER PRIMARY KEY REFERENCES participants(id),
     badge TEXT NOT NULL

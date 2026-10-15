@@ -71,6 +71,10 @@ All scenery (sand, sea, walls, goal posts, plot markers) is tagged Static, so it
 - **Castle plots:** four 5x5 plots along the west side, at z = -18, -6, 6 and 18 (x = -9.5).
   Pieces can go anywhere, but a castle only counts inside a plot. Nothing is scripted
   to knock castles down: badly balanced pieces fall over by themselves.
+- **Badges for the day** (when the world runs with an AI Beach): a goal counts for whoever
+  kicked the ball last (within 10 seconds); a castle of 3 or more resting pieces in a plot
+  counts for everyone who put one down, and a castle 4 high standing for 3 seconds "stood
+  tall". The world only records which join did it; the Beach gives the badges.
 - **Spawn points:** six, spread along the middle of the sand. Idle players are removed
   after 5 minutes.
 

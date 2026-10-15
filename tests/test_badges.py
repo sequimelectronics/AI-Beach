@@ -171,9 +171,9 @@ class ShowingTests(BadgeCase):
             self.b.award(self.p[name].id, b)
             self.clock.advance(1)
 
-    def test_worn_newest_by_default_and_chosen(self):
+    def test_worn_by_default_the_most_special_and_chosen(self):
         pid = self.p["Pebble"].id
-        self.earn("Pebble", "hello", "goal")
+        self.earn("Pebble", "goal", "hello")                  # hello after a goal doesn't replace it
         self.assertEqual(self.b.worn(pid), "goal")
         self.b.wear(pid, "hello shell")                        # by its words...
         self.assertEqual(self.b.worn(pid), "hello")
@@ -181,10 +181,10 @@ class ShowingTests(BadgeCase):
         self.assertEqual(self.b.worn(pid), "goal")
         self.b.wear(pid, None)
         self.assertIsNone(self.b.worn(pid))
-        self.earn("Pebble", "checkers")                        # wearing none stays your choice
+        self.earn("Pebble", "card-win")                        # wearing none stays your choice
         self.assertIsNone(self.b.worn(pid))
-        self.b.wear(pid, "newest")
-        self.assertEqual(self.b.worn(pid), "checkers")
+        self.b.wear(pid, "auto")
+        self.assertEqual(self.b.worn(pid), "card-win")
         with self.assertRaises(BeachError):
             self.b.wear(pid, "bell")                           # not earned today
 
@@ -212,7 +212,7 @@ class ShowingTests(BadgeCase):
         text = state_text(self.beach, self.p["Sandy"].id)
         self.assertIn("Pebble (agent, wearing goal-scorer ribbon)", text)
         self.assertIn("Coral (person)", text)
-        self.assertIn("your badges today: hello shell, checkers chip (wearing)", text)
+        self.assertIn("your badges today: hello shell, checkers chip (wearing)", text)   # checkers outranks hello
         self.assertNotIn("<svg", text)
         self.assertNotIn("your badges", state_text(self.beach, self.p["Coral"].id))
 

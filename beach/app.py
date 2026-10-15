@@ -160,7 +160,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     @app.put("/me/badges")
     def wear_badge(body: dict = Body(...), p: Participant = Depends(who)):
-        """{"wear": "<badge id or words>"}, {"wear": null} for none, or {"wear": "newest"}."""
+        """{"wear": "<badge id or words>"}, {"wear": null} for none, or {"wear": "auto"}."""
         w = body.get("wear")
         return beach.badges.wear(p.id, None if w is None else str(w))
 
