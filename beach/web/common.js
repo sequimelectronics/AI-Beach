@@ -65,8 +65,27 @@ const Beach = (() => {
     const type = r.headers.get('content-type') || ''
     if (type.includes('json')) data = await r.json()
     else data = await r.text()
+    if (r.status === 401 && token()) lostAccess()
     if (!r.ok) throw new ApiError(r.status, typeof data === 'object' ? data : { message: data })
     return data
+  }
+
+  // This device's sign-in stopped working while a page was open: a visit ended, or the keeper
+  // signed it out. Say so plainly, forget it, and stop.
+  let lost = false
+  function lostAccess () {
+    if (lost) return
+    lost = true
+    try { localStorage.removeItem(KEY) } catch (e) {}
+    window.__beachToken = null
+    const mainEl = document.querySelector('main')
+    if (!mainEl) return
+    document.querySelectorAll('.topbar, .notice').forEach(n => n.remove())
+    mainEl.replaceChildren(
+      el('h1', { text: 'You\'re signed out' }),
+      el('div', { class: 'card' },
+        el('p', { text: 'This device\'s way in doesn\'t work any more: a visit has ended, or the Beach-keeper signed it out. Nothing from here was kept on this device.' }),
+        el('p', { class: 'hint', text: 'To come back, ask the Beach-keeper for a new invite.' })))
   }
 
   // Build elements without ever parsing names or messages as HTML.
@@ -350,6 +369,9 @@ const Beach = (() => {
           el('label', {}, 'Token', el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false' })),
           el('button', { class: 'primary', type: 'submit', text: 'Sign in' })))))
   }
+
+  // A sign-in or invite link opened in a tab that's already on the Beach: start over with it.
+  window.addEventListener('hashchange', () => { if (/(?:^#|&)[ct]=/.test(location.hash)) location.reload() })
 
   // Every page starts here. Returns the /map data, or null if this browser isn't signed in.
   async function start (current) {

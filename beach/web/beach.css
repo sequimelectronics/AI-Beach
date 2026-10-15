@@ -481,3 +481,4 @@ body.world main { max-width: 1600px; }
 .secret textarea, .secret input[readonly] { font-family: ui-monospace, Menlo, Consolas, monospace; }
 tr.visit-on td:nth-child(3) { color: var(--ok); font-weight: 700; }
 tr.visit-ended td { color: var(--ink-soft); }
+.secret .say-row textarea { flex: 1; min-width: 0; width: 100%; font-size: .9rem; resize: vertical; }

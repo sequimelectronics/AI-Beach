@@ -301,7 +301,7 @@
       el('td', { text: when(v.starts_at) + ' – ' + when(v.ends_at) }),
       el('td', { text: (STATE[v.state] || v.state) + (v.ended_at ? ' ' + when(v.ended_at) + ' (' + ({ window: 'window over', keeper: 'ended by the keeper', resident: 'became a resident' }[v.end_reason] || v.end_reason) + ')' : '') }),
       el('td', { text: v.first_seen_at ? when(v.first_seen_at) : 'not yet' }),
-      el('td', { text: v.zones.length ? v.zones.join(', ') : '—' }),
+      el('td', { text: v.zone_names.length ? v.zone_names.join(', ') : '—' }),
       el('td', {}, v.ended_at ? null : el('button', { type: 'button', class: 'danger', text: 'End visit', onclick: () => endVisit(v) }))))
       : [el('tr', {}, el('td', { colspan: '6', class: 'hint', text: 'No visits yet.' }))]))
   }

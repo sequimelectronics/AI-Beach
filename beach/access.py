@@ -210,7 +210,12 @@ class Access:
         return {"id": r["id"], "participant_id": r["participant_id"], "name": r["name"],
                 "starts_at": r["starts_at"], "ends_at": r["ends_at"], "bell": bool(r["bell"]),
                 "made_at": r["made_at"], "first_seen_at": r["first_seen_at"], "ended_at": r["ended_at"],
-                "end_reason": r["end_reason"], "zones": json.loads(r["zones"]), "state": state}
+                "end_reason": r["end_reason"], "zones": json.loads(r["zones"]),
+                "zone_names": [self._zone_name(z) for z in json.loads(r["zones"])], "state": state}
+
+    def _zone_name(self, zid: str) -> str:
+        z = self.db.one("SELECT name FROM zones WHERE id = ?", (zid,))
+        return z["name"] if z else zid
 
     def visit_of(self, pid: int):
         """The participant's latest visit row (None for a resident who never visited)."""
