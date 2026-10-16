@@ -333,5 +333,44 @@ class RecoveryTests(AccessCase):
         self.assertEqual(self.http.post("/claim", json={"code": "keeper"}).status_code, 404)
 
 
+class VisitorAddressTests(AccessCase):
+    """Visitors come from outside: their invites use the visitor address; residents keep the household one."""
+
+    def settings(self, **kw):
+        r = self.http.patch("/admin/settings", json=kw, headers=self.admin)
+        self.assertEqual(r.status_code, 200, r.text)
+
+    def test_visitor_invites_use_the_visitor_address_and_residents_dont(self):
+        self.settings(link_base="http://192.168.1.20:8765", visitor_link_base="https://beach.example.org/")
+        v = self.visitor()
+        self.assertTrue(v["invite"]["link"].startswith("https://beach.example.org/#c="), v["invite"]["link"])
+        self.assertIn("https://beach.example.org", v["invite"]["for_agent"])
+        r = self.http.post("/admin/participants", json={"name": "Drift", "kind": "agent"}, headers=self.admin).json()
+        self.assertTrue(r["invite"]["link"].startswith("http://192.168.1.20:8765/#c="), r["invite"]["link"])
+        self.assertNotIn("beach.example.org", r["invite"]["for_agent"])
+
+    def test_without_a_visitor_address_visitors_fall_back_to_the_household_one(self):
+        self.settings(link_base="http://192.168.1.20:8765")
+        self.assertTrue(self.visitor()["invite"]["link"].startswith("http://192.168.1.20:8765/#c="))
+
+    def test_bad_values_are_refused(self):
+        for bad in ({"visitor_link_base": "beach.example.org"}, {"trusted_proxy": "yes"}):
+            self.assertEqual(self.http.patch("/admin/settings", json=bad, headers=self.admin).status_code, 400, bad)
+
+    def last_ip(self, code, headers, client):
+        http = TestClient(create_app(self.beach, upkeep_interval=None), client=client)
+        tok = http.post("/claim", json={"code": code}, headers=headers).json()["token"]
+        http.get("/me", headers={**headers, **self.h(tok)})
+        return self.beach.db.one("SELECT last_ip FROM sign_ins ORDER BY id DESC LIMIT 1")["last_ip"]
+
+    def test_the_proxy_header_is_read_only_when_trusted_and_only_from_this_computer(self):
+        fwd = {"X-Forwarded-For": "203.0.113.9, 10.0.0.1"}
+        local, remote = ("127.0.0.1", 50000), ("192.168.1.30", 50000)
+        self.assertEqual(self.last_ip(self.visitor("Kelp")["invite"]["code"], fwd, local), "127.0.0.1")   # off
+        self.settings(trusted_proxy=True)
+        self.assertEqual(self.last_ip(self.visitor("Wrack")["invite"]["code"], fwd, local), "203.0.113.9")
+        self.assertEqual(self.last_ip(self.visitor("Tide")["invite"]["code"], fwd, remote), "192.168.1.30")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -91,8 +91,18 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             headers["Retry-After"] = str(int(exc.retry_after) + 1)
         return JSONResponse(body, status_code=STATUS.get(exc.code, 400), headers=headers)
 
+    def client_ip(request: Request) -> str | None:
+        """Where a request came from. Behind a proxy on this computer (keeper setting trusted_proxy), that's the
+        first address in X-Forwarded-For; the header is never trusted from anywhere else."""
+        host = request.client.host if request.client else None
+        if host in ("127.0.0.1", "::1") and beach.setting("trusted_proxy"):
+            fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+            if fwd:
+                return fwd[:64]
+        return host
+
     def who(request: Request, authorization: str | None = Header(default=None)) -> Participant:
-        p = beach.authenticate(_token(authorization), ip=request.client.host if request.client else None)
+        p = beach.authenticate(_token(authorization), ip=client_ip(request))
         if p is None:
             raise HTTPException(401, "a valid token is needed (Authorization: Bearer <token>)")
         return p
@@ -149,8 +159,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.post("/claim")
     def claim(request: Request, body: dict = Body(...)):
         """Use up an invite code (no token needed): it becomes this device's own token. Once only."""
-        return beach.access.claim(str(body.get("code", "")), body.get("label"),
-                                  ip=request.client.host if request.client else None)
+        return beach.access.claim(str(body.get("code", "")), body.get("label"), ip=client_ip(request))
 
     # ----------------------------------------------------------- everyone
     @app.post("/me/sign-out")
@@ -515,7 +524,9 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def invite_out(request: Request, p, invite: dict, visit: dict | None = None) -> dict:
         """An invite for the keeper to hand over: the code, a link for a browser, and the few lines
         an agent needs to claim it."""
-        base = (beach.setting("link_base") or str(request.base_url)).rstrip("/")
+        # A visitor comes from outside the household, so their invite uses the visitor address when there is one.
+        base = ((visit and beach.setting("visitor_link_base")) or beach.setting("link_base")
+                or str(request.base_url)).rstrip("/")
         return {"id": p.id, "name": p.name, "kind": p.kind, "access": p.access,
                 **({"visit": visit} if visit else {}),
                 "invite": {**{k: invite[k] for k in ("code", "label", "expires_at")},

@@ -59,6 +59,8 @@ DEFAULT_SETTINGS: dict = {
     "notify_hook": None,             # {"command": [...]} or {"url": "http://127.0.0.1:.../..."}
     "avatar_cooldown_s": 3600,       # how often a participant may change their look (first change free)
     "link_base": None,               # address sign-in links use, e.g. "http://192.168.1.20:8765"
+    "visitor_link_base": None,       # address visitor invites use, e.g. "https://beach.example.org" (else link_base)
+    "trusted_proxy": False,          # a proxy on this computer (e.g. Caddy) forwards visitors: read X-Forwarded-For
     "rename_cooldown_s": 86400,      # how often a participant may rename themselves (first rename free)
     "rename_hint_s": 86400,          # for this long, agents see "New (was Old)", and Old stays reserved
     "game_guests": False,            # game worlds admit players the Beach didn't vouch for (as guests)
@@ -271,10 +273,12 @@ class Beach:
             if k == "notify_hook" and v is not None:
                 from .hooks import validate_hook
                 validate_hook(v)
-            if k == "link_base" and v is not None:
+            if k in ("link_base", "visitor_link_base") and v is not None:
                 if not isinstance(v, str) or not re.match(r"^https?://[^\s/?#]+/?$", v.strip()):
-                    raise BeachError("invalid", "link_base is an address like http://192.168.1.20:8765")
+                    raise BeachError("invalid", f"{k} is an address like http://192.168.1.20:8765")
                 v = v.strip().rstrip("/")
+            if k == "trusted_proxy" and not isinstance(v, bool):
+                raise BeachError("invalid", "trusted_proxy is true or false")
             if k in ("beach_name", "sandchat_name"):
                 v = self._display_name(v)
             if k.endswith("_s") and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):

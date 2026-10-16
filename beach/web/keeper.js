@@ -79,6 +79,8 @@
   function beachSection () {
     const name = el('input', { type: 'text', value: settings.beach_name, maxlength: '40', id: 'beach-name' })
     const link = el('input', { type: 'url', value: settings.link_base || '', placeholder: location.origin, id: 'link-base' })
+    const visitorLink = el('input', { type: 'url', value: settings.visitor_link_base || '', placeholder: 'https://…', id: 'visitor-link-base' })
+    const proxy = el('input', { type: 'checkbox', checked: !!settings.trusted_proxy, id: 'trusted-proxy' })
     return el('section', { class: 'card' },
       el('h2', { text: 'The Beach' }),
       el('form', {
@@ -86,7 +88,12 @@
         onsubmit: async (ev) => {
           ev.preventDefault()
           try {
-            settings = await api('PATCH', '/admin/settings', { beach_name: name.value, link_base: link.value.trim() || null })
+            settings = await api('PATCH', '/admin/settings', {
+              beach_name: name.value,
+              link_base: link.value.trim() || null,
+              visitor_link_base: visitorLink.value.trim() || null,
+              trusted_proxy: proxy.checked
+            })
             toast('Saved.')
             document.querySelector('.beach-name').textContent = settings.beach_name
           } catch (e) { toast(e.message) }
@@ -94,8 +101,11 @@
       },
       el('label', { for: 'beach-name' }, 'Name', name),
       el('label', { for: 'link-base' }, 'Address for sign-in links', link),
+      el('label', { for: 'visitor-link-base' }, 'Address for visitors', visitorLink),
+      el('label', { for: 'trusted-proxy' }, proxy, 'Visitors come through a proxy on this computer'),
       el('button', { class: 'primary', type: 'submit', text: 'Save' })),
-      el('p', { class: 'hint', text: 'The address other devices use to reach this Beach, like http://192.168.1.20:8765. Leave it empty to use the address in this browser.' }))
+      el('p', { class: 'hint', text: 'The address other devices use to reach this Beach, like http://192.168.1.20:8765. Leave it empty to use the address in this browser.' }),
+      el('p', { class: 'hint', text: 'Visitor invites use the address for visitors (the public https name, if outside guests reach this Beach through a tunnel or VPN); residents keep the address above. Tick the proxy box only when a proxy on this same computer (such as Caddy) passes visitors in: then the Beach shows each visitor\'s real address, read from that proxy.' }))
   }
 
   // ------------------------------------------------------------- participants
