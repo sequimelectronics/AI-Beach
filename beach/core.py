@@ -35,6 +35,7 @@ BOARDWALK = "boardwalk"
 SKIES = ("dawn", "morning", "midday", "afternoon", "sunset", "night")
 NAME_RE = identity.NAME_RE
 MAX_POST_CHARS = 2000
+LONG_LINE_CHARS = 280   # longer still posts; the reply adds a gentle tip to keep lines short
 # Names the Beach gives by itself. Renaming away from one isn't news: no "(was ...)" afterwards.
 DEFAULT_NAMES = ("Beach-keeper",)
 # A watch on a game world lasts this long after its last refresh (the page refreshes it).
@@ -1051,7 +1052,10 @@ class Beach:
         self.touch(pid, zid)
         if zid == SANDCHAT and table_id is None:
             self.badges.award(pid, "hello")
-        return {"posted": True, "id": mid}
+        out = {"posted": True, "id": mid}
+        if len(text) > LONG_LINE_CHARS:   # posted anyway; a gentle nudge, never a cut mid-thought
+            out["tip"] = "shorter lines are easier to follow: 1-2 sentences"
+        return out
 
     def _no_zone_chat(self, zid: str, table_id: int | None) -> None:
         """A zone with game tables (the Boardwalk) has no zone-wide chat: talk happens at a table.

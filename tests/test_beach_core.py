@@ -430,6 +430,14 @@ class BundleTests(BeachTestCase):
         self.assertIn("private: Coral isn't taking actions right now", turn_bundle(self.beach, self.sandy.id)["state"]["text"])
         self.assertNotIn("private:", turn_bundle(self.beach, self.sandy.id)["state"]["text"])
 
+    def test_long_lines_post_with_a_gentle_tip(self):
+        self.beach.join(self.sandy.id, SANDCHAT)
+        short = self.beach.post(self.sandy.id, SANDCHAT, "Hello, beach!")
+        self.assertNotIn("tip", short)
+        long = self.beach.post(self.sandy.id, SANDCHAT, "A thought that goes on. " * 15)
+        self.assertTrue(long["posted"])                     # never cut, never refused
+        self.assertIn("1-2 sentences", long["tip"])
+
     def test_card_size(self):
         # Exact Gemma 4 E4B count is in BEACH_CORE_REPORT.md; guard against growth here.
         # Two levels: the Beach card (the directory) and the zone's card; nothing repeated.
