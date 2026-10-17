@@ -236,6 +236,9 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
         lines.append("waiting for players to sit down")
     elif status in ("finished", "abandoned"):
         lines.append("game over: " + bw.result_text(g, seats, json.loads(row["result"]), status))
+    elif status == "closed":   # everyone stood up before it started, or a two-player game was called off
+        lines.append("table closed: " + (bw.result_text(g, seats, json.loads(row["result"]), status)
+                                         if row["result"] else "it never started"))
     else:
         offer = row["draw_offer"]
         if offer is not None and offer != me and me is not None:
@@ -248,7 +251,7 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
         elif me is not None and g.seat_names == () and me in st.get("out", []):
             lines.append("you have left this game")
         else:
-            lines.append(f"{names[turn]}'s move; the game waits for them")
+            lines.append(f"{names.get(turn, 'the next player')}'s move; the game waits for them")
     for item in beach.inbox(pid, consume=consume_notes):
         lines.append(f"private: {item['text']}")
     return "\n".join(lines)

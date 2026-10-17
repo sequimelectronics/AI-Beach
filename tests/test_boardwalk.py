@@ -162,6 +162,14 @@ class TableTests(BoardwalkCase):
         self.assertEqual(self.sandchat_notices(), [])
         self.assertEqual(self.bw.result_text(self.bw.game(self.bw.table(tid)), self.bw.seats(tid),
                                              v["result"], "closed"), "Sandy called it off before the first move")
+        self.assertIn("table closed: Sandy called it off", table_bundle(self.beach, self.coral.id, tid)["state"]["text"])
+
+    def test_a_closed_table_reads_without_crashing(self):
+        # Live, 10-17 (server log): GET /agent/turn?table=<a table everyone stood up from> raised KeyError.
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.stand(self.sandy.id, tid)
+        self.assertEqual(self.bw.table(tid)["status"], "closed")
+        self.assertIn("table closed: it never started", table_bundle(self.beach, self.sandy.id, tid)["state"]["text"])
 
     def test_resign_and_draw_available_on_either_turn(self):
         tid = self.game()
