@@ -230,7 +230,15 @@ class Boardwalk:
         if out:
             self._finish(tid, out)
         reply = {"moved": info["move"], "captured": info.get("captured", []),
-                 "crowned": info.get("crowned", False), "over": out}
+                 "crowned": info.get("crowned", False), "over": out,
+                 # Plainly whose move it is now, so nobody has to read it out of the text: in Go Fish a
+                 # catch (or fishing the card you asked for) means you go again (WorkClaude, 10-17).
+                 "your_turn": not out and g.to_move(new) == seat}
+        if reply["your_turn"]:
+            reply["legal"] = g.legal_moves(new)   # go again without another read of the table
+        elif not out:
+            nxt = self.seats(tid).get(g.to_move(new))
+            reply["next"] = self._name(nxt) if nxt is not None else None
         if info.get("text"):
             reply["text"] = info["text"]
         if private:

@@ -21,6 +21,7 @@ from .core import Beach
 
 KINDS = ("say", "action", "notice")
 LIMIT = 50
+ONLY = {"room", "table", "mention", "note"}   # what `only` can keep: room chat, your tables, lines naming you, notes
 
 
 def parse_cursor(cursor: str | None) -> tuple[int, int, int] | None:
@@ -74,7 +75,29 @@ def actionable(beach: Beach, pid: int) -> list[dict]:
     return out
 
 
-def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT) -> dict:
+def parse_only(only: str | None) -> set[str]:
+    """`only=table,mention,note`: which kinds of news to keep (all of them when empty)."""
+    if not only:
+        return set()
+    wanted = {w.strip() for w in str(only).split(",") if w.strip()}
+    bad = wanted - ONLY
+    if bad:
+        raise ValueError(f"only takes {', '.join(sorted(ONLY))} (comma-separated), not {', '.join(sorted(bad))}")
+    return wanted
+
+
+def _wanted(it: dict, only: set[str]) -> bool:
+    if "mention" in only and it.get("mentions_you"):
+        return True
+    if "note" in only and it["source"] == "note":
+        return True
+    if "table" in only and it.get("table") is not None:
+        return True              # moves, chat and notices (sat down, started, a draw offer) at your tables
+    return "room" in only and it["source"] == "message" and it.get("table") is None
+
+
+def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, only: set[str] | None = None) -> dict:
+    """`only` keeps just some kinds of news (see parse_only); what's waiting on you is always listed."""
     me = beach.participant(pid)
     start = parse_cursor(cursor)
     if start is None:   # first call: nothing old, only what's waiting on you, and a cursor from now
@@ -113,17 +136,22 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT) 
         items.append({"source": "note", "id": r["id"], "room": "you", "kind": r["kind"], "text": r["text"],
                       "data": json.loads(r["data"]) if r["data"] else None, "at": r["created_at"]})
 
-    moves = beach.db.q("SELECT rowid AS rid, table_id, ply, participant_id, move, at FROM table_moves"
+    moves = beach.db.q("SELECT rowid AS rid, table_id, ply, participant_id, move, info, at FROM table_moves"
                        " WHERE rowid > ? ORDER BY rowid LIMIT ?", (v0, limit))
     v_next = v0
     for r in moves:
         v_next = r["rid"]
         if r["table_id"] not in tables or r["participant_id"] == pid:
             continue
+        who = beach.participant(r["participant_id"]).name
+        info = json.loads(r["info"]) if r["info"] else {}
+        # The game's own words when it has them ("Sandy asked Coral for 9s: go fish!"), else "Sandy played c3-d4".
         items.append({"source": "move", "id": r["rid"], "room": f"table {r['table_id']}", "table": r["table_id"],
-                      "kind": "move", "author": beach.participant(r["participant_id"]).name, "text": r["move"],
-                      "ply": r["ply"], "at": r["at"]})
+                      "kind": "move", "author": who, "text": r["move"], "ply": r["ply"], "at": r["at"],
+                      "line": info.get("text") or f"{who} played {r['move']}"})
 
+    if only:
+        items = [it for it in items if _wanted(it, only)]
     items.sort(key=lambda it: it["at"])
     acts = actionable(beach, pid)
     more = len(rows) == limit or len(notes) == limit or len(moves) == limit
@@ -137,7 +165,7 @@ def render(items: list[dict], acts: list[dict]) -> str:
     rooms: dict[str, list[str]] = {}
     for it in items:
         if it["source"] == "move":
-            line = f"- {it['author']} played {it['text']}"
+            line = f"- {it['line']}"
         elif it["source"] == "note":
             line = f"- (private) {it['text']}"
         elif it["kind"] == "action":

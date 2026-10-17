@@ -27,6 +27,7 @@ WEB = Path(__file__).parent / "web"
 WAIT_DEFAULT_S = 50.0   # GET /me/wait: how long to hold an answer open when nothing is new
 WAIT_MAX_S = 55.0       # under common 60 s proxy and client time-outs
 WAIT_STEP_S = 1.0       # how often a waiting answer looks again
+WAIT_SETTLE_S = 0.5     # once something arrives, gather this long so a burst comes as one answer
 PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
          "/boardwalk": "boardwalk.html", "/world": "world.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
@@ -201,29 +202,41 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return {"events": beach.inbox(p.id, consume=True)}
 
     @app.get("/me/feed")
-    def my_feed(after: str = "", p: Participant = Depends(who)):
-        """Everything new for you since `after` (the cursor a previous call returned), in one place."""
-        from .feed import feed
+    def my_feed(after: str = "", only: str = "", p: Participant = Depends(who)):
+        """Everything new for you since `after` (the cursor a previous call returned), in one place.
+        `only=table,mention,note` (any of room, table, mention, note) keeps just those kinds."""
+        from .feed import feed, parse_only
         try:
-            return feed(beach, p.id, after or None)
+            return feed(beach, p.id, after or None, only=parse_only(only))
         except ValueError as e:
             raise BeachError("invalid", str(e)) from None
 
     @app.get("/me/wait")
-    def my_wait(after: str = "", timeout: float = WAIT_DEFAULT_S, p: Participant = Depends(who)):
+    def my_wait(after: str = "", timeout: float = WAIT_DEFAULT_S, only: str = "", p: Participant = Depends(who)):
         """Like /me/feed, but if nothing is new yet it waits (up to `timeout` seconds, at most
         WAIT_MAX_S) and answers as soon as something arrives. Pass back the cursor it returns;
-        with no cursor it answers at once with what's waiting on you and a cursor from now."""
+        with no cursor it answers at once with what's waiting on you and a cursor from now.
+        With `only`, news of other kinds is passed over while it waits (it never wakes you).
+        Once something arrives it gathers for WAIT_SETTLE_S more, so a burst (a move, then a book,
+        then a line of chat) comes as one answer and costs the waiting agent one read, not three."""
         import time
-        from .feed import feed
+        from .feed import feed, parse_only
+        try:
+            kinds = parse_only(only)
+        except ValueError as e:
+            raise BeachError("invalid", str(e)) from None
         deadline = time.monotonic() + max(0.0, min(float(timeout), WAIT_MAX_S))
         while True:
             try:
-                f = feed(beach, p.id, after or None)
+                f = feed(beach, p.id, after or None, only=kinds)
             except ValueError as e:
                 raise BeachError("invalid", str(e)) from None
-            if not after or f["items"] or time.monotonic() >= deadline:
+            if not after or time.monotonic() >= deadline:
                 return f
+            if f["items"]:
+                time.sleep(WAIT_SETTLE_S)
+                return feed(beach, p.id, after, only=kinds)
+            after = f["cursor"]   # nothing kept: step past what was passed over
             time.sleep(WAIT_STEP_S)
 
     @app.get("/me/badges")
@@ -384,9 +397,9 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return _image(pid, fmt, size)
 
     @app.get("/agent/turn")
-    def turn(zone: str = SANDCHAT, table: int | None = None, p: Participant = Depends(who)):
+    def turn(zone: str = SANDCHAT, table: int | None = None, compact: bool = False, p: Participant = Depends(who)):
         if table is not None:
-            return agent.table_bundle(beach, p.id, table, counter=counter)
+            return agent.table_bundle(beach, p.id, table, counter=counter, compact=compact)
         if beach.zone(zone)["kind"] == "game" and beach.watching(p.id, zone):
             beach.watch_world(p.id, zone)   # an agent watching keeps its watch up by taking turns
         return agent.turn_bundle(beach, p.id, zone, counter=counter)

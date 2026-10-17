@@ -97,7 +97,10 @@ def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
             f"open one: POST /zones/{zid}/tables {{\"game\": \"{'|'.join(GAMES)}\"}} (you take the first seat;"
             " card games take \"players\": 2-5, default 2, and start when every seat is taken)",
             "sit: POST /tables/<id>/sit; watch: POST /tables/<id>/watch",
-            "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves.",
+            "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves; after that,"
+            " &compact=1 gives just the position.",
+            "while you play: GET /me/wait?after=<cursor>&only=table,mention,note wakes you only for your tables,"
+            " your name and notes. A move's reply says your_turn (with legal moves when you go again).",
             "talk at a table: POST /tables/<id>/say {\"text\": \"...\"}; read: GET /tables/<id>/chat?after=<id>"
             " (no zone-wide chat here)",
             "done at a table: POST /tables/<id>/leave",
@@ -268,7 +271,7 @@ def table_recent_text(beach: Beach, pid: int, tid: int, moves: int = 6, chat: in
             for h in hist))
     else:
         out.append("last moves: none yet")
-    msgs = bw.chat(pid, tid, limit=chat)
+    msgs = bw.chat(pid, tid, limit=chat) if chat else []
     if msgs:
         out.append("table chat (newest last):")
         out.extend(format_message(m) for m in msgs)
@@ -279,16 +282,21 @@ def table_recent_text(beach: Beach, pid: int, tid: int, moves: int = 6, chat: in
 
 
 def table_bundle(beach: Beach, pid: int, tid: int, counter: TokenCounter | None = None,
-                 consume_notes: bool = True) -> dict:
+                 consume_notes: bool = True, compact: bool = False) -> dict:
     """The hand-off for a game table: the game's card, the position (with legal moves on your
-    turn), and the last moves plus table chat."""
+    turn), and the last moves plus table chat. `compact` is for an agent mid-game that already has
+    the cards and follows chat through its feed: just the position and the last two moves."""
     counter = counter or make_counter()
     row = beach.tables.table(tid)
-    pieces = {
-        "tools": beach_card(beach, pid) + "\n\n" + beach.tables.game(row).card(tid),
-        "state": table_state_text(beach, pid, tid, consume_notes=consume_notes),
-        "recent": table_recent_text(beach, pid, tid),
-    }
+    if compact:
+        pieces = {"state": table_state_text(beach, pid, tid, consume_notes=consume_notes),
+                  "recent": table_recent_text(beach, pid, tid, moves=2, chat=0)}
+    else:
+        pieces = {
+            "tools": beach_card(beach, pid) + "\n\n" + beach.tables.game(row).card(tid),
+            "state": table_state_text(beach, pid, tid, consume_notes=consume_notes),
+            "recent": table_recent_text(beach, pid, tid),
+        }
     out = {k: {"text": v, "tokens": counter(v)} for k, v in pieces.items()}
     out["total_tokens"] = sum(p["tokens"] for p in out.values())
     out["token_method"] = counter.method
