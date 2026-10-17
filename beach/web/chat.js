@@ -45,8 +45,11 @@
     if (!present) return
     try {
       const r = await api('GET', '/zones/' + encodeURIComponent(zid) + '/messages?after=' + lastId)
-      addLines(r.messages.map(line))
-      if (r.messages.length) lastId = r.messages[r.messages.length - 1].id
+      // Two polls can overlap (one after sending, one on the timer) and both bring the same new lines;
+      // draw each line once, whichever reply lands first.
+      const fresh = r.messages.filter(m => m.id > lastId)
+      addLines(fresh.map(line))
+      if (fresh.length) lastId = fresh[fresh.length - 1].id
     } catch (e) { if (e.status === 409) setPresent(false) }
   }
 
