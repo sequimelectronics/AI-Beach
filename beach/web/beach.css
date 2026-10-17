@@ -220,7 +220,13 @@ body.sky-night .chat-head h1, body.sky-night .chat-head .sky-chip { color: #fff;
 .log p { margin: .15em 0; overflow-wrap: anywhere; }
 .log .t { color: #7a6a60; margin-right: .5em; font-size: .85em; }
 .log .say .who { font-weight: 700; }
-.log .action { color: #7c3a6a; font-style: italic; }
+/* Actions read differently from speech by several cues at once, never color alone: italic, their own
+   symbol, indented on a tinted band with a bar at the left, and color. */
+.log .action {
+  color: #7c3a6a; font-style: italic;
+  margin: .3em 0 .3em 1.2em; padding: .1em .6em;
+  border-left: 3px solid #b77aa6; border-radius: 0 6px 6px 0; background: rgba(124, 58, 106, .07);
+}
 .log .sys { color: #6b5d55; }
 .log .private { border: 2px dashed var(--line); border-radius: 8px; padding: .2em .5em; color: var(--ink-soft); }
 .log .empty { color: var(--ink-soft); font-family: system-ui, sans-serif; }

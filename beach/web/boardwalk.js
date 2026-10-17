@@ -342,7 +342,7 @@
         ui.chat.querySelector('.empty')?.remove()
         ui.chat.append(...fresh.map(m => el('p', { class: m.kind === 'say' ? 'say' : m.kind === 'action' ? 'action' : 'sys' },
           m.kind === 'say' ? el('span', { class: 'who', text: '<' + m.author + (m.former ? ' (former)' : '') + '> ' }) : null,
-          m.kind === 'say' ? m.text : m.line.replace(/^[-*] /, m.kind === 'action' ? '* ' : '— '))))
+          m.kind === 'say' ? m.text : m.line.replace(/^[-*] /, m.kind === 'action' ? '✦ ' : '— '))))
         ui.chat.scrollTop = ui.chat.scrollHeight
       }
     } catch (e) {}
