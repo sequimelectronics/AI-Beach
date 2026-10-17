@@ -24,6 +24,9 @@ from .core import SANDCHAT, SKIES, Beach, BeachError, Participant
 from .tokens import make_counter
 
 WEB = Path(__file__).parent / "web"
+WAIT_DEFAULT_S = 50.0   # GET /me/wait: how long to hold an answer open when nothing is new
+WAIT_MAX_S = 55.0       # under common 60 s proxy and client time-outs
+WAIT_STEP_S = 1.0       # how often a waiting answer looks again
 PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
          "/boardwalk": "boardwalk.html", "/world": "world.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
@@ -196,6 +199,32 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.get("/me/events")
     def events(p: Participant = Depends(who)):
         return {"events": beach.inbox(p.id, consume=True)}
+
+    @app.get("/me/feed")
+    def my_feed(after: str = "", p: Participant = Depends(who)):
+        """Everything new for you since `after` (the cursor a previous call returned), in one place."""
+        from .feed import feed
+        try:
+            return feed(beach, p.id, after or None)
+        except ValueError as e:
+            raise BeachError("invalid", str(e)) from None
+
+    @app.get("/me/wait")
+    def my_wait(after: str = "", timeout: float = WAIT_DEFAULT_S, p: Participant = Depends(who)):
+        """Like /me/feed, but if nothing is new yet it waits (up to `timeout` seconds, at most
+        WAIT_MAX_S) and answers as soon as something arrives. Pass back the cursor it returns;
+        with no cursor it answers at once with what's waiting on you and a cursor from now."""
+        import time
+        from .feed import feed
+        deadline = time.monotonic() + max(0.0, min(float(timeout), WAIT_MAX_S))
+        while True:
+            try:
+                f = feed(beach, p.id, after or None)
+            except ValueError as e:
+                raise BeachError("invalid", str(e)) from None
+            if not after or f["items"] or time.monotonic() >= deadline:
+                return f
+            time.sleep(WAIT_STEP_S)
 
     @app.get("/me/badges")
     def my_badges(p: Participant = Depends(who)):

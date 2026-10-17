@@ -107,6 +107,7 @@ class RenameTests(Case):
         self.assertEqual(view["seats"][0]["player"]["name"], "Sandcastle Sam")
         bw = [z for z in b.zone_map() if z["id"] == BOARDWALK][0]
         self.assertEqual(bw["here"], 2)
+        b.tables.move(self.sandy.id, tid, "c3-d4")    # a real game: resigning before any move calls it off
         b.tables.resign(self.pebble.id, tid)
         self.assertIn("Sandcastle Sam and Pebble finished a game of checkers on The Boardwalk: Sandcastle Sam won",
                       " ".join(self.lines(SANDCHAT, self.coral.id)))
@@ -188,7 +189,7 @@ class RenameTests(Case):
 
     def test_beach_card_has_the_rename_line(self):
         card = beach_card(self.beach)
-        self.assertIn('rename yourself: PUT /me/name {"name": "..."}', card)
+        self.assertIn('Rename: PUT /me/name {"name": "..."}', card)
         from beach.agent import zone_card
         for z in (SANDCHAT, BOARDWALK):
             self.assertNotIn("/me/name", zone_card(self.beach, z))

@@ -220,7 +220,13 @@ body.sky-night .chat-head h1, body.sky-night .chat-head .sky-chip { color: #fff;
 .log p { margin: .15em 0; overflow-wrap: anywhere; }
 .log .t { color: #7a6a60; margin-right: .5em; font-size: .85em; }
 .log .say .who { font-weight: 700; }
-.log .action { color: #7c3a6a; font-style: italic; }
+/* Actions read differently from speech by several cues at once, never color alone: italic, their own
+   symbol, indented on a tinted band with a bar at the left, and color. */
+.log .action {
+  color: #7c3a6a; font-style: italic;
+  margin: .3em 0 .3em 1.2em; padding: .1em .6em;
+  border-left: 3px solid #b77aa6; border-radius: 0 6px 6px 0; background: rgba(124, 58, 106, .07);
+}
 .log .sys { color: #6b5d55; }
 .log .private { border: 2px dashed var(--line); border-radius: 8px; padding: .2em .5em; color: var(--ink-soft); }
 .log .empty { color: var(--ink-soft); font-family: system-ui, sans-serif; }
@@ -338,7 +344,9 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
 .side-col { display: flex; flex-direction: column; gap: .5em; }
 .side-col h2 { margin: .6em 0 0; font-size: 1.05rem; }
 .turn-banner { margin: 0; padding: .6em .9em; border-radius: 12px; font-size: 1.25rem; font-weight: 800; }
-.turn-banner.mine { background: var(--ok); color: #fff; }
+.turn-banner.mine { background: var(--ok); color: #fff; animation: your-turn 1.2s ease-out 2; }
+@keyframes your-turn { 0% { box-shadow: 0 0 0 0 rgba(47, 90, 34, .55); } 100% { box-shadow: 0 0 0 14px rgba(47, 90, 34, 0); } }
+@media (prefers-reduced-motion: reduce) { .turn-banner.mine { animation: none; outline: 3px solid #ffd75e; } }
 .turn-banner.wait { background: #fff8e3; border: 2px solid var(--line); }
 .turn-banner.over { background: var(--sea-dark); color: #fff; }
 .draw-offer { font-weight: 700; }

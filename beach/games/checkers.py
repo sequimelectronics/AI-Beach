@@ -218,6 +218,7 @@ class Checkers(TableGame):
             "When it's your turn, state lists every legal move. Pick one and send it exactly:",
             f"move: POST {t}/move {{\"move\": \"c3-d4\"}}",
             "c3-d4 is a step; e3xc5xa7 is a capture through each landing square. Captures are compulsory.",
+            "Men move and capture forward only; kings (reach the far row) move and capture both ways.",
             f"draw: POST {t}/draw {{\"action\": \"offer\"|\"accept\"|\"decline\"}}",
             f"resign: POST {t}/resign",
             f"chat: POST {t}/say {{\"text\": \"...\"}}",

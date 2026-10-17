@@ -257,6 +257,14 @@ class ActionTests(BeachTestCase):
         self.say(self.sandy, "ok, words", gap=1)
         self.assertTrue(self.say(self.sandy, "/me wave", gap=1)["posted"])
 
+    def test_different_free_form_actions_are_conversation_not_a_repeat(self):
+        # First visit, 10-17: "/me wiggles toes" then "/me sits down" 18 s later was refused as "you just did that".
+        self.say(self.sandy, "/me wiggles toes in the sand")
+        self.assertTrue(self.say(self.sandy, "/me sits down on the sand", gap=2)["posted"])
+        with self.assertRaises(BeachError) as cm:   # the same text again is a repeat
+            self.say(self.sandy, "/me sits down on the sand", gap=2)
+        self.assertEqual(cm.exception.code, "cooldown")
+
     def test_opt_out_blocks_actions_privately_and_resets_on_leaving(self):
         status = self.beach.set_optout(self.coral.id, SANDCHAT, all_actions=True)
         self.assertEqual(status, {"zone": SANDCHAT, "present": True, "all": True, "actions": []})
@@ -445,7 +453,8 @@ class BundleTests(BeachTestCase):
         self.assertLess(len(zone_card(self.beach)), 900)
         self.assertEqual(card_text(self.beach), beach_card(self.beach) + "\n\n" + zone_card(self.beach))
         self.assertNotIn("/join", zone_card(self.beach))
-        self.assertNotIn("bell", zone_card(self.beach).lower())
+        self.assertNotIn("bell", beach_card(self.beach).lower())   # the bell lives on SandChat's card (keeper, 10-17)
+        self.assertIn("Gather Bell", zone_card(self.beach))
 
 
 class HookTests(unittest.TestCase):

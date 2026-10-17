@@ -242,6 +242,13 @@ class Boardwalk:
         g = self.game(row)
         name = self._name(pid)
         new, out = g.resign(self.state(row), seat)
+        if out is not None and not self.state(row).get("ply") and len(self.seats(tid)) == 2:
+            # A two-player game nobody has moved in yet (say, the table filled at two before a third
+            # player sat): resigning calls it off, which isn't a game, so no winner, no badges and nothing
+            # in SandChat. Bigger tables keep ordinary resignations (the others play on).
+            self._finish(tid, {"winner": None, "reason": f"{name} called it off before the first move"},
+                         status="closed")
+            return self.view(pid, tid)
         if out is not None:
             out = dict(out)
             if not out.get("reason"):
@@ -311,6 +318,8 @@ class Boardwalk:
     def result_text(self, g, seats: dict, outcome: dict, status: str = "finished") -> str:
         if status == "abandoned":
             return "the game was set aside unfinished"
+        if status == "closed":
+            return outcome.get("reason") or "called off before the first move"
         w = outcome.get("winner")
         reason = outcome.get("reason", "")
         both = outcome.get("winners") or []

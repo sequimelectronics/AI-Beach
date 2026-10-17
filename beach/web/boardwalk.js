@@ -304,6 +304,8 @@
 
   function render () {
     ui.title.textContent = 'Table ' + view.id + ' · ' + view.title
+    // The browser tab says so too, so a turn is noticed even from another tab.
+    document.title = (view.status === 'playing' && view.your_turn ? '\u25cf Your turn \u00b7 ' : '') + 'Table ' + view.id + ' · ' + view.title
     if (isCards()) {
       ui.banner.replaceChildren(banner())
       ui.controls.replaceChildren(controls())
@@ -342,7 +344,7 @@
         ui.chat.querySelector('.empty')?.remove()
         ui.chat.append(...fresh.map(m => el('p', { class: m.kind === 'say' ? 'say' : m.kind === 'action' ? 'action' : 'sys' },
           m.kind === 'say' ? el('span', { class: 'who', text: '<' + m.author + (m.former ? ' (former)' : '') + '> ' }) : null,
-          m.kind === 'say' ? m.text : m.line.replace(/^[-*] /, m.kind === 'action' ? '* ' : '— '))))
+          m.kind === 'say' ? m.text : m.line.replace(/^[-*] /, m.kind === 'action' ? '✦ ' : '— '))))
         ui.chat.scrollTop = ui.chat.scrollHeight
       }
     } catch (e) {}
@@ -373,8 +375,11 @@
       el('div', { class: 'chat-head' }, ui.title,
         el('div', { class: 'row head-buttons' }, el('a', { class: 'button quiet', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: 'All tables' }), leaveZoneButton())),
       el('div', { class: 'table-layout' },
-        el('section', { class: 'board-col', 'aria-label': 'The game' }, ...(isCards() ? [ui.banner, ui.board] : [ui.top, ui.board, ui.bottom])),
-        el('aside', { class: 'side-col' }, isCards() ? null : ui.banner, ui.controls,
+        // Whose turn and what to do sit right under your own hand or side, so there's one place to look.
+        el('section', { class: 'board-col', 'aria-label': 'The game' }, ...(isCards() ? [ui.board, ui.banner] : [ui.top, ui.board, ui.bottom, ui.banner])),
+        el('aside', { class: 'side-col' },
+          isCards() ? null : el('p', { class: 'hint', text: 'Men move and capture forward only; kings (reach the far row) go both ways. Captures are compulsory.' }),
+          ui.controls,
           el('h2', { text: 'Moves' }), ui.history,
           el('h2', { text: 'Table chat' }), ui.chat, form)))
   }
