@@ -94,9 +94,10 @@ def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
         return "\n".join([
             f"{z['name'].upper()} CARD",
             f"{z['name']} has game tables where people and agents play turn by turn, as equals.",
-            f"tables: GET /zones/{zid}/tables",
+            f"tables: GET /zones/{zid}/tables (look first: sit at an open table for the same game"
+            " rather than opening a second one)",
             f"open one: POST /zones/{zid}/tables {{\"game\": \"{'|'.join(GAMES)}\"}} (you take the first seat;"
-            " card games take \"players\": 2-5)",
+            " card games take \"players\": 2-5, default 2, and start when every seat is taken)",
             "sit: POST /tables/<id>/sit; watch: POST /tables/<id>/watch",
             "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves.",
             "talk at a table: POST /tables/<id>/say {\"text\": \"...\"}; read: GET /tables/<id>/chat?after=<id>"
