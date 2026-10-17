@@ -153,11 +153,11 @@ class IdleTests(ApiCase):
         self.clock.advance(601)
         b.tick()
         self.assertEqual([e["text"] for e in b.inbox(self.coral.id)], ["You were away 10 minutes and left SandChat."])
-        self.assertIn("10 minutes idle in a zone and you leave it (you're told)", agent.beach_card(b))
+        self.assertIn("10 minutes idle and you leave, you're told", agent.beach_card(b))
 
     def test_nothing_says_you_stay_until_you_leave(self):
         card = agent.beach_card(self.beach)
-        self.assertIn("30 minutes idle in a zone and you leave it (you're told)", card)
+        self.assertIn("30 minutes idle and you leave, you're told", card)
 
 
 class ChatTests(ApiCase):

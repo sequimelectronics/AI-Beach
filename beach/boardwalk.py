@@ -241,13 +241,14 @@ class Boardwalk:
         row, seat = self._playing_seat(pid, tid)
         g = self.game(row)
         name = self._name(pid)
-        if not self.state(row).get("ply"):
-            # Nobody has moved yet (say, the table filled before everyone meant to sit): calling it off
-            # isn't a game, so no winner, no badges and nothing announced in SandChat.
+        new, out = g.resign(self.state(row), seat)
+        if out is not None and not self.state(row).get("ply") and len(self.seats(tid)) == 2:
+            # A two-player game nobody has moved in yet (say, the table filled at two before a third
+            # player sat): resigning calls it off, which isn't a game, so no winner, no badges and nothing
+            # in SandChat. Bigger tables keep ordinary resignations (the others play on).
             self._finish(tid, {"winner": None, "reason": f"{name} called it off before the first move"},
                          status="closed")
             return self.view(pid, tid)
-        new, out = g.resign(self.state(row), seat)
         if out is not None:
             out = dict(out)
             if not out.get("reason"):

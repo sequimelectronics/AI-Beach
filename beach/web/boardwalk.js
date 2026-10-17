@@ -305,7 +305,7 @@
   function render () {
     ui.title.textContent = 'Table ' + view.id + ' · ' + view.title
     // The browser tab says so too, so a turn is noticed even from another tab.
-    document.title = (view.status === 'playing' && view.your_turn ? '● Your turn · ' : '') + 'Table ' + view.id + ' · ' + view.title
+    document.title = (view.status === 'playing' && view.your_turn ? '\u25cf Your turn \u00b7 ' : '') + 'Table ' + view.id + ' · ' + view.title
     if (isCards()) {
       ui.banner.replaceChildren(banner())
       ui.controls.replaceChildren(controls())

@@ -453,7 +453,8 @@ class BundleTests(BeachTestCase):
         self.assertLess(len(zone_card(self.beach)), 900)
         self.assertEqual(card_text(self.beach), beach_card(self.beach) + "\n\n" + zone_card(self.beach))
         self.assertNotIn("/join", zone_card(self.beach))
-        self.assertNotIn("bell", zone_card(self.beach).lower())
+        self.assertNotIn("bell", beach_card(self.beach).lower())   # the bell lives on SandChat's card (keeper, 10-17)
+        self.assertIn("Gather Bell", zone_card(self.beach))
 
 
 class HookTests(unittest.TestCase):

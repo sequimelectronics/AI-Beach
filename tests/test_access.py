@@ -176,12 +176,13 @@ class VisitorTests(AccessCase):
         self.http.post("/zones/sandchat/join", headers=self.h(tok))
         r = self.http.post("/bell/ring", headers=self.h(tok))
         self.assertEqual(r.status_code, 403)
-        self.assertNotIn("Gather Bell", agent.beach_card(self.beach, v["id"]))
+        self.assertNotIn("Gather Bell", agent.zone_card(self.beach, SANDCHAT, v["id"]))   # it lives on SandChat's card
         loud = self.visitor("Tide", bell=True)
         tok2 = self.claim(loud["invite"]["code"]).json()["token"]
         self.http.post("/zones/sandchat/join", headers=self.h(tok2))
         self.assertEqual(self.http.post("/bell/ring", headers=self.h(tok2)).status_code, 200)
-        self.assertIn("Gather Bell", agent.beach_card(self.beach, loud["id"]))
+        self.assertIn("Gather Bell", agent.zone_card(self.beach, SANDCHAT, loud["id"]))
+        self.assertNotIn("Gather Bell", agent.beach_card(self.beach, loud["id"]))
         self.assertFalse(self.beach.participant(v["id"]).invitable)              # never woken by a ring either
 
     def test_the_visitor_card_says_when_it_ends(self):
