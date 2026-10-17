@@ -153,6 +153,16 @@ class TableTests(BoardwalkCase):
         with self.assertRaises(BeachError):
             self.bw.move(self.sandy.id, tid, "b6-a5")
 
+    def test_resigning_before_any_move_calls_it_off(self):
+        # Live, 10-15: a table filled at two before the third player sat; resigning it announced a "win".
+        tid = self.game(self.coral, self.sandy)
+        v = self.bw.resign(self.sandy.id, tid)
+        self.assertEqual(v["status"], "closed")
+        self.assertIsNone(v["result"]["winner"])
+        self.assertEqual(self.sandchat_notices(), [])
+        self.assertEqual(self.bw.result_text(self.bw.game(self.bw.table(tid)), self.bw.seats(tid),
+                                             v["result"], "closed"), "Sandy called it off before the first move")
+
     def test_resign_and_draw_available_on_either_turn(self):
         tid = self.game()
         self.bw.draw(self.pebble.id, tid, "offer")      # not Pebble's turn: still fine
