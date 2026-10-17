@@ -197,6 +197,8 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
         if "world_url" not in cols:   # a game world's address on this machine, from its bridge
             self.db.run("ALTER TABLE zones ADD COLUMN world_url TEXT")
+        if "visitor_viewer_url" not in cols:   # the world's viewer as visitors reach it (e.g. its public https name)
+            self.db.run("ALTER TABLE zones ADD COLUMN visitor_viewer_url TEXT")
         gcols = {r["name"] for r in self.db.q("PRAGMA table_info(game_grants)")}
         if "session" not in gcols:   # job 10: one character per participant per world
             self.db.run("ALTER TABLE game_grants ADD COLUMN session TEXT")      # the session the Beach made (/play)
@@ -656,7 +658,7 @@ class Beach:
         if not z["world_url"]:
             raise BeachError("conflict", f"{z['name']} isn't connected to the Beach yet (its bridge isn't running)")
         p = self.participant(pid)
-        viewer = z["viewer_url"] or z["world_url"] + "/"
+        viewer = self.viewer_for(z, pid)
 
         def answer(session, agent_id, existing):
             return {"zone": zid, "name": p.name, "session": session, "agent_id": agent_id, "existing": existing,
@@ -725,7 +727,7 @@ class Beach:
         if me.access == "visitor":
             self.access.saw(pid, zid)
         from . import front_door
-        viewer = z["viewer_url"] or (z["world_url"] + "/" if z["world_url"] else None)
+        viewer = self.viewer_for(z, pid)
         return {"zone": zid, "watching": True, "playing": False, "lasts_s": WATCH_TTL_S,
                 "viewer": front_door.watch_link(viewer, z["watch_token"]) if viewer else None}
 
@@ -776,13 +778,23 @@ class Beach:
             return True
         return f"p:{pid}" in self.players_in(zid)
 
+    def viewer_for(self, z, pid: int | None, fallback: bool = True) -> str | None:
+        """A world's viewer as this participant reaches it. Visitors come from outside the household, so
+        they get the keeper's visitor address for the world when there is one; everyone else gets the
+        household one (with `fallback`, the world's own address when no viewer address is set)."""
+        if pid is not None and z["visitor_viewer_url"] and self.participant(pid).access == "visitor":
+            return z["visitor_viewer_url"]
+        if z["viewer_url"] or not fallback:
+            return z["viewer_url"]
+        return z["world_url"] + "/" if z["world_url"] else None
+
     def world_info(self, zid: str, pid: int) -> dict:
         """For a participant: how to join this world as themselves, and a viewer link."""
         z = self.zone(zid)
         if z["kind"] != "game":
             raise BeachError("invalid", "only game zones have worlds")
         p = self.participant(pid)
-        viewer = z["viewer_url"]
+        viewer = self.viewer_for(z, pid, fallback=False)
         base = viewer.split("?")[0].rstrip("/") if viewer else None
         steps = [f"POST /zones/{zid}/play (the Beach joins for you; use the session it returns)"]
         if not z["join_key"]:
@@ -829,8 +841,14 @@ class Beach:
         return self.zone(zid)
 
     def update_zone(self, zid: str, name: str | None = None, open: bool | None = None,
-                    viewer_url: str | None = None, card: str | None = None):
+                    viewer_url: str | None = None, card: str | None = None,
+                    visitor_viewer_url: str | None = None):
         self.zone(zid)
+        if visitor_viewer_url is not None:   # "" clears it (visitors then get the household viewer)
+            v = visitor_viewer_url.strip()
+            if v and not re.match(r"^https?://[^\s/?#]+(/[^\s?#]*)?$", v):
+                raise BeachError("invalid", "visitor_viewer_url is an address like https://world.example.org/")
+            self.db.run("UPDATE zones SET visitor_viewer_url = ? WHERE id = ?", (v or None, zid))
         if card is not None:
             if len(card) > 4000:
                 raise BeachError("invalid", "a zone card is at most 4000 characters")
@@ -1434,7 +1452,8 @@ class Beach:
                 here = len(self.players_in(z["id"]))
                 watching = len(self.watchers(z["id"]))
             out.append({"id": z["id"], "name": z["name"], "kind": z["kind"], "open": bool(z["open"]),
-                        "here": here, "watching": watching, "viewer_url": z["viewer_url"], "sky": z["sky"],
+                        "here": here, "watching": watching, "viewer_url": z["viewer_url"],
+                        "visitor_viewer_url": z["visitor_viewer_url"], "sky": z["sky"],
                         "created_at": z["created_at"], "tables": bool(z["tables"]),
                         "connected": bool(z["world_url"]), "idle_limit_s": z["afk_timeout_s"]})
         return out

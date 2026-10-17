@@ -363,6 +363,29 @@ class VisitorAddressTests(AccessCase):
         http.get("/me", headers={**headers, **self.h(tok)})
         return self.beach.db.one("SELECT last_ip FROM sign_ins ORDER BY id DESC LIMIT 1")["last_ip"]
 
+    def test_visitors_get_the_worlds_visitor_viewer_and_residents_keep_the_household_one(self):
+        r = self.http.patch("/admin/zones/beachblox", json={"visitor_viewer_url": "https://blox.example.org/"},
+                            headers=self.admin)
+        self.assertEqual(r.json()["visitor_viewer_url"], "https://blox.example.org/")
+        tok = self.claim(self.visitor()["invite"]["code"]).json()["token"]
+        vpid = self.http.get("/me", headers=self.h(tok)).json()["id"]
+        self.assertEqual(self.beach.world_info("beachblox", vpid)["world"], "https://blox.example.org")
+        self.assertEqual(self.beach.world_info("beachblox", self.sandy.id)["world"], "http://127.0.0.1:8100")
+        link = self.beach.play(vpid, "beachblox", joiner=self.world.join, alive=self.world.alive)["viewer"]
+        self.assertTrue(link.startswith("https://blox.example.org/"), link)
+        self.assertTrue(self.play(self.sandy)["viewer"].startswith("http://127.0.0.1:8100/"))
+        self.assertIn("watch: https://blox.example.org/", agent.zone_card(self.beach, "beachblox", vpid))
+        self.assertIn("watch: http://127.0.0.1:8100/", agent.zone_card(self.beach, "beachblox", self.sandy.id))
+        csp = self.http.get("/world?zone=beachblox").headers["content-security-policy"]
+        self.assertIn("frame-src http://127.0.0.1:8100 https://blox.example.org", csp)
+
+    def test_a_bad_visitor_viewer_is_refused_and_empty_clears_it(self):
+        bad = self.http.patch("/admin/zones/beachblox", json={"visitor_viewer_url": "blox.example.org"}, headers=self.admin)
+        self.assertEqual(bad.status_code, 400)
+        self.http.patch("/admin/zones/beachblox", json={"visitor_viewer_url": "https://blox.example.org/"}, headers=self.admin)
+        cleared = self.http.patch("/admin/zones/beachblox", json={"visitor_viewer_url": ""}, headers=self.admin)
+        self.assertIsNone(cleared.json()["visitor_viewer_url"])
+
     def test_the_proxy_header_is_read_only_when_trusted_and_only_from_this_computer(self):
         fwd = {"X-Forwarded-For": "203.0.113.9, 10.0.0.1"}
         local, remote = ("127.0.0.1", 50000), ("192.168.1.30", 50000)

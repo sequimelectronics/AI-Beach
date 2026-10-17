@@ -127,10 +127,12 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         from .front_door import origin_of
         try:
             z = beach.zone(zone)
-            origin = origin_of(z["viewer_url"] or z["world_url"]) if z["kind"] == "game" else None
+            # The household viewer and, when the keeper set one, the visitors' address for the same world.
+            origins = [o for o in (origin_of(z["viewer_url"] or z["world_url"]), origin_of(z["visitor_viewer_url"]))
+                       if o] if z["kind"] == "game" else []
         except BeachError:
-            origin = None
-        csp = WEB_HEADERS["Content-Security-Policy"] + "; frame-src " + (origin or "'none'")
+            origins = []
+        csp = WEB_HEADERS["Content-Security-Policy"] + "; frame-src " + (" ".join(dict.fromkeys(origins)) or "'none'")
         return page("world.html", {**WEB_HEADERS, "Content-Security-Policy": csp})
 
     @app.get("/")
@@ -320,8 +322,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return {"text": text, "tokens": counter(text), "token_method": counter.method}
 
     @app.get("/zones/{zid}/card")
-    def get_zone_card(zid: str, _: Participant = Depends(who)):
-        text = agent.zone_card(beach, zid)
+    def get_zone_card(zid: str, p: Participant = Depends(who)):
+        text = agent.zone_card(beach, zid, p.id)
         return {"text": text, "tokens": counter(text), "token_method": counter.method,
                 "custom": bool(beach.zone(zid)["card"])}
 
@@ -659,8 +661,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def patch_zone(zid: str, body: dict = Body(...), _: Participant = Depends(admin)):
         o = body.get("open")
         z = beach.update_zone(zid, body.get("name"), None if o is None else bool(o), body.get("viewer_url"),
-                              body.get("card"))
-        return {k: z[k] for k in ("id", "name", "kind", "open", "viewer_url")}
+                              body.get("card"), body.get("visitor_viewer_url"))
+        return {k: z[k] for k in ("id", "name", "kind", "open", "viewer_url", "visitor_viewer_url")}
 
     @app.post("/admin/zones/{zid}/bridge-token")
     def bridge(zid: str, _: Participant = Depends(admin)):

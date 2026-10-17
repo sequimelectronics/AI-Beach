@@ -337,11 +337,13 @@
         const name = el('input', { type: 'text', value: z.name, maxlength: '40', 'aria-label': 'Name of ' + z.name })
         const open = el('input', { type: 'checkbox', checked: z.open, 'aria-label': z.name + ' is open' })
         const viewer = z.kind === 'game' ? el('input', { type: 'url', value: z.viewer_url || '', placeholder: 'http://…', 'aria-label': 'Viewer address for ' + z.name }) : null
+        const visitorViewer = z.kind === 'game' ? el('input', { type: 'url', value: z.visitor_viewer_url || '', placeholder: 'https://… (optional)', 'aria-label': 'Viewer address for visitors to ' + z.name }) : null
         return el('tr', {},
           el('td', {}, name),
           el('td', { text: z.kind }),
           el('td', {}, el('label', {}, open, z.open ? ' open' : ' closed')),
           el('td', {}, viewer || el('span', { class: 'hint', text: '—' })),
+          el('td', {}, visitorViewer || el('span', { class: 'hint', text: '—' })),
           el('td', {}, el('div', { class: 'inline-form' },
             el('button', {
               type: 'button',
@@ -350,6 +352,7 @@
               onclick: async () => {
                 const body = { name: name.value, open: open.checked }
                 if (viewer) body.viewer_url = viewer.value.trim()
+                if (visitorViewer) body.visitor_viewer_url = visitorViewer.value.trim()
                 try { await api('PATCH', '/admin/zones/' + z.id, body); toast('Saved.'); render() } catch (e) { toast(e.message) }
               }
             }),
@@ -401,7 +404,7 @@
     const zkind = el('select', { id: 'zone-kind' }, el('option', { value: 'chat', text: 'chat' }), el('option', { value: 'game', text: 'game' }))
     box.append(
       el('h2', { text: 'Zones' }),
-      el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, ['Name', 'Kind', 'Open', 'Viewer', ''].map(h => el('th', { text: h })))), tbody)),
+      el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, ['Name', 'Kind', 'Open', 'Viewer', 'Viewer for visitors', ''].map(h => el('th', { text: h })))), tbody)),
       out,
       el('h2', { text: 'Add a zone' }),
       el('form', {

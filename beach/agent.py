@@ -73,7 +73,7 @@ def _clock(t: float) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
 
 
-def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
+def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
     """The card for one zone: only what you can do there."""
     z = beach.zone(zid)
     if z["kind"] == "game":
@@ -81,8 +81,9 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
             return z["card"]
         lines = [f"{z['name'].upper()} CARD",
                  f"{z['name']} is a game played in its own world; the Beach only knows who's playing."]
-        if z["viewer_url"]:
-            lines.append(f"watch: {z['viewer_url']}")
+        viewer = beach.viewer_for(z, pid, fallback=False)
+        if viewer:
+            lines.append(f"watch: {viewer}")
         lines.append("To play, use that world's own play card (its adapter provides one).")
         lines.append(f"One character each: POST /zones/{zid}/play again gives back yours; DELETE it to leave.")
         lines.append(f"watch instead (no character; your name shows at the world's watch spot): POST /zones/{zid}/watch"
@@ -120,7 +121,7 @@ def zone_card(beach: Beach, zid: str = SANDCHAT) -> str:
 
 def card_text(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
     """The tools piece: the Beach card (constant), then the zone's card."""
-    return beach_card(beach, pid) + "\n\n" + zone_card(beach, zid)
+    return beach_card(beach, pid) + "\n\n" + zone_card(beach, zid, pid)
 
 
 def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool = True) -> str:
