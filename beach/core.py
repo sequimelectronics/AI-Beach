@@ -1221,10 +1221,15 @@ class Beach:
                 note = f"{t.name} isn't taking actions right now"
                 self._note(pid, note)
                 return {"posted": False, "note": note}
-        # Flood control: a cooldown per action, and a limit on actions in a row.
+        # Flood control: a cooldown per action (a named shorthand, or the same free-form /me text repeated:
+        # two different free-form actions are just conversation), and a limit on actions in a row.
         cooldown = self.setting("action_cooldown_s")
-        last = self.db.one("SELECT created_at FROM messages WHERE author_id = ? AND zone_id = ? AND kind = 'action'"
-                           " AND action_key = ? ORDER BY id DESC LIMIT 1", (pid, zid, key))
+        if key == "me":
+            last = self.db.one("SELECT created_at FROM messages WHERE author_id = ? AND zone_id = ? AND kind = 'action'"
+                               " AND action_key = 'me' AND text = ? ORDER BY id DESC LIMIT 1", (pid, zid, text))
+        else:
+            last = self.db.one("SELECT created_at FROM messages WHERE author_id = ? AND zone_id = ? AND kind = 'action'"
+                               " AND action_key = ? ORDER BY id DESC LIMIT 1", (pid, zid, key))
         if cooldown and last and self.now() - last["created_at"] < cooldown:
             wait = cooldown - (self.now() - last["created_at"])
             raise BeachError("cooldown", f"you just did that; try again in {int(wait) + 1}s",
