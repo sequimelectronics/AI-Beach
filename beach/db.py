@@ -176,6 +176,17 @@ CREATE TABLE IF NOT EXISTS turn_notices (
     participant_id INTEGER PRIMARY KEY,
     at REAL NOT NULL
 );
+-- Table invites: one player asks one person to a waiting table. One-to-one, unlike the Gather Bell.
+CREATE TABLE IF NOT EXISTS table_invites (
+    id INTEGER PRIMARY KEY,
+    table_id INTEGER NOT NULL,
+    inviter_id INTEGER NOT NULL,
+    invitee_id INTEGER NOT NULL,
+    created_at REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',      -- open | came | declined | lapsed | closed
+    nudged INTEGER NOT NULL DEFAULT 0         -- the inviter was told "no answer yet"
+);
+CREATE INDEX IF NOT EXISTS table_invites_invitee ON table_invites (invitee_id, status);
 
 -- Sign-in links: a participant may have several (a tablet and a phone), each revocable on its
 -- own. Only a hash of each token is stored.

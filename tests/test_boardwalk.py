@@ -302,6 +302,123 @@ class TableTests(BoardwalkCase):
             self.assertIn("talk at a table", e.exception.message)
         self.bw.say(self.pebble.id, tid, "/me waves")                       # at a table: fine
 
+
+class InviteTests(BoardwalkCase):
+    """Table invites (play-test finding 2) and rematches. One-to-one: a decline is told only to the
+    inviter, kindly; no answer gets one "no answer yet"; the invite lapses."""
+
+    def notes(self, who):
+        return [e["text"] for e in self.beach.inbox(who.id)]
+
+    def table_lines(self, tid):
+        return [m["text"] for m in self.bw.chat(self.sandy.id, tid)]
+
+    def test_invite_then_come_sits_you_down(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")
+        note = self.notes(self.pebble)
+        self.assertEqual(len(note), 1)
+        self.assertTrue(note[0].startswith("Sandy invited you to checkers"), note)
+        self.assertEqual([i["from"] for i in self.bw.invites_for(self.pebble.id)], ["Sandy"])
+        self.assertIn("Sandy invited Pebble", self.table_lines(tid))
+        self.assertEqual(self.bw.view(self.sandy.id, tid)["invited"], ["Pebble"])
+        v = self.bw.respond(self.pebble.id, tid, "come")
+        self.assertEqual(v["status"], "playing")
+        self.assertEqual(self.bw.invites_for(self.pebble.id), [])
+
+    def test_a_decline_is_private_and_kind(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")
+        self.bw.respond(self.pebble.id, tid, "decline")
+        self.assertEqual(self.notes(self.sandy), ["Pebble can't join right now. Maybe next time!"])
+        self.assertFalse([t for t in self.table_lines(tid) if "decline" in t or "can't" in t])
+        with self.assertRaises(BeachError):
+            self.bw.respond(self.pebble.id, tid, "come")          # answered: nothing left to answer
+
+    def test_no_answer_tells_the_inviter_once_then_lapses(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")
+        self.clock.advance(601)
+        self.bw.sweep()
+        self.bw.sweep()
+        self.assertEqual(self.notes(self.sandy), [f"No answer from Pebble yet (table {tid})."])
+        self.clock.advance(3600)
+        self.bw.sweep()
+        self.assertEqual(self.bw.invites_for(self.pebble.id), [])
+        self.assertEqual(self.notes(self.sandy), [])
+
+    def test_the_rules(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        with self.assertRaises(BeachError):
+            self.bw.invite(self.coral.id, tid, "Pebble")          # not sitting here
+        with self.assertRaises(BeachError):
+            self.bw.invite(self.sandy.id, tid, "Nobody")
+        with self.assertRaises(BeachError):
+            self.bw.invite(self.sandy.id, tid, "Sandy")
+        self.bw.invite(self.sandy.id, tid, "@Pebble")             # an @ is fine
+        with self.assertRaises(BeachError):
+            self.bw.invite(self.sandy.id, tid, "Pebble")          # already invited
+        self.bw.invite(self.sandy.id, tid, "Coral")
+        self.bw.sit(self.coral.id, tid)                           # the table fills: Pebble's invite is moot
+        self.assertEqual(self.bw.invites_for(self.pebble.id), [])
+        with self.assertRaises(BeachError):
+            self.bw.invite(self.sandy.id, tid, "Drift")           # started: invites are for waiting tables
+
+    def test_the_hook_is_for_someone_away(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")             # Pebble isn't on the Boardwalk
+        self.assertEqual([(h["event"], h["invitee"]) for h in self.hook], [("table_invite", "Pebble")])
+        self.beach.join(self.coral.id, BOARDWALK)
+        self.bw.invite(self.sandy.id, tid, "Coral")              # Coral is here: the note is enough
+        self.assertEqual(len(self.hook), 1)
+
+    def test_a_visitor_without_the_bell_invites_only_people_here(self):
+        now = self.clock()
+        v = self.beach.access.invite_visitor("Kelp", "agent", now, now + 3600)["participant"]
+        tid = self.bw.open(v.id, BOARDWALK, "checkers")["id"]
+        with self.assertRaises(BeachError) as e:
+            self.bw.invite(v.id, tid, "Pebble")                  # away: a visitor can't call them in
+        self.assertEqual(e.exception.code, "forbidden")
+        self.beach.join(self.pebble.id, BOARDWALK)
+        self.bw.invite(v.id, tid, "Pebble")
+        self.assertEqual(self.hook, [])                           # and never through anyone's hook
+
+    def test_rematch_opens_a_table_and_invites_the_others(self):
+        tid = self.game(self.sandy, self.pebble)
+        with self.assertRaises(BeachError):
+            self.bw.rematch(self.sandy.id, tid)                   # still being played
+        self.bw.move(self.sandy.id, tid, "c3-d4")
+        self.bw.resign(self.pebble.id, tid)
+        v = self.bw.rematch(self.pebble.id, tid)
+        self.assertNotEqual(v["id"], tid)
+        self.assertEqual((v["status"], v["game"], v["invited"]), ("waiting", "checkers", ["Sandy"]))
+        self.assertEqual(self.bw.seat_of(v["id"], self.pebble.id), 0)
+        self.assertIn(f"Pebble asked for a rematch at table {v['id']}", self.table_lines(tid))
+        with self.assertRaises(BeachError):
+            self.bw.rematch(self.coral.id, tid)                   # only the players of that game
+        self.bw.respond(self.sandy.id, v["id"], "come")
+        self.assertEqual(self.bw.table(v["id"])["status"], "playing")
+
+    def test_a_card_game_rematch_keeps_the_number_of_players(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "crazy8", options={"players": 3, "seed": 4})["id"]
+        self.bw.sit(self.pebble.id, tid)
+        self.bw.sit(self.coral.id, tid)
+        names = {0: self.sandy, 1: self.pebble, 2: self.coral}
+        while self.bw.view(self.sandy.id, tid)["status"] == "playing":
+            who = names[self.bw.view(self.sandy.id, tid)["to_move"]]
+            self.bw.move(who.id, tid, self.bw.view(who.id, tid)["legal"][0])
+        v = self.bw.rematch(self.coral.id, tid)
+        self.assertEqual(len(v["seats"]), 3)
+        self.assertEqual(sorted(v["invited"]), ["Pebble", "Sandy"])
+
+    def test_invites_show_in_the_feed_as_waiting_on_you(self):
+        from beach.feed import actionable
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")
+        self.assertEqual([(a["what"], a["from"]) for a in actionable(self.beach, self.pebble.id)],
+                         [("table_invite", "Sandy")])
+
+
 class BundleTests(BoardwalkCase):
     def test_table_bundle_lists_legal_moves_on_your_turn(self):
         tid = self.game()

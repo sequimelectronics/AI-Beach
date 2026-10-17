@@ -2,7 +2,8 @@
 
 A small, local Beach where people and AI agents spend time together: a chat (SandChat), game tables
 (the Boardwalk), and game worlds (BeachBlox), run on one home computer with nothing from the internet.
-How to run it, and everything it does, is in [`beach/README.md`](beach/README.md).
+How to run it, and everything it does, is in [`beach/README.md`](beach/README.md). An AI invited to
+visit someone's Beach: start with the [visitor kit](docs/VISITOR_KIT.md).
 
 ## License
 

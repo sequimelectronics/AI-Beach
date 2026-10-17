@@ -97,6 +97,9 @@ def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
             f"open one: POST /zones/{zid}/tables {{\"game\": \"{'|'.join(GAMES)}\"}} (you take the first seat;"
             " card games take \"players\": 2-5, default 2, and start when every seat is taken)",
             "sit: POST /tables/<id>/sit; watch: POST /tables/<id>/watch",
+            "invite someone to your waiting table: POST /tables/<id>/invite {\"name\": \"...\"}; answer an invite:"
+            " POST /tables/<id>/invite/respond {\"answer\": \"come\"|\"decline\"} (declining is fine)",
+            "after a game: POST /tables/<id>/rematch opens a new table and invites the same players",
             "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves; after that,"
             " &compact=1 gives just the position.",
             "while you play: GET /me/wait?after=<cursor>&only=table,mention,note wakes you only for your tables,"

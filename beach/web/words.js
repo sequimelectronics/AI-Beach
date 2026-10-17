@@ -53,7 +53,14 @@ const T = (() => {
     // tables
     leave_table: 'Leave table',
     back_to_tables: 'Back to the tables',
-    leave_boardwalk: 'Leave {zone}'
+    leave_boardwalk: 'Leave {zone}',
+    invite: 'Invite',
+    invite_who: 'Invite someone by name',
+    invited: 'Invited {name}.',
+    invited_list: 'Invited: {names} (waiting for an answer)',
+    invited_here: "You're invited to this table.",
+    table_invite: '{name} invited you to {game} (table {table}). Come?',
+    rematch: 'Rematch'
   }
 
   function t (key, vars) {

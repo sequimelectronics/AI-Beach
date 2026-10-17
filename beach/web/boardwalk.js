@@ -229,16 +229,59 @@
     return el('p', { class: 'turn-banner wait', text: view.my_seat === null ? who + verb : 'Waiting for ' + who + '. The game waits as long as it takes.' })
   }
 
+  // Ask one person to this table. Names come from who's at the Beach now; any name can be typed.
+  function inviteForm () {
+    const list = el('datalist', { id: 'invite-names' })
+    api('GET', '/map').then(r => {
+      const names = new Set()
+      for (const z of r.zones) for (const w of (z.who || [])) if (w.name && w.name !== me.name) names.add(w.name)
+      list.replaceChildren(...[...names].sort().map(n => el('option', { value: n })))
+    }).catch(() => {})
+    const input = el('input', { type: 'text', list: 'invite-names', 'aria-label': T.t('invite_who'), placeholder: T.t('invite_who'), autocomplete: 'off' })
+    return el('form', {
+      class: 'inline-form invite-form',
+      onsubmit: async (ev) => {
+        ev.preventDefault()
+        const name = input.value.trim()
+        if (!name) return
+        try { await api('POST', '/tables/' + view.id + '/invite', { name }); input.value = ''; toast(T.t('invited', { name })); await refresh(true) } catch (e) { toast(e.message) }
+      }
+    }, input, list, el('button', { class: 'quiet', type: 'submit', text: T.t('invite') }))
+  }
+
+  async function answerInvite (answer) {
+    try { await api('POST', '/tables/' + view.id + '/invite/respond', { answer }) } catch (e) { toast(e.message) }
+    await refresh(true)
+  }
+
+  async function rematch () {
+    try {
+      const t = await api('POST', '/tables/' + view.id + '/rematch')
+      location.href = tableUrl(t.id)
+    } catch (e) { toast(e.message) }
+  }
+
   function controls () {
+    if (view.my_seat === null && view.status === 'waiting' && view.invite_for_me) {
+      return el('div', { class: 'row' }, el('span', { class: 'draw-offer', text: T.t('invited_here') }),
+        el('button', { class: 'primary', type: 'button', text: T.t('come'), onclick: () => answerInvite('come') }),
+        el('button', { class: 'quiet', type: 'button', text: T.t('not_now'), onclick: () => answerInvite('decline') }))
+    }
     if (view.my_seat === null) {
       if (view.status === 'waiting' && !view.draws) return el('div', { class: 'row' }, el('button', { class: 'primary', type: 'button', text: 'Sit down', onclick: () => sit(view.id) }))
       if (view.status === 'waiting') return el('div', { class: 'row' }, view.seats.filter(s => !s.player).map(s => el('button', { class: 'primary', type: 'button', text: 'Sit as ' + s.name, onclick: () => sit(view.id, s.seat) })))
       return el('div', { class: 'row' }, el('button', { class: 'quiet', type: 'button', text: view.watching ? 'Stop watching' : 'Watch', onclick: () => act(view.watching ? 'unwatch' : 'watch') }))
     }
-    if (view.status === 'waiting') return el('div', { class: 'row' }, el('button', { class: 'quiet', type: 'button', text: 'Stand up', onclick: () => act('stand') }))
+    if (view.status === 'waiting') {
+      return el('div', {},
+        el('div', { class: 'row' }, el('button', { class: 'quiet', type: 'button', text: 'Stand up', onclick: () => act('stand') })),
+        inviteForm(),
+        view.invited.length ? el('p', { class: 'hint', text: T.t('invited_list', { names: view.invited.join(', ') }) }) : null)
+    }
     if (view.status !== 'playing') {
       return el('div', { class: 'row' },
-        el('button', { class: 'primary', type: 'button', text: T.t('leave_table'), onclick: leaveTable }),
+        view.status === 'finished' ? el('button', { class: 'primary', type: 'button', text: T.t('rematch'), onclick: rematch }) : null,
+        el('button', { class: view.status === 'finished' ? 'quiet' : 'primary', type: 'button', text: T.t('leave_table'), onclick: leaveTable }),
         el('a', { class: 'button quiet', href: '/boardwalk?zone=' + encodeURIComponent(zid), text: T.t('back_to_tables') }))
     }
     const offer = view.draw_offer
@@ -327,7 +370,8 @@
   async function refresh (force) {
     try {
       const v = await api('GET', '/tables/' + tableId)
-      const key = [v.status, v.position.ply, v.draw_offer, v.watchers, v.seats.map(s => s.player && s.player.id).join()].join('|')
+      const key = [v.status, v.position.ply, v.draw_offer, v.watchers, v.seats.map(s => s.player && s.player.id).join(),
+        v.invited.join(), v.invite_for_me].join('|')
       if (force || key !== lastKey) {
         if (view && v.position.ply !== view.position.ply) chosenRank = null
         view = v; lastKey = key; if (!force) picked = []; render()

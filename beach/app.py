@@ -181,7 +181,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
                 "was": beach.was_name(p.id), "next_rename_in": beach._rename_wait(p.id),
                 "zones": beach.zones_of(p.id),
                 "optout": beach.optout_status(p.id, SANDCHAT),
-                "invites": beach.bell_invites(p.id)}
+                "invites": beach.bell_invites(p.id), "table_invites": beach.tables.invites_for(p.id)}
 
     @app.get("/me/links")
     def my_links(p: Participant = Depends(who)):
@@ -459,6 +459,18 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.post("/tables/{tid}/draw")
     def draw(tid: int, body: dict = Body(...), p: Participant = Depends(who)):
         return bw.draw(p.id, tid, str(body.get("action", "")))
+
+    @app.post("/tables/{tid}/invite")
+    def invite_to_table(tid: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return bw.invite(p.id, tid, str(body.get("name", "")))
+
+    @app.post("/tables/{tid}/invite/respond")
+    def answer_table_invite(tid: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return bw.respond(p.id, tid, str(body.get("answer", "")))
+
+    @app.post("/tables/{tid}/rematch")
+    def rematch(tid: int, p: Participant = Depends(who)):
+        return bw.rematch(p.id, tid)
 
     @app.post("/tables/{tid}/say")
     def table_say(tid: int, body: dict = Body(...), p: Participant = Depends(who)):

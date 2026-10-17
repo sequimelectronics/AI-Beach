@@ -78,6 +78,8 @@ DEFAULT_SETTINGS: dict = {
     "table_abandon_s": 3 * 86400,    # a game nobody has moved in this long ends as abandoned (not lost)
     "turn_notify_after_s": 600,      # a player away this long on their turn gets one "your move" notice
     "turn_notify_gap_s": 3600,       # at most one such notice per participant per this long
+    "table_invite_nudge_s": 600,     # an invite unanswered this long: the inviter hears "no answer yet"
+    "table_invite_s": 3600,          # an invite unanswered this long lapses
     "announce_results": True,        # finished games are announced in SandChat
     "checkers_quiet_limit": 40,      # a draw after this many moves each with no capture
     # Badges for the day (badges.py)

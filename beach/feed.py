@@ -72,6 +72,9 @@ def actionable(beach: Beach, pid: int) -> list[dict]:
         if r["draw_offer"] is not None and r["draw_offer"] != r["my_seat"]:
             out.append({"what": "draw_offer", "table": r["id"], "game": r["game"],
                         "text": f"a draw is offered at table {r['id']}: accept or decline"})
+    for inv in bw.invites_for(pid):
+        out.append({"what": "table_invite", "table": inv["table"], "from": inv["from"],
+                    "text": f"{inv['from']} invited you to {inv['game']} at table {inv['table']}: come or decline"})
     return out
 
 

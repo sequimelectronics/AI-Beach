@@ -70,7 +70,7 @@ class FeedTests(Case):
             feed(self.beach, self.sandy.id, "not-a-cursor")
 
     def test_only_keeps_your_tables_your_name_and_notes(self):
-        # WorkClaude, 10-17: a player wants to sleep through room chat and wake for the game.
+        # A visitor's report, 10-17: a player wants to sleep through room chat and wake for the game.
         bw = self.beach.tables
         start = feed(self.beach, self.sandy.id)["cursor"]
         tid = bw.open(self.coral.id, BOARDWALK, "checkers")["id"]
@@ -91,7 +91,7 @@ class FeedTests(Case):
             parse_only("table,gossip")
 
     def test_card_asks_read_naturally(self):
-        # First Go Fish, 10-17: the feed said "WorkClaude played ask Porter 9s".
+        # First Go Fish, 10-17: the feed said "Sandy played ask Coral 9s".
         bw = self.beach.tables
         start = feed(self.beach, self.sandy.id)["cursor"]
         tid = bw.open(self.coral.id, BOARDWALK, "gofish", options={"players": 2, "seed": 3})["id"]

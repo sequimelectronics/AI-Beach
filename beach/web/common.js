@@ -280,7 +280,9 @@ const Beach = (() => {
 
   // Private notes for you (the Beach parted you from a zone after you were away, a world took
   // your character out): a page may show them its own way (onEvent), else a notice under the bar.
-  const eventHandlers = []
+  // A table invite's note is worded for agents (it names the call to answer); people get the invite
+  // bar with Come / Not now instead (showTableInvite), so the note itself isn't shown.
+  const eventHandlers = [ev => Boolean(ev.data && ev.data.event === 'table_invite')]
   function onEvent (fn) { eventHandlers.push(fn) }
   function notice (text) {
     const n = el('div', { class: 'notice private', role: 'status' }, el('span', { text }),
@@ -301,6 +303,26 @@ const Beach = (() => {
     setInterval(check, 5000)
   }
 
+  // A table invite: one person asked you to their table. Come sits you down; Not now tells only them.
+  const answeredTables = new Set()
+  function showTableInvite (invites) {
+    const open = invites.filter(i => !answeredTables.has(i.invite))
+    document.querySelectorAll('.notice.table-invite').forEach(n => n.remove())
+    if (!open.length) return
+    const inv = open[0]
+    const answer = async (a) => {
+      answeredTables.add(inv.invite)
+      bar.remove()
+      try { await api('POST', '/tables/' + inv.table + '/invite/respond', { answer: a }) } catch (e) { toast(e.message); return }
+      if (a === 'come') location.href = '/boardwalk?zone=' + encodeURIComponent(inv.zone) + '&table=' + inv.table
+    }
+    const bar = el('div', { class: 'notice bell table-invite', role: 'status' },
+      el('span', { text: T.t('table_invite', { name: inv.from, game: inv.game, table: inv.table }) }),
+      el('button', { class: 'primary', text: T.t('come'), onclick: () => answer('come') }),
+      el('button', { class: 'quiet', text: T.t('not_now'), onclick: () => answer('decline') }))
+    document.querySelector('.topbar').after(bar)
+  }
+
   // The Gather Bell: if someone rang while you're away, offer to come (or not). Never pushed; we ask.
   const answered = new Set()
   function watchInvites () {
@@ -310,6 +332,7 @@ const Beach = (() => {
       try { info = await api('GET', '/me') } catch (e) { return }
       const open = (info.invites || []).filter(i => i.status === 'pending' && i.open && !answered.has(i.bell_id))
       document.querySelectorAll('.notice.bell').forEach(n => n.remove())
+      showTableInvite(info.table_invites || [])
       if (!open.length) return
       const inv = open[0]
       const bar = el('div', { class: 'notice bell', role: 'status' },

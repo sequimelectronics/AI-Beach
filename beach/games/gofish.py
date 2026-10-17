@@ -160,7 +160,8 @@ class GoFish(CardGame):
                 card = s["stock"].pop()
                 s["hands"][seat] = sort_hand(s["hands"][seat] + [card])
                 if rank(card) == r:
-                    info["text"] = f"{me} asked {them} for {plural(r)}: go fish! {me} fished a {r} and goes again"
+                    a_n = "an" if r in ("A", "8") else "a"
+                    info["text"] = f"{me} asked {them} for {plural(r)}: go fish! {me} fished {a_n} {r} and goes again"
                     info["fished"] = r
                     again = True
                 else:

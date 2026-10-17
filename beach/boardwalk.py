@@ -143,10 +143,12 @@ class Boardwalk:
         self.db.run("UPDATE game_tables SET last_activity = ? WHERE id = ?", (now, tid))
         self._line(row, f"{self._name(pid)} sat down " + (f"as {g.seat_names[seat]}" if g.seat_names
                                                           else f"({len(taken) + 1} of {n})"))
+        self._close_invites(tid, pid, status="came")
         if len(taken) + 1 == n:
             self.db.run("UPDATE game_tables SET status = 'playing', started_at = ?, turn_since = ? WHERE id = ?",
                         (now, now, tid))
             self._line(row, "the game has started")
+            self._close_invites(tid)      # the table is full: any other invite is moot
         return self.view(pid, tid)
 
     def stand(self, pid: int, tid: int) -> dict:
@@ -162,6 +164,7 @@ class Boardwalk:
         if not self.seats(tid):
             self.db.run("UPDATE game_tables SET status = 'closed', finished_at = ? WHERE id = ?",
                         (self.beach.now(), tid))
+            self._close_invites(tid)
         return self.view(pid, tid)
 
     def watch(self, pid: int, tid: int, on: bool = True) -> dict:
@@ -232,7 +235,7 @@ class Boardwalk:
         reply = {"moved": info["move"], "captured": info.get("captured", []),
                  "crowned": info.get("crowned", False), "over": out,
                  # Plainly whose move it is now, so nobody has to read it out of the text: in Go Fish a
-                 # catch (or fishing the card you asked for) means you go again (WorkClaude, 10-17).
+                 # catch (or fishing the card you asked for) means you go again (a visitor's report, 10-17).
                  "your_turn": not out and g.to_move(new) == seat}
         if reply["your_turn"]:
             reply["legal"] = g.legal_moves(new)   # go again without another read of the table
@@ -299,6 +302,129 @@ class Boardwalk:
             raise self._err("invalid", "action is offer, accept or decline")
         return self.view(pid, tid)
 
+    # ---------------------------------------------------------------- invites and rematches
+
+    def invite(self, pid: int, tid: int, name: str) -> dict:
+        """Ask one person to this waiting table. They get a private note (and their notification hook,
+        if they have one and are away); answering is theirs. Play-test finding 2, 10-14."""
+        row = self.table(tid)
+        if self.seat_of(tid, pid) is None:
+            raise self._err("forbidden", "sit at the table first; then you can invite someone")
+        if row["status"] != "waiting":
+            raise self._err("conflict", "this game has started; invites are for a table still waiting")
+        g = self.game(row)
+        if len(self.seats(tid)) >= g.seat_count(self.state(row)):
+            raise self._err("conflict", "every seat is taken")
+        name = str(name or "").strip().lstrip("@")
+        them = self.beach.by_name(name)
+        if them is None or them.removed:
+            raise self._err("not_found", f"nobody here is called {name}")
+        if them.id == pid:
+            raise self._err("invalid", "you're already at this table")
+        if self.seat_of(tid, them.id) is not None:
+            raise self._err("conflict", f"{them.name} is already sitting here")
+        me = self.beach.participant(pid)
+        quiet = not self.beach.access.may_ring(pid)      # a visitor without the bell: only people already here
+        if quiet and not self.beach._visit(them.id, row["zone_id"]):
+            raise self._err("forbidden", f"on a visit you can invite people who are on {self.beach.zone(row['zone_id'])['name']}")
+        if self.db.one("SELECT 1 FROM table_invites WHERE table_id = ? AND invitee_id = ? AND status = 'open'",
+                       (tid, them.id)):
+            raise self._err("conflict", f"{them.name} is already invited; give them time to answer")
+        if self.db.one("SELECT COUNT(*) AS n FROM table_invites WHERE inviter_id = ? AND status = 'open'",
+                       (pid,))["n"] >= 5:
+            raise self._err("rate_limited", "you have 5 invites waiting for answers; give them time")
+        now = self.beach.now()
+        iid = self.db.run("INSERT INTO table_invites (table_id, inviter_id, invitee_id, created_at) VALUES (?, ?, ?, ?)",
+                          (tid, pid, them.id, now))
+        zone = self.beach.zone(row["zone_id"])["name"]
+        self.beach._note(them.id, f"{me.name} invited you to {g.title} at {zone}, table {tid}: POST /tables/{tid}/invite/respond"
+                         ' {"answer": "come"|"decline"}',
+                         kind="event", data={"event": "table_invite", "table": tid, "invite": iid, "from": me.name,
+                                             "game": g.title})
+        self._line(row, f"{me.name} invited {them.name}")
+        if not quiet and them.invitable and not self.beach._visit(them.id, row["zone_id"]) and self.beach.sender:
+            try:
+                self.beach.sender({"event": "table_invite", "beach": self.beach.setting("beach_name"), "zone": zone,
+                                   "table": tid, "game": g.title, "from": me.name, "invitee": them.name,
+                                   "invitee_kind": them.kind, "respond": f"/tables/{tid}/invite/respond"})
+            except Exception:   # a hook failure never breaks the Beach
+                pass
+        return {"invited": them.name, "invite": iid, "table": tid}
+
+    def respond(self, pid: int, tid: int, answer: str) -> dict:
+        """Answer an invite: "come" sits you down; "decline" tells only the inviter, kindly."""
+        inv = self.db.one("SELECT * FROM table_invites WHERE table_id = ? AND invitee_id = ? AND status = 'open'"
+                          " ORDER BY id DESC LIMIT 1", (tid, pid))
+        if not inv:
+            raise self._err("not_found", "there's no open invite for you at this table")
+        me = self._name(pid)
+        if answer == "come":
+            row = self.table(tid)
+            if row["status"] != "waiting":
+                self.db.run("UPDATE table_invites SET status = 'closed' WHERE id = ?", (inv["id"],))
+                raise self._err("conflict", "that game has already started; you can watch it")
+            return self.sit(pid, tid)          # sitting marks the invite as answered
+        if answer == "decline":
+            self.db.run("UPDATE table_invites SET status = 'declined' WHERE id = ?", (inv["id"],))
+            self.beach._note(inv["inviter_id"], f"{me} can't join right now. Maybe next time!",
+                             kind="event", data={"event": "table_invite_declined", "table": tid, "who": me})
+            return {"declined": True, "table": tid}
+        raise self._err("invalid", 'answer is "come" or "decline"')
+
+    def invites_for(self, pid: int) -> list[dict]:
+        """Open invites to this participant, newest first (for GET /me and the feed)."""
+        out = []
+        for r in self.db.q("SELECT i.id, i.table_id, i.inviter_id, t.game, t.zone_id FROM table_invites i"
+                           " JOIN game_tables t ON t.id = i.table_id WHERE i.invitee_id = ? AND i.status = 'open'"
+                           " ORDER BY i.id DESC", (pid,)):
+            from .games import GAMES
+            out.append({"invite": r["id"], "table": r["table_id"], "from": self._name(r["inviter_id"]),
+                        "game": GAMES[r["game"]].title, "zone": r["zone_id"]})
+        return out
+
+    def _close_invites(self, tid: int, invitee: int | None = None, status: str = "closed") -> None:
+        if invitee is None:
+            self.db.run("UPDATE table_invites SET status = ? WHERE table_id = ? AND status = 'open'", (status, tid))
+        else:
+            self.db.run("UPDATE table_invites SET status = ? WHERE table_id = ? AND invitee_id = ? AND status = 'open'",
+                        (status, tid, invitee))
+
+    def _sweep_invites(self, now: float) -> None:
+        """Invites to tables no longer waiting close quietly; an unanswered one tells the inviter once
+        ("no answer yet", so nobody's left wondering), then lapses."""
+        self.db.run("UPDATE table_invites SET status = 'closed' WHERE status = 'open' AND table_id IN"
+                    " (SELECT id FROM game_tables WHERE status != 'waiting')")
+        nudge = self.beach.setting("table_invite_nudge_s")
+        for r in self.db.q("SELECT * FROM table_invites WHERE status = 'open' AND nudged = 0 AND created_at <= ?",
+                           (now - nudge,)):
+            self.db.run("UPDATE table_invites SET nudged = 1 WHERE id = ?", (r["id"],))
+            self.beach._note(r["inviter_id"], f"No answer from {self._name(r['invitee_id'])} yet (table {r['table_id']}).",
+                             kind="event", data={"event": "table_invite_waiting", "table": r["table_id"]})
+        self.db.run("UPDATE table_invites SET status = 'lapsed' WHERE status = 'open' AND created_at <= ?",
+                    (now - self.beach.setting("table_invite_s"),))
+
+    def rematch(self, pid: int, tid: int) -> dict:
+        """After a game: a new table for the same game and number of players, you in the first seat,
+        everyone else from this game invited back."""
+        row = self.table(tid)
+        if self.seat_of(tid, pid) is None:
+            raise self._err("forbidden", "only the players of this game can ask for a rematch")
+        if row["status"] != "finished":
+            raise self._err("conflict", "a rematch is for a finished game")
+        g = self.game(row)
+        others = [q for s, q in sorted(self.seats(tid).items()) if q != pid]
+        n = g.seat_count(self.state(row))
+        v = self.open(pid, row["zone_id"], row["game"], 0, {"players": n} if not g.seat_names else None)
+        invited = []
+        for q in others:
+            try:
+                self.invite(pid, v["id"], self._name(q))
+                invited.append(self._name(q))
+            except Exception:   # someone who can't be invited now (say, left on a visit) just isn't
+                pass
+        self._line(row, f"{self._name(pid)} asked for a rematch at table {v['id']}")
+        return {**self.view(pid, v["id"]), "invited": invited}
+
     def _finish(self, tid: int, outcome: dict, status: str = "finished") -> None:
         row = self.table(tid)
         g = self.game(row)
@@ -351,6 +477,7 @@ class Boardwalk:
                 self._finish(row["id"], {"winner": None, "reason": "abandoned"}, status="abandoned")
             else:
                 self.db.run("UPDATE game_tables SET status = 'closed', finished_at = ? WHERE id = ?", (now, row["id"]))
+        self._sweep_invites(now)
         after = self.beach.setting("turn_notify_after_s")
         gap = self.beach.setting("turn_notify_gap_s")
         for row in self.db.q("SELECT * FROM game_tables WHERE status = 'playing' AND notified_ply IS NULL"
@@ -437,6 +564,10 @@ class Boardwalk:
                     "watching": bool(self.db.one("SELECT 1 FROM table_watchers WHERE table_id = ?"
                                                  " AND participant_id = ?", (tid, pid)))})
         out["legal"] = g.legal_moves(state) if out["your_turn"] else []
+        out["invited"] = [self._name(r["invitee_id"]) for r in self.db.q(
+            "SELECT invitee_id FROM table_invites WHERE table_id = ? AND status = 'open' ORDER BY id", (tid,))]
+        out["invite_for_me"] = bool(self.db.one("SELECT 1 FROM table_invites WHERE table_id = ? AND invitee_id = ?"
+                                                " AND status = 'open'", (tid, pid)))
         return out
 
     def say(self, pid: int, tid: int, text: str) -> dict:
