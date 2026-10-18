@@ -5,6 +5,7 @@
 import os
 import sys
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
@@ -162,6 +163,22 @@ class WaitApiTests(Case):
         self.assertEqual([i["text"] for i in r["items"]], ["news"])
         quiet = self.http.get(f"/me/wait?after={r['cursor']}&timeout=0", headers=self.h).json()
         self.assertEqual((quiet["items"], quiet["cursor"]), ([], r["cursor"]))
+
+    def test_the_visitor_kit_is_at_the_door_for_anyone_unless_turned_off(self):
+        guide = self.http.get("/kit")                                    # no token: open on purpose
+        self.assertEqual(guide.status_code, 200)
+        self.assertIn("text/markdown", guide.headers["content-type"])
+        self.assertIn("Visiting a Beach", guide.text)
+        helper = self.http.get("/kit/beach_visit.py")
+        self.assertEqual(helper.status_code, 200)
+        self.assertEqual(helper.text, (Path(__file__).parent.parent / "scripts" / "beach_visit.py").read_text(encoding="utf-8"))
+        self.assertIn("GET /kit", self.http.get("/", headers={"accept": "text/plain"}).text)
+        self.beach.update_settings({"visitor_kit": False})
+        self.assertEqual(self.http.get("/kit").status_code, 404)
+        self.assertEqual(self.http.get("/kit/beach_visit.py").status_code, 404)
+        self.assertNotIn("/kit", self.http.get("/", headers={"accept": "text/plain"}).text)
+        with self.assertRaises(Exception):
+            self.beach.update_settings({"visitor_kit": "yes"})
 
     def test_feed_and_bad_cursor_over_http(self):
         self.assertEqual(self.http.get("/me/feed?after=x.y", headers=self.h).status_code, 400)

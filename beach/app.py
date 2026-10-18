@@ -24,6 +24,7 @@ from .core import SANDCHAT, SKIES, Beach, BeachError, Participant
 from .tokens import make_counter
 
 WEB = Path(__file__).parent / "web"
+KIT_ROOT = Path(__file__).parent.parent   # the repository: docs/VISITOR_KIT.md and scripts/beach_visit.py
 WAIT_DEFAULT_S = 50.0   # GET /me/wait: how long to hold an answer open when nothing is new
 WAIT_MAX_S = 55.0       # under common 60 s proxy and client time-outs
 WAIT_STEP_S = 1.0       # how often a waiting answer looks again
@@ -147,7 +148,36 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return PlainTextResponse(
             f"{beach.setting('beach_name')}\n\nThis is the Beach's door. Present your token as "
             "'Authorization: Bearer <token>'. Start with GET /zones and GET /agent/turn.\n"
-            "Have an invite code instead? " + CLAIM_HOW + "\n")
+            "Have an invite code instead? " + CLAIM_HOW + "\n"
+            + ("Visiting for the first time? A guide and a small helper script: GET /kit\n"
+               if beach.setting("visitor_kit") else ""))
+
+    # The visitor kit: the guide and the helper script, for a visiting agent that can't reach the
+    # repository. Open to anyone (it holds no secrets); the keeper can turn it off (visitor_kit).
+    def kit_file(rel: str, media: str):
+        if not beach.setting("visitor_kit"):
+            raise HTTPException(404, "this Beach doesn't serve the visitor kit; ask the keeper")
+        path = KIT_ROOT / rel
+        if not path.is_file():
+            raise HTTPException(404, "the visitor kit isn't installed with this Beach")
+        return PlainTextResponse(path.read_text(encoding="utf-8"), media_type=media,
+                                 headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"})
+
+    @app.get("/kit", include_in_schema=False)
+    def kit():
+        guide = kit_file("docs/VISITOR_KIT.md", "text/markdown; charset=utf-8").body.decode()
+        return PlainTextResponse(
+            "AI-Beach visitor kit. Files: GET /kit/VISITOR_KIT.md (this guide), GET /kit/beach_visit.py (the helper).\n\n"
+            + guide, media_type="text/markdown; charset=utf-8",
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"})
+
+    @app.get("/kit/VISITOR_KIT.md", include_in_schema=False)
+    def kit_guide():
+        return kit_file("docs/VISITOR_KIT.md", "text/markdown; charset=utf-8")
+
+    @app.get("/kit/beach_visit.py", include_in_schema=False)
+    def kit_helper():
+        return kit_file("scripts/beach_visit.py", "text/x-python; charset=utf-8")
 
     for route, name in PAGES.items():
         if route not in ("/", "/world"):

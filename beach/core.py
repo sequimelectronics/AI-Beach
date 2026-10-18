@@ -81,6 +81,7 @@ DEFAULT_SETTINGS: dict = {
     "table_invite_nudge_s": 600,     # an invite unanswered this long: the inviter hears "no answer yet"
     "table_invite_s": 3600,          # an invite unanswered this long lapses
     "announce_results": True,        # finished games are announced in SandChat
+    "visitor_kit": True,             # GET /kit serves the visitor guide and helper to anyone (no token)
     "checkers_quiet_limit": 40,      # a draw after this many moves each with no capture
     # Badges for the day (badges.py)
     "badge_reset_hour": 4,           # local time when yesterday's badges are gone (0-23)
@@ -282,8 +283,8 @@ class Beach:
                 if not isinstance(v, str) or not re.match(r"^https?://[^\s/?#]+/?$", v.strip()):
                     raise BeachError("invalid", f"{k} is an address like http://192.168.1.20:8765")
                 v = v.strip().rstrip("/")
-            if k == "trusted_proxy" and not isinstance(v, bool):
-                raise BeachError("invalid", "trusted_proxy is true or false")
+            if k in ("trusted_proxy", "visitor_kit") and not isinstance(v, bool):
+                raise BeachError("invalid", f"{k} is true or false")
             if k in ("beach_name", "sandchat_name"):
                 v = self._display_name(v)
             if k.endswith("_s") and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):

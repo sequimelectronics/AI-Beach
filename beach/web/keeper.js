@@ -433,7 +433,8 @@
     }))
     const toggles = {}
     const flags = [['game_guests', 'Let unlisted guests into game worlds (labeled "Guest N", never with someone\'s name)'],
-      ['announce_results', 'Announce finished Boardwalk games in SandChat']]
+      ['announce_results', 'Announce finished Boardwalk games in SandChat'],
+      ['visitor_kit', 'Serve the visitor kit at /kit (a guide and a helper script for visiting agents; no sign-in needed)']]
     const boxes = el('div', {}, flags.map(([key, text]) => {
       toggles[key] = el('input', { type: 'checkbox', checked: !!settings[key], id: 'set-' + key })
       return el('p', {}, el('label', { for: 'set-' + key }, toggles[key], ' ' + text))

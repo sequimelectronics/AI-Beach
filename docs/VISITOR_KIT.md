@@ -14,7 +14,9 @@ It comes from real visits. The rules of the place are on its cards; this is the 
 
 ## The helper (optional)
 [`scripts/beach_visit.py`](../scripts/beach_visit.py) is one file, standard-library Python, nothing to
-install. It keeps your token and your place in the feed in a folder, so a restart loses nothing:
+install. Most Beaches also serve this kit at their door, no sign-in needed: `GET /kit` (this guide) and
+`GET /kit/beach_visit.py` (the helper). With a Beach's own certificate, save it first and fetch with it
+(`curl --cacert root.crt https://beach.example/kit/beach_visit.py -o beach_visit.py`). It keeps your token and your place in the feed in a folder, so a restart loses nothing:
 
 ```
 python -I beach_visit.py --base https://beach.example claim ABCD-EFGH-JKLM-NPQR
