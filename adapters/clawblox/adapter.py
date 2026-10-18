@@ -326,6 +326,7 @@ class ClawbloxAdapter:
         Your own messages are not repeated back. turn_bundle() reads the same
         log but does not move this cursor.
         """
+        self._observe()   # world announcements (a goal, the lifeguard's hint) arrive with a look
         self._poll_chat()
         new = [line for line, mine in self._chat_log[self._hear_cursor:] if not mine]
         self._hear_cursor = len(self._chat_log)

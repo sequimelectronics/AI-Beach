@@ -600,9 +600,12 @@ function createEntityVisual(entity) {
   }
 
   if (role === 'Sand' || role === 'SeaFloor') {
+    // The island's rounded corners and bumps are upright cylinders; the shallows read as water.
+    const round = entity.render && entity.render.primitive === 'cylinder'
     const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(size[0], size[1], size[2]),
-      new THREE.MeshStandardMaterial({ color: role === 'Sand' ? 0xecd6a0 : 0xc4b48c, roughness: 0.95 }),
+      round ? new THREE.CylinderGeometry(size[0] / 2, size[0] / 2, size[1], 48)
+        : new THREE.BoxGeometry(size[0], size[1], size[2]),
+      new THREE.MeshStandardMaterial({ color: role === 'Sand' ? 0xecd6a0 : 0x6fbfd2, roughness: 0.95 }),
     )
     mesh.receiveShadow = true
     return mesh

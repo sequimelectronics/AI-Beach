@@ -15,9 +15,9 @@
 local PLOTS = {
     enabled = true,
     half_size = 2.5, -- each plot is a 5 x 5 square
-    list = {   -- two rows of four at the Sandcastles (south-west)
-        { id = 1, x = -66, z = -36 }, { id = 2, x = -54, z = -36 }, { id = 3, x = -42, z = -36 }, { id = 4, x = -30, z = -36 },
-        { id = 5, x = -66, z = -52 }, { id = 6, x = -54, z = -52 }, { id = 7, x = -42, z = -52 }, { id = 8, x = -30, z = -52 },
+    list = {   -- two north-south columns of four at the Sandcastles (south-west)
+        { id = 1, x = -40, z = -20 }, { id = 2, x = -40, z = -30 }, { id = 3, x = -40, z = -40 }, { id = 4, x = -40, z = -50 },
+        { id = 5, x = -28, z = -20 }, { id = 6, x = -28, z = -30 }, { id = 7, x = -28, z = -40 }, { id = 8, x = -28, z = -50 },
     },
 }
 
@@ -29,11 +29,11 @@ local PLOTS = {
 -- only shouts carry there. Keep in step with [[speech.regions]] in world.toml.
 --------------------------------------------------------------------------------
 local REGIONS = {
-    { name = "the Plaza", x = { -16, 16 }, z = { -16, 16 } },
-    { name = "the Ball Court", x = { -100, -16 }, z = { 16, 100 } },
-    { name = "the Sandcastles", x = { -100, -16 }, z = { -100, -16 } },
-    { name = "the Lighthouse", x = { 16, 100 }, z = { 16, 100 } },
-    { name = "the Pier", x = { 16, 100 }, z = { -100, -16 } },
+    { name = "the Plaza", x = { -12, 12 }, z = { -12, 12 } },
+    { name = "the Ball Court", x = { -70, -12 }, z = { 12, 70 } },
+    { name = "the Sandcastles", x = { -70, -12 }, z = { -70, -12 } },
+    { name = "the Lighthouse", x = { 12, 70 }, z = { 12, 70 } },
+    { name = "the Pier", x = { 12, 70 }, z = { -70, -12 } },
 }
 
 --------------------------------------------------------------------------------
@@ -43,13 +43,13 @@ local REGIONS = {
 -- test for "is this sand or sea"; the adapter's map card describes the same shapes.
 --------------------------------------------------------------------------------
 local ISLAND = {
-    half = 80, corner_r = 26, top_y = 0,
+    half = 55, corner_r = 18, top_y = 0,   -- ~110 across: every area one walk from the Plaza
     bumps = {
-        { name = "the headland", x = 70, z = 70, r = 22 },
-        { name = "the castle beach", x = -80, z = -30, r = 14 },
-        { name = "the pier point", x = 80, z = -24, r = 10 },
+        { name = "the headland", x = 48, z = 48, r = 16 },
+        { name = "the castle beach", x = -55, z = -24, r = 10 },
+        { name = "the pier point", x = 55, z = -18, r = 8 },
     },
-    wall = 100,   -- invisible walls at x = +/-100 and z = +/-100, in the shallows
+    wall = 70,   -- invisible walls at x = +/-70 and z = +/-70, in the shallows
 }
 
 local function on_land(x, z)
@@ -74,22 +74,28 @@ local CONFIG = {
     spawn_points = {               -- at the Plaza, the middle of the island: every area is one walk away
         { -6, -6 }, { 6, -6 }, { -6, 6 }, { 6, 6 }, { 0, -9 }, { 0, 9 },
     },
-    -- The ball court (north-west): goals line_z either side of its middle (field.z).
-    field = { x = -48, z = 50 },
-    goal = { line_z = 18, half_width = 3, height = 3, return_after = 3 },
-    center = Vector3.new(-48, 0, 50),   -- where a scored ball goes back to: the court's middle
+    -- The ball court (north-west) runs east-west along the north shore, the sea along its long side
+    -- (a hard kick ends in the water: a gentle threat). Goals `line` either side of its middle, at
+    -- its east and west ends.
+    field = { x = -30, z = 42 },
+    goal = { line = 16, half_width = 3, height = 3, return_after = 3 },
+    center = Vector3.new(-30, 0, 42),   -- where a scored ball goes back to: the court's middle
     -- The dune between the court and the castles: an uneven ridge of three sand ledges 1.4 high
     -- (a walk climbs 1.0 at most; a running jump about 1.7), two with a second ledge on top.
-    -- Walk through the gap at x -44..-38, or round its east end by the Plaza.
+    -- Walk through the gap at x -32..-27, or round its east end by the Plaza.
     dune = {
         step = 1.4,
         ledges = {
-            { name = "DuneWest", x = { -80, -61 }, z = { -6, 6 }, top = { x = { -77, -66 }, z = { -3, 3 } } },
-            { name = "DuneMiddle", x = { -63, -44 }, z = { -2, 10 }, top = { x = { -59, -48 }, z = { 1, 7 } } },
-            { name = "DuneEast", x = { -38, -22 }, z = { -10, 2 } },
+            { name = "DuneWest", x = { -55, -42 }, z = { -4, 4 }, top = { x = { -52, -45 }, z = { -2, 2 } } },
+            { name = "DuneMiddle", x = { -43, -32 }, z = { -1, 7 }, top = { x = { -40, -35 }, z = { 2, 6 } } },
+            { name = "DuneEast", x = { -27, -17 }, z = { -6, 2 } },
         },
-        gaps = { { x = { -44, -38 } }, { x = { -22, -16 } } },
+        gaps = { { x = { -32, -27 } }, { x = { -17, -12 } } },
     },
+    -- The lifeguard: a ball left outside the Ball Court, untouched and still, for `after` seconds is
+    -- picked up and hidden somewhere on the island's sand (in a region, never in the sea, on the dune
+    -- or in a plot), with a hint of where. Then it's hide and seek.
+    lifeguard = { after = 120 },
     kick = { reach = 3.0, impulse = 20, max_speed = 40, lift = 0.18 },  -- body radius 1 + ball radius 0.6 + walking slack
     pickup_range = 6, place_range = 7, match_radius = 1.5,
     hold_offset = Vector3.new(0, 3.5, 0),
@@ -105,17 +111,17 @@ local CONFIG = {
     -- Watching (when the world runs with an AI Beach): people and agents who watch have no
     -- character; their names show at this spot, on a patch of sand off the west coast outside
     -- the walls, where nothing can reach; the world announces each one.
-    watch = { name = "the lifeguard chair", x = -107, z = -44 },
+    watch = { name = "the lifeguard chair", x = -77, z = -30 },
 }
 
 local BALLS = {
     -- name, kind, diameter, density, friction, elasticity, home x/z, extra drag on sand
     { name = "SoccerBall", kind = "soccer ball", d = 1.2, density = 0.8, friction = 0.6, elasticity = 0.5,
-      color = Color3.fromRGB(245, 245, 245), home = { -48, 50 }, sand_drag = 1.2 },
+      color = Color3.fromRGB(245, 245, 245), home = { -30, 42 }, sand_drag = 1.2 },
     { name = "Volleyball", kind = "volleyball", d = 1.1, density = 0.3, friction = 0.5, elasticity = 0.85,
-      color = Color3.fromRGB(250, 214, 64), home = { -42, 42 }, sand_drag = 1.6 },
+      color = Color3.fromRGB(250, 214, 64), home = { -36, 38 }, sand_drag = 1.6 },
     { name = "BeachBall", kind = "beach ball", d = 1.8, density = 0.05, friction = 0.5, elasticity = 0.7,
-      color = Color3.fromRGB(235, 80, 90), home = { -42, 58 }, sand_drag = 2.5,
+      color = Color3.fromRGB(235, 80, 90), home = { -24, 46 }, sand_drag = 2.5,
       -- Air resistance stand-in (the engine has none): lift cancels most of gravity,
       -- quadratic drag slows it in flight, and a light breeze nudges it along the beach.
       air = { lift = 0.8, drag = 0.06, breeze = Vector3.new(0, 0, 0.6) } },
@@ -258,18 +264,18 @@ wall("WallSouth", Vector3.new(W * 2 + 4, WH, 2), Vector3.new(0, WH / 2, -W - 1))
 local G = CONFIG.goal
 local F = CONFIG.field
 local GOALS = {
-    { name = "north", sign = 1 },
-    { name = "south", sign = -1 },
+    { name = "east", sign = 1 },
+    { name = "west", sign = -1 },
 }
 for _, g in ipairs(GOALS) do
-    local z = F.z + g.sign * G.line_z
+    local x = F.x + g.sign * G.line
     local cap = g.name:sub(1, 1):upper() .. g.name:sub(2)
     for _, side in ipairs({ -1, 1 }) do
-        scenery(cap .. "GoalPost" .. (side < 0 and "W" or "E"), Vector3.new(0.3, G.height, 0.3),
-            Vector3.new(F.x + side * G.half_width, G.height / 2, z),
+        scenery(cap .. "GoalPost" .. (side < 0 and "S" or "N"), Vector3.new(0.3, G.height, 0.3),
+            Vector3.new(x, G.height / 2, F.z + side * G.half_width),
             { Role = "GoalPost", Color = Color3.fromRGB(250, 250, 250) })
     end
-    scenery(cap .. "GoalBar", Vector3.new(G.half_width * 2 + 0.3, 0.3, 0.3), Vector3.new(F.x, G.height, z),
+    scenery(cap .. "GoalBar", Vector3.new(0.3, 0.3, G.half_width * 2 + 0.3), Vector3.new(x, G.height, F.z),
         { Role = "GoalPost", Color = Color3.fromRGB(250, 250, 250) })
 end
 
@@ -344,8 +350,8 @@ mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
     sand = { x = { -I.half, I.half }, z = { -I.half, I.half }, top_y = I.top_y },   -- its bounding box
     walls = { x = { -I.wall, I.wall }, z = { -I.wall, I.wall } },
     goals = {
-        { name = "north", line_z = F.z + G.line_z, x = { F.x - G.half_width, F.x + G.half_width }, height = G.height },
-        { name = "south", line_z = F.z - G.line_z, x = { F.x - G.half_width, F.x + G.half_width }, height = G.height },
+        { name = "east", line_x = F.x + G.line, z = { F.z - G.half_width, F.z + G.half_width }, height = G.height },
+        { name = "west", line_x = F.x - G.line, z = { F.z - G.half_width, F.z + G.half_width }, height = G.height },
     },
     regions = REGIONS,
     dune = { ledge = CONFIG.dune.step, ledges = CONFIG.dune.ledges, gaps = CONFIG.dune.gaps },
@@ -371,9 +377,9 @@ watchersInfo.Parent = Workspace
 
 local score = child(Workspace, "Score") or Instance.new("Folder")
 score.Name = "Score"
-if score:GetAttribute("North") == nil then
-    score:SetAttribute("North", 0)
-    score:SetAttribute("South", 0)
+if score:GetAttribute("East") == nil then
+    score:SetAttribute("East", 0)
+    score:SetAttribute("West", 0)
 end
 score.Parent = Workspace
 
@@ -828,10 +834,72 @@ end
 -- MAIN LOOP
 --------------------------------------------------------------------------------
 local goalReturns = {}   -- ball -> time to return to center
-local lastZ = {}         -- ball -> z on the previous tick
+local lastZ = {}         -- ball -> its position along the court on the previous tick
 
+--------------------------------------------------------------------------------
+-- THE LIFEGUARD (Becky, 10-18): a ball left outside the Ball Court, untouched and still for a while,
+-- is picked up and hidden somewhere on the island's sand, with a hint of where. Hide and seek.
+--------------------------------------------------------------------------------
+local function regionAt(x, z)
+    for _, r in ipairs(REGIONS) do
+        if x >= r.x[1] and x <= r.x[2] and z >= r.z[1] and z <= r.z[2] then return r.name end
+    end
+    return nil
+end
+
+local function clearSpot(x, z)
+    if not on_land(x, z) or plotAt(Vector3.new(x, 0, z)) then return false end
+    for _, l in ipairs(CONFIG.dune.ledges) do
+        if x >= l.x[1] - 2 and x <= l.x[2] + 2 and z >= l.z[1] - 2 and z <= l.z[2] + 2 then return false end
+    end
+    return true
+end
+
+local ballActive = {}    -- ball -> os.clock() when someone last had it, kicked it, or it last rolled
+local ballHidden = {}    -- ball -> true while the lifeguard's hiding place is unfound
+local function lifeguard(now)
+    local L = CONFIG.lifeguard
+    for _, b in ipairs(balls) do
+        local pos, cfg = b.Position, ballInfo[b]
+        local kicked = lastKick[b] and lastKick[b].at or 0
+        if isHeld(b) or kicked > (ballActive[b] or 0) then
+            ballHidden[b] = nil   -- found (or touched): it's in play again
+        end
+        if isHeld(b) or b.AssemblyLinearVelocity.Magnitude > 0.3 or goalReturns[b]
+            or regionAt(pos.X, pos.Z) == "the Ball Court" then
+            ballActive[b] = now
+        end
+        local idle = now - math.max(ballActive[b] or now, kicked)
+        if idle >= L.after and not ballHidden[b] then
+            for _ = 1, 60 do
+                local x = math.random() * ISLAND.half * 2 - ISLAND.half
+                local z = math.random() * ISLAND.half * 2 - ISLAND.half
+                local where = regionAt(x, z)
+                if where and where ~= "the Ball Court" and clearSpot(x, z) then
+                    local r = cfg.d / 2
+                    b.Position = Vector3.new(x, r + 0.05, z)
+                    b.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    b.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    b:SetAttribute("InWaterSince", nil)
+                    lastZ[b] = nil
+                    announce(string.format("The lifeguard found the %s and left it somewhere around %s.", cfg.kind, where))
+                    ballHidden[b] = true   -- it stays there until someone finds it
+                    break
+                end
+            end
+            ballActive[b] = now
+        end
+    end
+end
+
+local lifeguardTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     local now = os.clock()
+    lifeguardTimer = lifeguardTimer + dt
+    if lifeguardTimer >= 1 then
+        lifeguardTimer = 0
+        lifeguard(now)
+    end
 
     for _, player in ipairs(Players:GetPlayers()) do
         local hrp = hrpOf(player)
@@ -887,14 +955,14 @@ RunService.Heartbeat:Connect(function(dt)
 
             -- Goals: the ball crosses the goal line between the posts, under the bar.
             -- (Rolling in from the side, behind the line, does not count.)
-            -- (z measured from the field's middle)
-            local relZ = pos.Z - F.z
-            local prevZ = lastZ[b] or relZ
-            lastZ[b] = relZ
-            if not goalReturns[b] and math.abs(pos.X - F.x) < G.half_width and pos.Y < G.height then
+            -- (x measured from the court's middle: the goals are at its east and west ends)
+            local rel = pos.X - F.x
+            local prev = lastZ[b] or rel
+            lastZ[b] = rel
+            if not goalReturns[b] and math.abs(pos.Z - F.z) < G.half_width and pos.Y < G.height then
                 for _, g in ipairs(GOALS) do
-                    if relZ * g.sign > G.line_z and prevZ * g.sign <= G.line_z then
-                        local key = g.name == "north" and "North" or "South"
+                    if rel * g.sign > G.line and prev * g.sign <= G.line then
+                        local key = g.name == "east" and "East" or "West"
                         score:SetAttribute(key, (score:GetAttribute(key) or 0) + 1)
                         announce(string.format("Goal at the %s end! (%s)", g.name, cfg.kind))
                         goalReturns[b] = now + G.return_after

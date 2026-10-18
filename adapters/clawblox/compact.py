@@ -396,10 +396,13 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
     goals = layout.get("goals", [])
     if goals:
         g = goals[0]
-        lines.append("goals: " + "; ".join(
-            f"{x['name']} goal line z={x['line_z']:g} between posts x={x['x'][0]:g}..{x['x'][1]:g}"
-            for x in goals) + f" (bar {g['height']:g} high). A ball over the line between the posts "
-            f"scores; it returns to the center {fmt_vec((center[0], 0, center[1]))}")
+        def goal_text(x):
+            if "line_x" in x:   # goals at the east and west ends (the island's court)
+                return f"{x['name']} goal line x={x['line_x']:g} between posts z={x['z'][0]:g}..{x['z'][1]:g}"
+            return f"{x['name']} goal line z={x['line_z']:g} between posts x={x['x'][0]:g}..{x['x'][1]:g}"
+        lines.append("goals: " + "; ".join(goal_text(x) for x in goals)
+                     + f" (bar {g['height']:g} high). A ball over the line between the posts "
+                     f"scores; it returns to the court's middle {fmt_vec((center[0], 0, center[1]))}")
     plots = layout.get("plots", [])
     if plots:
         size = plots[0]["half"] * 2
