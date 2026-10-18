@@ -306,13 +306,15 @@ class WorldScriptTests(unittest.TestCase):
         self.assertTrue((ROOT / "worlds" / "beach" / "NOTICE.md").exists())
 
     def test_the_watch_spot(self):
-        # The lifeguard chair stands outside the walls, off the island, and nothing in it collides:
-        # a watcher never blocks a ball or a build. New watchers are announced; agents get a folder.
+        # The lifeguard chair stands on the castle beach, and nothing in it collides: a watcher never
+        # blocks a ball or a build. New watchers are announced; agents get a folder.
         spot = self.lua[self.lua.index("-- The lifeguard chair: the watch spot."):self.lua.index("-- MAP INFO for agents")]
         self.assertEqual(spot.count("CanCollide = false"), 2)          # every chair part, and the sign
         x = float(re.search(r"watch = \{ name = \"the lifeguard chair\", x = (-?[\d.]+)", self.lua).group(1))
-        wall = float(re.search(r"wall = (-?[\d.]+),", self.lua).group(1))   # walls at +/- this
-        self.assertLessEqual(x + 3.5, -wall)                          # its patch of sand ends outside the west wall
+        z = float(re.search(r"watch = \{ name = \"the lifeguard chair\", x = -?[\d.]+, z = (-?[\d.]+)", self.lua).group(1))
+        from adapters.clawblox.compact import on_land
+        island = {"half": 45, "corner_r": 15, "bumps": [{"x": -45, "z": -20, "r": 8}]}
+        self.assertTrue(on_land({"island": island}, (x, 0, z)))   # on the sand, by the water
         loop = self.lua[self.lua.index("-- WATCHERS:"):self.lua.index("-- JOIN / LEAVE")]
         self.assertIn('announce(n .. " is watching from " .. CONFIG.watch.name)', loop)
         self.assertIn('watchersInfo:SetAttribute("Names"', loop)

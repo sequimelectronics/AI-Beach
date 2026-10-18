@@ -123,9 +123,10 @@ local CONFIG = {
     -- tall_height or more, standing still for stand_s seconds.
     badges = { kick_memory = 10, castle_pieces = 3, tall_height = 4, stand_s = 3, again_s = 600 },
     -- Watching (when the world runs with an AI Beach): people and agents who watch have no
-    -- character; their names show at this spot, on a patch of sand off the west coast outside
-    -- the walls, where nothing can reach; the world announces each one.
-    watch = { name = "the lifeguard chair", x = -64, z = -26 },
+    -- character; their names show at this spot, on the castle beach by the water (keeper, 10-18:
+    -- a lifeguard belongs on the beach). Nothing in the chair is solid, so it never blocks anyone;
+    -- the world announces each watcher.
+    watch = { name = "the lifeguard chair", x = -48, z = -20 },
 }
 
 local BALLS = {
