@@ -89,7 +89,7 @@ class SpdxHeaderTest(unittest.TestCase):
 
     def test_patches_keep_mit_attribution(self):
         patches = sorted((ROOT / "patches").glob("clawblox-*.patch"))
-        self.assertEqual(len(patches), 8)
+        self.assertEqual(len(patches), 9)
         for p in patches:
             top = "".join(p.read_text(encoding="utf-8").splitlines(keepends=True)[:8])
             self.assertIn("MIT", top, p.name)

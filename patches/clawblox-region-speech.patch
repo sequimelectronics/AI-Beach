@@ -1,0 +1,175 @@
+Clawblox engine: region speech, and a shout that carries everywhere
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0. Independent of the
+other patches in this folder; apply any or all of them (they touch different lines).
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-region-speech.patch
+    cargo build --release
+
+Why: a big world is several places, and talk should stay in the place it was said, like on a real
+beach. Clawblox can deliver chat to everyone (`global`) or within a distance (`proximity`); this adds
+a third speech mode, `regions`: the world names rectangles in world.toml, and a line is heard by
+everyone in the speaker's region. Between regions nobody hears it but the speaker. And any chat
+message can be a shout (`POST /chat {"content": "...", "shout": true}`): heard by everyone in the
+world, whatever the mode, and marked with `delivery_mode: "shout"` so a reader can show it as one.
+
+    [speech]
+    mode = "regions"
+
+    [[speech.regions]]
+    name = "the Ball Field"
+    x = [-21.0, 28.0]
+    z = [52.0, 102.0]
+
+Spectators (the viewer) still see every line, with who heard it.
+
+diff --git a/src/config.rs b/src/config.rs
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -208,6 +208,24 @@ fn default_physics_solver_iterations() -> usize {
+ pub enum SpeechMode {
+     Global,
+     Proximity,
++    /// Heard by everyone in the speaker's named region (see `regions`); outside every region, by nobody.
++    Regions,
++}
++
++/// A named rectangle of the world (x and z ranges, any height) for region speech.
++#[derive(Debug, Clone, Deserialize)]
++pub struct SpeechRegion {
++    pub name: String,
++    pub x: [f32; 2],
++    pub z: [f32; 2],
++}
++
++impl SpeechRegion {
++    pub fn contains(&self, x: f32, z: f32) -> bool {
++        let (x0, x1) = (self.x[0].min(self.x[1]), self.x[0].max(self.x[1]));
++        let (z0, z1) = (self.z[0].min(self.z[1]), self.z[0].max(self.z[1]));
++        x >= x0 && x <= x1 && z >= z0 && z <= z1
++    }
+ }
+ 
+ impl Default for SpeechMode {
+@@ -225,6 +243,16 @@ pub struct SpeechConfig {
+     /// Maximum hearing distance for proximity speech.
+     #[serde(default = "default_speech_hearing_radius")]
+     pub hearing_radius: f32,
++    /// The named regions for `mode = "regions"` (`[[speech.regions]]` with name, x, z).
++    #[serde(default)]
++    pub regions: Vec<SpeechRegion>,
++}
++
++impl SpeechConfig {
++    /// The region a point is in (the first that contains it), if any.
++    pub fn region_at(&self, x: f32, z: f32) -> Option<&str> {
++        self.regions.iter().find(|r| r.contains(x, z)).map(|r| r.name.as_str())
++    }
+ }
+ 
+ impl Default for SpeechConfig {
+@@ -232,6 +260,7 @@ impl Default for SpeechConfig {
+         Self {
+             mode: SpeechMode::default(),
+             hearing_radius: default_speech_hearing_radius(),
++            regions: Vec::new(),
+         }
+     }
+ }
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -3739,6 +3739,9 @@ struct PlaybackDoneEvent {
+ #[derive(Deserialize)]
+ struct ChatPostRequest {
+     content: String,
++    /// Shout: heard by everyone in the world, whatever the speech mode.
++    #[serde(default)]
++    shout: bool,
+ }
+ 
+ #[derive(Serialize)]
+@@ -4395,6 +4398,7 @@ fn speech_mode_name(mode: SpeechMode) -> &'static str {
+     match mode {
+         SpeechMode::Global => "global",
+         SpeechMode::Proximity => "proximity",
++        SpeechMode::Regions => "regions",
+     }
+ }
+ 
+@@ -4410,6 +4414,7 @@ fn build_chat_audibility(
+     state: &LocalState,
+     speaker_agent_id: Uuid,
+     speaker_name: &str,
++    shout: bool,
+ ) -> Result<(String, Option<f32>, Vec<Uuid>, Vec<ChatAudibilityEntry>), String> {
+     let observation =
+         game::get_spectator_observation_for_instance(&state.game_handle, state.instance_id)?;
+@@ -4418,6 +4423,9 @@ fn build_chat_audibility(
+         .iter()
+         .find(|player| player.id == speaker_agent_id)
+         .map(|player| player.position);
++    let speech = &state.speech_config;
++    // Region speech: the speaker's region, or none (between regions only a shout carries).
++    let speaker_region = speaker_position.and_then(|p| speech.region_at(p[0], p[2]));
+ 
+     let mut heard_by = Vec::new();
+     let mut audibility = Vec::new();
+@@ -4430,15 +4438,21 @@ fn build_chat_audibility(
+             round_chat_distance((dx * dx + dy * dy + dz * dz).sqrt())
+         });
+ 
+-        let heard = match state.speech_config.mode {
+-            SpeechMode::Global => true,
+-            SpeechMode::Proximity => {
+-                player.id == speaker_agent_id
+-                    || distance
+-                        .map(|value| value <= state.speech_config.hearing_radius)
+-                        .unwrap_or(false)
+-            }
+-        };
++        let heard = shout
++            || match speech.mode {
++                SpeechMode::Global => true,
++                SpeechMode::Proximity => {
++                    player.id == speaker_agent_id
++                        || distance
++                            .map(|value| value <= speech.hearing_radius)
++                            .unwrap_or(false)
++                }
++                SpeechMode::Regions => {
++                    player.id == speaker_agent_id
++                        || (speaker_region.is_some()
++                            && speech.region_at(player.position[0], player.position[2]) == speaker_region)
++                }
++            };
+ 
+         if heard {
+             heard_by.push(player.id);
+@@ -4466,10 +4480,11 @@ fn build_chat_audibility(
+     }
+ 
+     Ok((
+-        speech_mode_name(state.speech_config.mode).to_string(),
+-        match state.speech_config.mode {
+-            SpeechMode::Global => None,
+-            SpeechMode::Proximity => Some(state.speech_config.hearing_radius),
++        // A shout is delivered to everyone; its mode says so, so a reader can show it as a shout.
++        if shout { "shout".to_string() } else { speech_mode_name(speech.mode).to_string() },
++        match speech.mode {
++            SpeechMode::Proximity if !shout => Some(speech.hearing_radius),
++            _ => None,
+         },
+         heard_by,
+         audibility,
+@@ -5322,7 +5337,7 @@ async fn local_chat(
+     }
+ 
+     let (delivery_mode, hearing_radius, heard_by, audibility) =
+-        build_chat_audibility(&state, agent_id, &agent_name)
++        build_chat_audibility(&state, agent_id, &agent_name, body.shout)
+             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
+ 
+     let msg = {

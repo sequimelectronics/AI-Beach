@@ -172,6 +172,7 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
         "tick": snap.tick,
         "me": [r1(v) for v in snap.me],
         "facing": snap.facing,
+        "region": region_at(layout, snap.me),
         "standing_on": on.name if on else None,
         "holding": held.name if held else None,
         "near": rows[:near],
@@ -188,6 +189,17 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
     }
 
 
+def region_at(layout: dict | None, pos) -> str | None:
+    """The named region a point is in: "" between regions, None when the world has none."""
+    regions = (layout or {}).get("regions") or []
+    if not regions:
+        return None
+    for r in regions:
+        if min(r["x"]) <= pos[0] <= max(r["x"]) and min(r["z"]) <= pos[2] <= max(r["z"]):
+            return r["name"]
+    return ""
+
+
 def castle_text(c: dict) -> str:
     where = f" {fmt_vec(c['pos'])} {c['dist']:g} {c['dir']}" if c["pos"] else ""
     bits = [f"{c['pieces']} piece{'s' if c['pieces'] != 1 else ''}", f"{c['height']} high"]
@@ -201,6 +213,10 @@ def castle_text(c: dict) -> str:
 
 def view_text(v: dict) -> str:
     me = f"you {fmt_vec(v['me'])}"
+    if v.get("region"):
+        me += f" in {v['region']}"
+    elif v.get("region") == "":
+        me += " between regions (only shouts carry here)"
     if v["facing"]:
         me += f" facing {v['facing']}"
     if v["standing_on"]:
@@ -332,9 +348,22 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
     lines = ["MAP (beach; x = east, z = north, y = up; distances in studs)"]
     lines.append(f"sand: flat, y={sand['top_y']:g}, x {sand['x'][0]:g}..{sand['x'][1]:g}, "
                  f"z {sand['z'][0]:g}..{sand['z'][1]:g}")
+    wz = walls.get("z", [-32, 32])
     lines.append(f"sea: east of x={layout['shore_x']:g} is shallow water; balls that go in drift back "
                  f"to the sand after a few seconds. Invisible walls at x={walls.get('x', ['?', '?'])[0]}"
-                 f" and x={walls.get('x', ['?', '?'])[1]}, z=+/-{walls.get('z', ['?', 32])[1]}")
+                 f" and x={walls.get('x', ['?', '?'])[1]}, z={wz[0]:g} and z={wz[1]:g}")
+    regions = layout.get("regions") or []
+    if regions:
+        lines.append("regions (you see moving things only nearby; talk is heard in your own region, "
+                     "and between regions only a shout carries): " + "; ".join(
+                         f"{r['name']} x {r['x'][0]:g}..{r['x'][1]:g}, z {r['z'][0]:g}..{r['z'][1]:g}"
+                         for r in regions))
+    dune = layout.get("dune")
+    if dune:
+        lines.append(f"dune: x {dune['x'][0]:g}..{dune['x'][1]:g}, z {dune['z'][0]:g}..{dune['z'][1]:g}, "
+                     f"two ledges {dune['ledge']:g} high (the top one set in {dune['top_inset']:g} from each "
+                     f"side): climb with a running jump. Or walk around it on the path at x "
+                     f"{dune['path_x'][0]:g}..{dune['path_x'][1]:g}")
     goals = layout.get("goals", [])
     if goals:
         g = goals[0]

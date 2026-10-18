@@ -38,7 +38,9 @@ def action_definitions(rules: Rules = MESA_RULES) -> list[dict]:
         {"name": "look", "args": {}, "returns": "compact view of you, nearby objects and players"},
         {"name": "act", "args": {"type": "|".join(rules.actions), "data": "object; see the card"},
          "returns": "one line"},
-        {"name": "say", "args": {"text": f"string, 1-{CHAT_MAX} chars"}, "returns": "one line"},
+        {"name": "say", "args": {"text": f"string, 1-{CHAT_MAX} chars",
+                                 "shout": "optional true: the whole world hears (else, where it has regions, only yours)"},
+         "returns": "one line"},
         {"name": "hear", "args": {}, "returns": "new chat lines 'name: text' (World: = the world)"},
         {"name": "history", "args": {"n": "int, default 20"}, "returns": "your last n actions and results"},
         {"name": "full_look", "args": {}, "returns": "the raw observation JSON (large)"},
@@ -278,21 +280,24 @@ class ClawbloxAdapter:
         items = list(self._history)[-n:]
         return "\n".join(h.line() for h in items) if items else "no actions yet"
 
-    def say(self, text: str) -> str:
+    def say(self, text: str, shout: bool = False) -> str:
+        """Say something. In a world with region speech only your region hears it; a shout
+        reaches everyone in the world."""
         text = (text or "").strip()
         if not text:
             return "say failed: empty message"
         if len(text) > CHAT_MAX:
             return f"say failed: message is {len(text)} characters, limit is {CHAT_MAX}"
         self.join()
-        status, body = self.t.request("POST", "/chat", {"content": text}, self.session)
+        body_in = {"content": text, "shout": True} if shout else {"content": text}
+        status, body = self.t.request("POST", "/chat", body_in, self.session)
         if status >= 400:
             return f"say failed: HTTP {status} {body[:80]}"
         msg_id = json.loads(body).get("id")
         if msg_id:
             self._chat_seen.add(msg_id)
-        self._chat_log.append((f"{self.name}: {text}", True))
-        return f"said: {text}"
+        self._chat_log.append((f"{self.name}{' shouts' if shout else ''}: {text}", True))
+        return f"{'shouted' if shout else 'said'}: {text}"
 
     def _poll_chat(self) -> None:
         """Fetch chat into the running log, deduped by message id.
@@ -312,7 +317,8 @@ class ClawbloxAdapter:
             aid = str(m.get("agent_id", ""))
             who = (self._names_by_agent.get(aid) or self._names_by_user.get(user_id_of(aid))
                    or m.get("agent_name", "?"))
-            self._chat_log.append((f"{who}: {m.get('content', '')}", False))
+            shouted = " shouts" if m.get("delivery_mode") == "shout" else ""
+            self._chat_log.append((f"{who}{shouted}: {m.get('content', '')}", False))
 
     def hear(self) -> str:
         """Chat lines (and "World:" announcements) since your last hear(), oldest first.
@@ -443,9 +449,9 @@ class ClawbloxAdapter:
                 if rise > self.rules.jump_rise - 0.5:
                     return (f"MoveTo (jump): {part.name} is {r1(rise):g} high, more than a jump "
                             f"(~{self.rules.jump_rise - 0.5:g}); climb something lower first")
-                runup = self.rules.climb_runup
-                if not (runup - 1.5 <= face_d <= runup + 1.5):
-                    # A jump only clears the ledge if it starts ~3-5 from the face.
+                runup, window = self.rules.climb_runup, self.rules.climb_window
+                if not (runup - window <= face_d <= runup + window):
+                    # A jump only clears the ledge from the right distance (mesa: ~3-5; beach: ~1).
                     length = hdist(start.me, target)
                     ux, uz = (target[0] - start.me[0]) / length, (target[2] - start.me[2]) / length
                     back = face_d - runup
@@ -454,7 +460,18 @@ class ClawbloxAdapter:
                     status, _ = self._wait_move(spot, timeout=abs(back) / 10 + 3)
                     if status not in ("arrived",):
                         note = " (run-up spot not reached)"
-                note = note or f" (took a run-up {runup:g} from {part.name})"
+                    else:
+                        # "Arrived" allows arrive_tolerance; a short jump needs the real spot, so let
+                        # the walk finish (stop moving, or get within the window) before taking off.
+                        prev = None
+                        for _ in range(int(1.2 / self.poll) + 1):
+                            snap = self._observe()
+                            if hdist(snap.me, spot) <= window or (prev and hdist(prev, snap.me) < 0.05):
+                                break
+                            prev = snap.me
+                            self.sleep(self.poll)
+                note = note or (f" (took a run-up {runup:g} from {part.name})" if runup >= 0.5
+                                else f" (jumped from the foot of {part.name})")
             self._send("Jump", {})
             self._send("MoveTo", {"position": list(target)})
         else:

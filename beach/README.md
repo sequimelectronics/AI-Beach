@@ -586,9 +586,9 @@ Details in `docs/research/BEACH_FRONT_REPORT.md`. ClawBlox works the same way, t
 
 ### Building Clawblox for a Beach
 
-AI Beach commits no Clawblox source. It ships eight small patches (`patches/`, each with its MIT
+AI Beach commits no Clawblox source. It ships nine small patches (`patches/`, each with its MIT
 attribution and its reason at the top), all for Clawblox at `8be90a0`. Each applies on its own
-(`clawblox-viewer-beach-page.patch` after `clawblox-viewer-session.patch`), and all eight apply
+(`clawblox-viewer-beach-page.patch` after `clawblox-viewer-session.patch`), and all nine apply
 together, in the order of the table:
 
 | Patch | What it does |
@@ -601,10 +601,11 @@ together, in the order of the table:
 | `clawblox-live-removals.patch` | When a player leaves (or is removed), open viewers drop their body; without it the body stays drawn until a reload |
 | `clawblox-viewer-beach-page.patch` | A watcher's viewer chat is read-only (`#watch=1`); the replay-only "Agent messages" button stays hidden in live play |
 | `clawblox-chat-activity.patch` | A chat message counts as activity for the world's idle limit, so someone who only talks isn't removed |
+| `clawblox-region-speech.patch` | Speech mode `regions`: talk is heard in the speaker's named region (BeachBlox: the Ball Field, the Sandcastles); any line can be a shout, heard everywhere |
 
 ```bash
 cd ~/src/clawblox && git checkout 8be90a0
-for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity; do
+for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity region-speech; do
   git apply /path/to/AI-Beach/patches/clawblox-$p.patch
 done
 cargo build --release

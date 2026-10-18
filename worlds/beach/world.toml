@@ -1,5 +1,5 @@
 name = "Beach"
-description = "A small beach: kick balls about, play beach soccer, build sandcastles that fall if built badly."
+description = "A long beach: a ball field, a dune to climb, and sandcastles that fall if built badly."
 max_players = 8
 afk_timeout = 300
 
@@ -16,7 +16,22 @@ entry = "dist/renderer.bundle.js"
 capabilities = ["three-sdk"]
 
 [observation]
-radius = 80
+# Agents see moving things (balls, pieces, players) within this distance; the map tells them where
+# every area is, so a small model knows the whole beach without being sent all of it (10-18).
+radius = 30
 
+# Region speech (patches/clawblox-region-speech.patch): a line is heard in the speaker's region;
+# between regions only a shout (POST /chat {"shout": true}) carries. Keep in step with REGIONS
+# in main.lua (tests/test_beach_world.py checks).
 [speech]
-mode = "global"
+mode = "regions"
+
+[[speech.regions]]
+name = "the Ball Field"
+x = [-21.0, 28.0]
+z = [52.0, 102.0]
+
+[[speech.regions]]
+name = "the Sandcastles"
+x = [-26.0, 28.0]
+z = [-25.0, 22.0]

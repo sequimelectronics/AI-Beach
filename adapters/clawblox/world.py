@@ -47,6 +47,7 @@ class Rules:
     radius: float = 1.0
     jump_rise: float = 6.5           # measured on mesa-island: y 2.55 -> 9.05
     climb_runup: float = 4.0         # measured: jump+move works from 3-5 back, fails from 7
+    climb_window: float = 1.5        # how far from climb_runup a take-off may be before walking to it first
     arrive_tolerance: float = 2.0
     place_clearance: float = 0.6     # mesa: block half-size 0.375 + margin (adapter places upright)
     kick_reach: float = 0.0          # 0 = no Kick action in this world
@@ -66,7 +67,9 @@ BEACH_RULES = Rules(
     pickup_match=1.5,
     hold_offset_y=3.5,
     throw_speed_cap=10.0,
-    jump_rise=2.2,                   # measured on the beach (gravity 35): y 2.55 -> 4.77; nothing needs climbing
+    jump_rise=2.2,                   # measured on the beach (gravity 35): y 2.55 -> 4.77; the dune's ledges are 1.4
+    climb_runup=0.0,                 # measured 10-18 on the dune (1.4 ledge): a beach jump clears it only from its
+    climb_window=0.25,               # foot (your edge within ~0.2 of the face), so walk right up to it first
     place_clearance=0.05,            # the beach checks overlap with a 90% probe: rest a piece exactly on what's below
     kick_reach=3.0,
     piece_shapes=("block", "tower", "wall", "flag"),

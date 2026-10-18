@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 -- Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
--- Beach: a small beach for people and small AI agents.
--- Kick balls about, play beach soccer, build sandcastles that fall if built badly.
+-- Beach: a long beach for people and small AI agents.
+-- Kick balls about on the ball field, climb the dune, build sandcastles that fall if built badly.
 --
 -- The Pickup / Place / Throw handlers follow the pattern of Clawblox's
 -- worlds/mesa-island/main.lua (MIT; see NOTICE.md and LICENSE.clawblox).
@@ -16,11 +16,22 @@ local PLOTS = {
     enabled = true,
     half_size = 2.5, -- each plot is a 5 x 5 square
     list = {
-        { id = 1, x = -9.5, z = -18 },
-        { id = 2, x = -9.5, z = -6 },
-        { id = 3, x = -9.5, z = 6 },
-        { id = 4, x = -9.5, z = 18 },
+        { id = 1, x = -13, z = -15 },
+        { id = 2, x = -13, z = -5 },
+        { id = 3, x = -13, z = 5 },
+        { id = 4, x = -13, z = 15 },
     },
+}
+
+--------------------------------------------------------------------------------
+-- REGIONS (10-18): the beach is long, and each area is its own place. Agents always know
+-- where every region is (the map); they see moving things only within the world's
+-- observation radius, and speech is heard within the speaker's region (a shout carries
+-- everywhere). Keep in step with [[speech.regions]] in world.toml.
+--------------------------------------------------------------------------------
+local REGIONS = {
+    { name = "the Ball Field", x = { -21, 28 }, z = { 52, 102 } },
+    { name = "the Sandcastles", x = { -26, 28 }, z = { -25, 22 } },
 }
 
 --------------------------------------------------------------------------------
@@ -28,16 +39,23 @@ local PLOTS = {
 --------------------------------------------------------------------------------
 local CONFIG = {
     gravity = 35,                 -- a little above Earth at this scale (~28 if a 5-stud character is 1.75 m); mesa uses 10
-    sand = { half_x = 14, half_z = 30, top_y = 0 }, -- 28 wide (x) by 60 long (z)
-    sea_edge_x = 14,              -- the shoreline: x > 14 is shallow water
-    sea_wall_x = 24,              -- invisible wall 10 into the shallows
-    land_wall_x = -15,
-    end_wall_z = 32,
-    spawn_points = {
+    -- A long beach (10-18): the Ball Field in the north, a dune, the Sandcastles in the middle,
+    -- and open sand to the south (the pier and the lighthouse come next).
+    sand = { x = { -20, 18 }, z = { -125, 100 }, top_y = 0 },
+    sea_edge_x = 18,              -- the shoreline: x > 18 is shallow water
+    sea_wall_x = 28,              -- invisible wall 10 into the shallows
+    land_wall_x = -21,
+    end_wall_z = { south = -127, north = 102 },
+    spawn_points = {               -- at the Sandcastles, the middle of the beach
         { -4, -14 }, { 4, -8 }, { -4, -2 }, { 4, 4 }, { -4, 10 }, { 4, 16 },
     },
-    goal = { line_z = 28, half_width = 3, height = 3, return_after = 3 },
-    center = Vector3.new(0, 0, 0),
+    -- The ball field: goals line_z either side of its middle (field.z).
+    field = { x = 0, z = 77 },
+    goal = { line_z = 20, half_width = 3, height = 3, return_after = 3 },
+    center = Vector3.new(0, 0, 77),   -- where a scored ball goes back to: the field's middle
+    -- The dune between the field and the castles: two ledges, each a running jump high (a walk
+    -- climbs 1.0 at most; a jump about 1.7). A sandy path on the land side goes around it.
+    dune = { x = { -12, 18 }, z = { 30, 44 }, step = 1.4, top_inset = 3, path_x = { -20, -12 } },
     kick = { reach = 3.0, impulse = 20, max_speed = 40, lift = 0.18 },  -- body radius 1 + ball radius 0.6 + walking slack
     pickup_range = 6, place_range = 7, match_radius = 1.5,
     hold_offset = Vector3.new(0, 3.5, 0),
@@ -53,17 +71,17 @@ local CONFIG = {
     -- Watching (when the world runs with an AI Beach): people and agents who watch have no
     -- character; their names show at this spot, outside the land wall where nothing can reach,
     -- and the world announces each one.
-    watch = { name = "the lifeguard chair", x = -19.5, z = 0 },
+    watch = { name = "the lifeguard chair", x = -25.5, z = 0 },
 }
 
 local BALLS = {
     -- name, kind, diameter, density, friction, elasticity, home x/z, extra drag on sand
     { name = "SoccerBall", kind = "soccer ball", d = 1.2, density = 0.8, friction = 0.6, elasticity = 0.5,
-      color = Color3.fromRGB(245, 245, 245), home = { 0, 0 }, sand_drag = 1.2 },
+      color = Color3.fromRGB(245, 245, 245), home = { 0, 77 }, sand_drag = 1.2 },
     { name = "Volleyball", kind = "volleyball", d = 1.1, density = 0.3, friction = 0.5, elasticity = 0.85,
-      color = Color3.fromRGB(250, 214, 64), home = { 6, -10 }, sand_drag = 1.6 },
+      color = Color3.fromRGB(250, 214, 64), home = { 6, 67 }, sand_drag = 1.6 },
     { name = "BeachBall", kind = "beach ball", d = 1.8, density = 0.05, friction = 0.5, elasticity = 0.7,
-      color = Color3.fromRGB(235, 80, 90), home = { 6, 10 }, sand_drag = 2.5,
+      color = Color3.fromRGB(235, 80, 90), home = { 6, 87 }, sand_drag = 2.5,
       -- Air resistance stand-in (the engine has none): lift cancels most of gravity,
       -- quadratic drag slows it in flight, and a light breeze nudges it along the beach.
       air = { lift = 0.8, drag = 0.06, breeze = Vector3.new(0, 0, 0.6) } },
@@ -160,14 +178,17 @@ state.Parent = ServerStorage
 -- SCENERY (all tagged Static: it never appears in agent observations)
 --------------------------------------------------------------------------------
 local S = CONFIG.sand
-scenery("Sand", Vector3.new(S.half_x * 2 + 2, 4, S.half_z * 2 + 8), Vector3.new(-1, -2, 0),
+local EW = CONFIG.end_wall_z
+local beachLen = EW.north - EW.south + 6           -- ground runs a little past both end walls
+local beachMidZ = (EW.north + EW.south) / 2
+scenery("Sand", Vector3.new(S.x[2] - S.x[1] + 4, 4, beachLen), Vector3.new((S.x[1] + S.x[2]) / 2 - 1, -2, beachMidZ),
     { Role = "Sand", Color = Color3.fromRGB(236, 214, 160), CustomPhysicalProperties = sandPhysics,
       Material = Enum.Material.Sand })
 -- Shallow sea floor continues level with the sand, so nothing rolls in or out by itself.
-scenery("SeaFloor", Vector3.new(CONFIG.sea_wall_x - CONFIG.sea_edge_x, 4, S.half_z * 2 + 8),
-    Vector3.new((CONFIG.sea_wall_x + CONFIG.sea_edge_x) / 2, -2, 0),
+scenery("SeaFloor", Vector3.new(CONFIG.sea_wall_x - CONFIG.sea_edge_x + 2, 4, beachLen),
+    Vector3.new((CONFIG.sea_wall_x + CONFIG.sea_edge_x) / 2 + 1, -2, beachMidZ),
     { Role = "SeaFloor", Color = Color3.fromRGB(196, 180, 140), CustomPhysicalProperties = sandPhysics })
-scenery("Ocean", Vector3.new(300, 0.3, 400), Vector3.new(CONFIG.sea_edge_x + 150, 0.15, 0),
+scenery("Ocean", Vector3.new(300, 0.3, beachLen + 300), Vector3.new(CONFIG.sea_edge_x + 150, 0.15, beachMidZ),
     { Role = "Ocean", CanCollide = false, CanQuery = false, CanTouch = false, Transparency = 0.25,
       Color = Color3.fromRGB(52, 140, 190), Material = Enum.Material.Glass })
 
@@ -176,27 +197,53 @@ local function wall(name, size, pos)
         CustomPhysicalProperties = sandPhysics })
 end
 local WH = 30
-wall("WallSea", Vector3.new(2, WH, 80), Vector3.new(CONFIG.sea_wall_x + 1, WH / 2, 0))
-wall("WallLand", Vector3.new(2, WH, 80), Vector3.new(CONFIG.land_wall_x - 1, WH / 2, 0))
-wall("WallNorth", Vector3.new(50, WH, 2), Vector3.new(4, WH / 2, CONFIG.end_wall_z + 1))
-wall("WallSouth", Vector3.new(50, WH, 2), Vector3.new(4, WH / 2, -CONFIG.end_wall_z - 1))
+local acrossX = CONFIG.sea_wall_x - CONFIG.land_wall_x + 4
+local acrossMidX = (CONFIG.sea_wall_x + CONFIG.land_wall_x) / 2
+wall("WallSea", Vector3.new(2, WH, beachLen), Vector3.new(CONFIG.sea_wall_x + 1, WH / 2, beachMidZ))
+wall("WallLand", Vector3.new(2, WH, beachLen), Vector3.new(CONFIG.land_wall_x - 1, WH / 2, beachMidZ))
+wall("WallNorth", Vector3.new(acrossX, WH, 2), Vector3.new(acrossMidX, WH / 2, EW.north + 1))
+wall("WallSouth", Vector3.new(acrossX, WH, 2), Vector3.new(acrossMidX, WH / 2, EW.south - 1))
 
--- Goals: two poles and a crossbar at each end; the zone behind the line is invisible.
+-- Goals: two poles and a crossbar at each end of the field; the zone behind the line is invisible.
 local G = CONFIG.goal
+local F = CONFIG.field
 local GOALS = {
     { name = "north", sign = 1 },
     { name = "south", sign = -1 },
 }
 for _, g in ipairs(GOALS) do
-    local z = g.sign * G.line_z
+    local z = F.z + g.sign * G.line_z
     local cap = g.name:sub(1, 1):upper() .. g.name:sub(2)
     for _, side in ipairs({ -1, 1 }) do
         scenery(cap .. "GoalPost" .. (side < 0 and "W" or "E"), Vector3.new(0.3, G.height, 0.3),
-            Vector3.new(side * G.half_width, G.height / 2, z),
+            Vector3.new(F.x + side * G.half_width, G.height / 2, z),
             { Role = "GoalPost", Color = Color3.fromRGB(250, 250, 250) })
     end
-    scenery(cap .. "GoalBar", Vector3.new(G.half_width * 2 + 0.3, 0.3, 0.3), Vector3.new(0, G.height, z),
+    scenery(cap .. "GoalBar", Vector3.new(G.half_width * 2 + 0.3, 0.3, 0.3), Vector3.new(F.x, G.height, z),
         { Role = "GoalPost", Color = Color3.fromRGB(250, 250, 250) })
+end
+
+-- The dune: two sand ledges, the upper one set in from every side. Unlike the scenery above it is
+-- NOT tagged Static: agents see it once they're near (it's solid ground to climb, and their
+-- adapter needs it to plan a running jump). It isn't a pickup and never moves.
+do
+    local D = CONFIG.dune
+    local function ledge(name, x0, x1, z0, z1, y0, y1)
+        local p = child(Workspace, name) or Instance.new("Part")
+        p.Name = name
+        p.Size = Vector3.new(x1 - x0, y1 - y0, z1 - z0)
+        p.Position = Vector3.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
+        p.Anchored = true
+        p.Color = Color3.fromRGB(230, 206, 150)
+        p.Material = Enum.Material.Sand
+        p.CustomPhysicalProperties = sandPhysics
+        p:SetAttribute("RenderRole", "Dune")
+        p:SetAttribute("Kind", "dune")
+        p.Parent = Workspace
+    end
+    local i = D.top_inset
+    ledge("DuneLower", D.x[1], D.x[2], D.z[1], D.z[2], 0, D.step)
+    ledge("DuneTop", D.x[1] + i, D.x[2] - i, D.z[1] + i, D.z[2] - i, D.step, D.step * 2)
 end
 
 -- Plot markers: thin flat squares you can walk over.
@@ -241,13 +288,16 @@ mapInfo.Name = "BeachMap"
 mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
     world = "beach",
     axes = "x east, z north, y up",
-    sand = { x = { -S.half_x, S.half_x }, z = { -S.half_z, S.half_z }, top_y = S.top_y },
+    sand = { x = { S.x[1], S.x[2] }, z = { S.z[1], S.z[2] }, top_y = S.top_y },
     shore_x = CONFIG.sea_edge_x,
-    walls = { x = { CONFIG.land_wall_x, CONFIG.sea_wall_x }, z = { -CONFIG.end_wall_z, CONFIG.end_wall_z } },
+    walls = { x = { CONFIG.land_wall_x, CONFIG.sea_wall_x }, z = { EW.south, EW.north } },
     goals = {
-        { name = "north", line_z = G.line_z, x = { -G.half_width, G.half_width }, height = G.height },
-        { name = "south", line_z = -G.line_z, x = { -G.half_width, G.half_width }, height = G.height },
+        { name = "north", line_z = F.z + G.line_z, x = { F.x - G.half_width, F.x + G.half_width }, height = G.height },
+        { name = "south", line_z = F.z - G.line_z, x = { F.x - G.half_width, F.x + G.half_width }, height = G.height },
     },
+    regions = REGIONS,
+    dune = { x = CONFIG.dune.x, z = CONFIG.dune.z, ledge = CONFIG.dune.step, top_inset = CONFIG.dune.top_inset,
+             path_x = CONFIG.dune.path_x },
     center = { CONFIG.center.X, CONFIG.center.Z },
     centre = { CONFIG.center.X, CONFIG.center.Z }, -- the name before job 12, for older adapters  -- spelling: kept
     plots = PLOTS.enabled and (function()
@@ -786,11 +836,13 @@ RunService.Heartbeat:Connect(function(dt)
 
             -- Goals: the ball crosses the goal line between the posts, under the bar.
             -- (Rolling in from the side, behind the line, does not count.)
-            local prevZ = lastZ[b] or pos.Z
-            lastZ[b] = pos.Z
-            if not goalReturns[b] and math.abs(pos.X) < G.half_width and pos.Y < G.height then
+            -- (z measured from the field's middle)
+            local relZ = pos.Z - F.z
+            local prevZ = lastZ[b] or relZ
+            lastZ[b] = relZ
+            if not goalReturns[b] and math.abs(pos.X - F.x) < G.half_width and pos.Y < G.height then
                 for _, g in ipairs(GOALS) do
-                    if pos.Z * g.sign > G.line_z and prevZ * g.sign <= G.line_z then
+                    if relZ * g.sign > G.line_z and prevZ * g.sign <= G.line_z then
                         local key = g.name == "north" and "North" or "South"
                         score:SetAttribute(key, (score:GetAttribute(key) or 0) + 1)
                         announce(string.format("Goal at the %s end! (%s)", g.name, cfg.kind))
