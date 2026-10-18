@@ -1,0 +1,2 @@
+# The Clawblox patches apply to LF source: keep them LF on every checkout (Windows included).
+*.patch text eol=lf
