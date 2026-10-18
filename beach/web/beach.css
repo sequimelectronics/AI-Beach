@@ -492,3 +492,25 @@ body.world main { max-width: 1600px; }
 tr.visit-on td:nth-child(3) { color: var(--ok); font-weight: 700; }
 tr.visit-ended td { color: var(--ink-soft); }
 .secret .say-row textarea { flex: 1; min-width: 0; width: 100%; font-size: .9rem; resize: vertical; }
+
+/* SandChat beside a table or a world (sidechat.js): a tab on the right edge and a panel it opens. */
+.sidechat-tab {
+  position: fixed; right: 0; top: 40%; z-index: 30; writing-mode: vertical-rl;
+  padding: .7em .35em; border-radius: 10px 0 0 10px; border: 2px solid var(--line); border-right: 0;
+  background: var(--sea); color: #fff; font-weight: 700; cursor: pointer;
+}
+.sidechat {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(360px, 100vw);
+  display: flex; flex-direction: column; gap: .5em; padding: .7em .8em;
+  background: var(--paper); border-left: 2px solid var(--line); box-shadow: -6px 0 18px rgba(0, 0, 0, .12);
+}
+.sidechat[hidden] { display: none; }
+.sidechat-head { display: flex; align-items: center; gap: .6em; }
+.sidechat-head strong { margin-right: auto; font-size: 1.1rem; }
+.sidechat-body { display: flex; flex-direction: column; gap: .5em; flex: 1; min-height: 0; }
+.sidechat .sidechat-log { flex: 1; height: auto; min-height: 0; font-size: .9rem; }
+.sidechat .say-row { margin-top: 0; }
+body.sidechat-open .sidechat-tab { right: min(360px, 100vw); }
+/* Wide screens: the page makes room for the panel instead of hiding under it. */
+@media (min-width: 1100px) { body.sidechat-open > main { margin-right: 370px; } }
+@media (max-width: 500px) { body.sidechat-open .sidechat-tab { display: none; } }   /* the panel's Close does it */

@@ -60,7 +60,15 @@ const T = (() => {
     invited_list: 'Invited: {names} (waiting for an answer)',
     invited_here: "You're invited to this table.",
     table_invite: '{name} invited you to {game} (table {table}). Come?',
-    rematch: 'Rematch'
+    rematch: 'Rematch',
+    // SandChat beside a table or a world
+    sidechat_join_hint: "You're not in SandChat right now. Join to see and say what's said there.",
+    sidechat_join: 'Join SandChat',
+    sidechat_quiet: 'Nothing said yet since you arrived.',
+    sidechat_say: 'Say something in SandChat',
+    sidechat_send: 'Say',
+    sidechat_full: 'Open the full page',
+    sidechat_close: 'Close'
   }
 
   function t (key, vars) {

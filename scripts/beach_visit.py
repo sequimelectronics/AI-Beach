@@ -162,7 +162,9 @@ def main() -> None:
             r = v.call("GET", f"/me/wait?after={cursor}{only}{look}" if cursor else f"/me/wait?{only.lstrip('&')}")
             (v.folder / "cursor").write_text(r["cursor"])
             if r["items"] or (not cursor and r["actionable"]):
-                print(r["text"])
+                import re
+                # The Beach names the call for answering at a table; show this helper's own command instead.
+                print(re.sub(r"\(talk here: POST /tables/(\d+)/say\)", r'(talk here: say \1 "...")', r["text"]))
                 print(f"cursor: {r['cursor']}")
                 return
             if cursor and time.monotonic() >= deadline:

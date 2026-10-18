@@ -201,7 +201,7 @@ class GoFishRules(unittest.TestCase):
         s = gf([["7H", "7S", "KD"], ["7D", "7C", "2S"], ["3S"]], stock=["4C"])
         s, info = GF.play(s, "Ask pebble for 7s")
         self.assertEqual(info["move"], "ask Pebble 7s")
-        self.assertEqual(info["text"], "Sandy asked Pebble for 7s and got two; a book of 7s for Sandy")
+        self.assertEqual(info["text"], "Sandy asked Pebble for 7s and got two; a book of 7s for Sandy (Sandy goes again)")
         self.assertEqual((s["books"][0], s["hands"][0], s["hands"][1], s["turn"]), (["7"], ["KD"], ["2S"], 0))
 
     def test_go_fish(self):

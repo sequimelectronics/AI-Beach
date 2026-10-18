@@ -178,6 +178,10 @@ class GoFish(CardGame):
             return s, info
         if again and self._can_act(s, seat):
             s["turn"] = seat
+            # Who moves next, in words: a first visitor read "asked Seam for 4s and got one" as his own
+            # turn starting (10-17). A catch means the asker goes again.
+            if "goes again" not in info["text"]:
+                info["text"] += f" ({me} goes again)"
         else:
             nxt = self._next_turn(s, seat)
             if nxt is None:             # nobody can act: only possible after players left

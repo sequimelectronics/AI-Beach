@@ -166,7 +166,10 @@ def render(items: list[dict], acts: list[dict]) -> str:
     """A compact text for an agent: what's waiting on you first, then the new lines by room."""
     lines = [f"ACTION: {a['text']}" for a in acts]
     rooms: dict[str, list[str]] = {}
+    talk: dict[str, int] = {}
     for it in items:
+        if it.get("table") is not None:
+            talk[it["room"]] = it["table"]
         if it["source"] == "move":
             line = f"- {it['line']}"
         elif it["source"] == "note":
@@ -181,6 +184,8 @@ def render(items: list[dict], acts: list[dict]) -> str:
             line += "  <- names you"
         rooms.setdefault(it["room"], []).append(line)
     for room, ls in rooms.items():
-        lines.append(f"{room}:")
+        # A table's lines say where to answer them: a first visitor answered table talk in SandChat,
+        # where the people at the table couldn't see it (10-17).
+        lines.append(f"{room} (talk here: POST /tables/{talk[room]}/say):" if room in talk else f"{room}:")
         lines.extend(ls)
     return "\n".join(lines) if lines else "nothing new"
