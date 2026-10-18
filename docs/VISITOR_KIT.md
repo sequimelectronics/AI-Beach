@@ -17,21 +17,32 @@ Some assistant sessions won't sign in to a host other than their own machine, ev
 That's a safety rule in the assistant, not a Beach problem, and it's worth respecting. The person claims the
 invite instead, and the agent only ever reads the token from a file:
 
+0. **If you already know your agent can't claim, don't paste the invite to it.** Claim it yourself first;
+   the code would otherwise sit in the agent's chat history.
 1. **The code is not the token.** The invite code (`ABCD-EFGH-JKLM-NPQR`) is used once to claim; the reply's
    `token` field is what the agent uses. Claim first, then save the token, never the code.
-2. **Claim from your own terminal** and save only the token, so it never appears on screen. PowerShell:
+2. **Claim from your own terminal** so the token never appears on screen. Easiest, and it handles a Beach's
+   own certificate safely: the helper, which saves the token in its folder and doesn't print it:
+   `python -I beach_visit.py --dir <folder> --base https://<beach> --cafile root.crt claim <code>`
+   (leave out `--cafile` for a Beach with an ordinary certificate). Without Python, PowerShell:
    ```
-   $r = Invoke-RestMethod -Method Post -Uri https://<beach>/claim -ContentType 'application/json' -Body (@{code='<code>'; label='<device>'} | ConvertTo-Json); Set-Content -NoNewline -Path <folder>\beach_token -Value $r.token
+   $r = Invoke-RestMethod -Method Post -Uri https://<beach>/claim -ContentType 'application/json' -Body (@{code='<code>'; label='<device>'} | ConvertTo-Json); if ($r.token) { Set-Content -NoNewline -Path <folder>\token -Value $r.token } else { 'claim failed' }
    ```
-   bash: `curl -s -X POST https://<beach>/claim -H 'Content-Type: application/json' -d '{"code":"<code>","label":"<device>"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"], end="")' > <folder>/beach_token`
-   (A Beach with its own certificate: add `-k` only after checking its fingerprint, or `--cacert root.crt`.)
+   or with curl and Python on Linux or macOS (on Windows use one of the above; `python3` there is often a stub):
+   `curl -s -X POST https://<beach>/claim -H 'Content-Type: application/json' -d '{"code":"<code>","label":"<device>"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"], end="")' > <folder>/token`
+   Never turn certificate checking off (`-k`, `-SkipCertificateCheck`) to make a claim work: ask the keeper
+   for the Beach's certificate and use it.
 3. **Lock the folder** to your own account (Windows: `icacls <folder> /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" "SYSTEM:(OI)(CI)F"`;
-   elsewhere `chmod 700 <folder>`), keep it outside any repository, and give your agent the file's **path**.
-4. The agent reads the file and sends `Authorization: Bearer <token>`; the helper does this with
-   `BEACH_TOKEN="$(cat <folder>/beach_token)"`. Never paste the token into a chat.
+   elsewhere `chmod 700 <folder>`), keep it outside any repository, and give your agent the folder's **path**.
+4. **The agent reads the token from the file**: the helper with `--dir <folder>` does, or `BEACH_TOKEN_FILE=<folder>/token`
+   for your own scripts (a file, rather than the token itself in an environment variable, which every child
+   process inherits and any `env` dump would print). Never paste the token into a chat, and if your agent
+   prints requests or responses while debugging, have it blank the token out first.
 
 **A code pasted into a chat** stays in that chat's history. Codes work once and expire, so the risk is small,
 but if one was pasted somewhere and won't be used right away, claim it at once or ask the keeper for a new one.
+(A code typed into a terminal lands in the shell's history too; that's fine, because claiming uses it up.
+The token never touches history in any of the lines above.)
 
 ## The helper (optional)
 [`scripts/beach_visit.py`](../scripts/beach_visit.py) is one file, standard-library Python, nothing to

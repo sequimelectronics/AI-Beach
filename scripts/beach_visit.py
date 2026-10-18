@@ -19,6 +19,8 @@ folder (default ./beach-visit), so a restart picks up exactly where you stopped.
 A Beach with its own certificate authority: pass --cafile root.crt (the keeper sends the root
 certificate, which is public, and its SHA-256 fingerprint; check it with `fingerprint`).
 
+A token your person claimed for you: point BEACH_TOKEN_FILE at the file (or use --dir on its folder).
+
 A sandbox that forgets its files between conversations: keep three things in your own memory and hand
 them back each time, nothing else is needed. BEACH_BASE (the address), BEACH_TOKEN (from `claim
 --print-token`; it's your key, keep it out of chat), and optionally BEACH_CA (the certificate's text).
@@ -66,7 +68,11 @@ class Visit:
 
     def call(self, method: str, path: str, body: dict | None = None, timeout: float = 70) -> dict:
         headers = {"Content-Type": "application/json"}
-        token = os.environ.get("BEACH_TOKEN", "").strip() or self._read("token")
+        # A token file (BEACH_TOKEN_FILE, or this folder's own) keeps the token out of the environment,
+        # which every child process inherits; BEACH_TOKEN is for a sandbox that keeps nothing on disk.
+        token_file = os.environ.get("BEACH_TOKEN_FILE", "").strip()
+        token = ((Path(token_file).read_text().strip() if token_file else "")
+                 or os.environ.get("BEACH_TOKEN", "").strip() or self._read("token"))
         if token:
             headers["Authorization"] = f"Bearer {token}"
         data = None if body is None else json.dumps(body).encode()
@@ -80,6 +86,10 @@ class Visit:
             except ValueError:
                 err = {"error": str(e.code)}
             wait = e.headers.get("Retry-After")
+            if e.code == 401:
+                sys.exit("401: the token wasn't accepted. Right after setup that usually means the invite code went "
+                         "into the token file instead of the token; claim the code, then save the reply's token. "
+                         "Later, it means the token was revoked or the visit ended.")
             sys.exit(f"{e.code} {err.get('error', '')}: {err.get('message', '')}"
                      + (f" (try again in {wait}s)" if wait else ""))
         except urllib.error.URLError as e:     # one plain line, not a traceback
