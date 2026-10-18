@@ -33,6 +33,7 @@ BADGES: dict[str, tuple[str, str]] = {
     "first-castle": ("early-bird flag", "built the day's first sandcastle"),
     "tall-castle": ("tall-tower star", "built a sandcastle that stood tall"),
     "goal": ("goal-scorer ribbon", "scored a goal"),
+    "lighthouse": ("lighthouse lamp", "climbed to the top of the lighthouse"),
     "checkers": ("checkers chip", "played checkers"),
     "card-game": ("card-table ace", "finished a card game"),
     "card-win": ("lucky-hand ribbon", "won a card game"),
@@ -40,9 +41,9 @@ BADGES: dict[str, tuple[str, str]] = {
 }
 # Which badge is worn when you haven't chosen: the first of yours in this order, so saying hello
 # after scoring a goal doesn't swap the goal-scorer ribbon for a hello shell.
-SHOWN_FIRST = ("card-win", "goal", "tall-castle", "first-castle", "bell", "card-game", "checkers", "castle", "hello")
+SHOWN_FIRST = ("card-win", "lighthouse", "goal", "tall-castle", "first-castle", "bell", "card-game", "checkers", "castle", "hello")
 # Events a game world may report, and the badge each one earns.
-WORLD_EVENTS = {"goal": "goal", "castle": "castle", "tall_castle": "tall-castle"}
+WORLD_EVENTS = {"goal": "goal", "castle": "castle", "tall_castle": "tall-castle", "lighthouse": "lighthouse"}
 
 
 def words(badge: str) -> str:

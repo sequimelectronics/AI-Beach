@@ -146,7 +146,7 @@ class _LiveBeachWorld:
         cls.beach.ensure_admin()
         # Each test plays its own pair: one character per participant, so a second test reconnecting
         # the same name would retire the first test's character mid-run (seen 10-18 under load).
-        cls.tokens = {n: cls.beach.add_participant(n, "agent")[1] for n in ("Sandy", "Pebble", "Coral", "Shell")}
+        cls.tokens = {n: cls.beach.add_participant(n, "agent")[1] for n in ("Sandy", "Pebble", "Coral", "Shell", "Kelp")}
         cls.beach.add_zone("beachblox", "BeachBlox", "game")
         bridge_token = cls.beach.bridge_token("beachblox")
         beach_port = _free_port()
@@ -260,6 +260,54 @@ class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
         self.assertIn("on DuneMiddleTop", res)
         self.assertIn("between regions", a.look())
 
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveLighthouseTest(_LiveBeachWorld, unittest.TestCase):
+    """The pier and the lighthouse (10-18): onto the deck and out to its end; then up the lighthouse's
+    spiral, pad by pad as the map card describes it, to the top, which earns the lighthouse badge."""
+
+    def test_the_pier_then_up_the_lighthouse(self):
+        from adapters.clawblox.world import beach_layout
+        a = self.adapter("Kelp")
+        a.look()
+        self.assertIn("lighthouse: a tower", a.map_card())
+        self.assertIn("pier: a plank deck", a.map_card())
+        a.act("MoveTo", {"position": [30, 0, -25]})
+        self.assertIn("on PierDeck", a.act("MoveTo", {"position": [48, 0.3, -25]}))
+        self.assertIn("on PierEnd", a.act("MoveTo", {"position": [54.5, 0.3, -25]}))
+        self.assertIn("in the Pier", a.look())
+        for stop in ([30, 0, -25], [28, 0, 28]):
+            a.act("MoveTo", {"position": stop})
+        lh = beach_layout(a._observe())["lighthouse"]
+
+        def pad(n, r=None):
+            ang = math.radians(lh["first_deg"] + (n - 1) * lh["step_deg"])
+            r = r or lh["ramp_r"]
+            return [lh["x"] + r * math.cos(ang), n * lh["rise"], lh["z"] + r * math.sin(ang)]
+        # Two pads per walk (they overlap, so the straight line between them stays on pads).
+        for n in [1] + list(range(3, lh["pads"] + 1, 2)) + [lh["pads"]]:
+            res = a.act("MoveTo", {"position": pad(n)})
+            # On the spiral (neighboring pads overlap, so either may be named) and at pad n's height.
+            self.assertIn("on LighthouseStep", res, f"pad {n}")
+            y = float(re.search(r"at \([-\d.]+,([-\d.]+),", res).group(1))
+            self.assertGreater(y, n * lh["rise"] + 2.5 - 0.5, f"pad {n}: {res}")
+        res = a.act("MoveTo", {"position": pad(lh["pads"] + 1, lh["tower_r"] + 1.2)})
+        self.assertRegex(res, r"on Lighthouse(Landing|Tower)")   # the landing reaches onto the top
+        self.assertIn("on LighthouseTower", a.act("MoveTo", {"position": [lh["x"], lh["top_y"], lh["z"]]}))
+        heard = ""
+        for _ in range(8):
+            heard += a.hear()
+            if "reached the top of the lighthouse" in heard:
+                break
+            time.sleep(1)
+        self.assertIn("Kelp reached the top of the lighthouse!", heard)
+        pid = self.beach.by_name("Kelp").id
+        for _ in range(15):   # the bridge reports the world's events every couple of seconds
+            if "lighthouse" in self.beach.badges.today(pid):
+                break
+            time.sleep(1)
+        self.assertIn("lighthouse", self.beach.badges.today(pid))
 
 
 @unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")

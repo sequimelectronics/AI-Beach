@@ -578,6 +578,46 @@ function createEntityVisual(entity) {
 
   const attrs = entity.attributes || {}
 
+  // The lighthouse: a white tower with red bands, and its lamp (lit, so it reads at any time of day).
+  if (role === 'Lighthouse') {
+    const group = new THREE.Group()
+    const r = size[0] / 2
+    const h = size[1]
+    const bands = 6
+    for (let i = 0; i < bands; i++) {
+      const band = new THREE.Mesh(
+        new THREE.CylinderGeometry(r * (1 - 0.06 * (i + 1) / bands), r * (1 - 0.06 * i / bands), h / bands, 32),
+        new THREE.MeshStandardMaterial({ color: i % 2 ? 0xd8483a : 0xf5f2ec, roughness: 0.7 }),
+      )
+      band.position.y = -h / 2 + h / bands * (i + 0.5)
+      band.castShadow = true
+      band.receiveShadow = true
+      group.add(band)
+    }
+    return group
+  }
+  if (role === 'LighthouseLamp') {
+    return new THREE.Mesh(
+      new THREE.CylinderGeometry(size[0] / 2, size[0] / 2, size[1], 24),
+      new THREE.MeshStandardMaterial({ color: 0xffd65a, emissive: 0xffc23a, emissiveIntensity: 0.9, roughness: 0.3 }),
+    )
+  }
+  // A signpost board: wood, with its area's name above it (a label that always faces you).
+  if (role === 'SignBoard') {
+    const group = new THREE.Group()
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(size[0], size[1], size[2]),
+      new THREE.MeshStandardMaterial({ color: 0xecdab0, roughness: 0.85 }),
+    )
+    board.castShadow = true
+    group.add(board)
+    const label = makeLabelSprite(String(attrs.SignText || ''))
+    label.position.y = size[1] / 2 + 0.35
+    label.scale.set(2.6, 0.65, 1)
+    group.add(label)
+    return group
+  }
+
   // The watch spot's board: the names of whoever is watching, above the lifeguard chair.
   if (role === 'WatchSign') {
     const group = new THREE.Group()

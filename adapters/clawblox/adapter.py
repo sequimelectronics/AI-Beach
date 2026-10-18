@@ -398,13 +398,28 @@ class ClawbloxAdapter:
             snap = self._observe()
             trail.append(snap.me)
             if hdist(snap.me, target) <= self.rules.arrive_tolerance:
-                return "arrived", self._landed(snap)
+                return "arrived", self._landed(self._settle(snap, target))
             if snap.me[1] < -20:
                 return "fell", snap
             window = max(3, int(round(1.0 / self.poll)))
             if len(trail) > window and dist3(trail[-1], trail[-1 - window]) < 0.15:
                 return "stuck", snap
         return "timeout", snap or self._observe()
+
+    def _settle(self, snap: Snapshot, target) -> Snapshot:
+        """Within arrive_tolerance counts as arrived, but the walk goes on to the spot: let it finish
+        (close to the target, or stopped; max ~1.2 s) so the next action starts from where you were
+        sent. Without this, a run of short walks (a spiral, a run-up) starts each one short (10-18)."""
+        for _ in range(int(1.2 / self.poll) + 1):
+            if hdist(snap.me, target) <= 0.5:
+                break
+            self.sleep(self.poll)
+            nxt = self._observe()
+            moved = hdist(nxt.me, snap.me)
+            snap = nxt
+            if moved < 0.05:
+                break
+        return snap
 
     def _landed(self, snap: Snapshot) -> Snapshot:
         """Wait (max ~1.5 s) until you stop moving vertically, e.g. after a jump."""

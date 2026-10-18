@@ -81,7 +81,7 @@ local CONFIG = {
     goal = { line = 14, half_width = 3, height = 3, return_after = 3 },
     center = Vector3.new(-24, 0, 33),   -- where a scored ball goes back to: the court's middle
     -- The dune between the court and the castles: an uneven ridge of three sand ledges 1.4 high
-    -- (a walk climbs 1.0 at most; a running jump about 1.7), two with a second ledge on top.
+    -- (a walk climbs about 0.3; a running jump about 1.7), two with a second ledge on top.
     -- Walk through the gap at x -26..-21, or round its east end by the Plaza.
     dune = {
         step = 1.4,
@@ -96,6 +96,20 @@ local CONFIG = {
     -- picked up and hidden somewhere on the island's sand (in a region, never in the sea, on the dune
     -- or in a plot), with a hint of where. Then it's hide and seek.
     lifeguard = { after = 120 },
+    -- The lighthouse (north-east, on the headland): a striped tower, and a spiral of stepping pads
+    -- around it, each `rise` above the last (a walk steps up about 0.3, measured 10-18, so no jumping is
+    -- needed: the challenge is following the spiral without stepping off; pads overlap, so a walk can
+    -- cross two or three at once). A turn is 20 pads, 6 up: room for a character's head. Pad n's middle is at angle
+    -- first_deg + (n - 1) * step_deg around the tower, `ramp_r` out, its top at n * rise. The last
+    -- pad, the landing, is level with the tower's top, where the lamp is. Reaching the top earns the
+    -- lighthouse badge.
+    lighthouse = { x = 40, z = 40, tower_r = 3.5, top_y = 12.3, ramp_r = 6.5, rise = 0.3, step_deg = 18,
+                   first_deg = 225, pads = 40, pad = 3.0, tread = 3.4 },   -- pad: across; tread: along
+    -- The pier (south-east): a plank deck from the east coast out over the shallows, its top `top_y`
+    -- above the sand (a step you can walk up), with a wider end for fishing.
+    pier = { deck = { x = { 43, 53 }, z = { -27, -23 } }, finish = { x = { 52, 57 }, z = { -30, -20 } }, top_y = 0.3 },
+    -- The signpost in the middle of the Plaza: a board pointing to each area.
+    signpost = { x = 0, z = 0, height = 4.2 },
     kick = { reach = 3.0, impulse = 20, max_speed = 40, lift = 0.18 },  -- body radius 1 + ball radius 0.6 + walking slack
     pickup_range = 6, place_range = 7, match_radius = 1.5,
     hold_offset = Vector3.new(0, 3.5, 0),
@@ -303,6 +317,92 @@ do
     end
 end
 
+-- Solid things to stand on or bump into (the lighthouse, the pier, the signpost). Like the dune they
+-- are NOT tagged Static: agents see them when near, and their adapter can plan around them.
+local function solid(name, size, cf, props)
+    local p = child(Workspace, name) or Instance.new("Part")
+    p.Name = name
+    p.Size = size
+    p.CFrame = typeof(cf) == "Vector3" and CFrame.new(cf) or cf
+    p.Anchored = true
+    for k, v in pairs(props or {}) do
+        if k == "Role" then p:SetAttribute("RenderRole", v)
+        elseif k == "Kind" then p:SetAttribute("Kind", v)
+        else p[k] = v end
+    end
+    p.Parent = Workspace
+    return p
+end
+
+local LH = CONFIG.lighthouse
+local function padSpot(n)   -- the middle of the lighthouse's pad n (1-based), on its top
+    local a = math.rad(LH.first_deg + (n - 1) * LH.step_deg)
+    return LH.x + LH.ramp_r * math.cos(a), n * LH.rise, LH.z + LH.ramp_r * math.sin(a)
+end
+do
+    local stone = Color3.fromRGB(176, 170, 160)
+    solid("LighthouseTower", Vector3.new(LH.tower_r * 2, LH.top_y, LH.tower_r * 2),
+        Vector3.new(LH.x, LH.top_y / 2, LH.z),
+        { Shape = Enum.PartType.Cylinder, Role = "Lighthouse", Kind = "lighthouse", Color = Color3.fromRGB(245, 242, 236) })
+    -- Each pad is a tread turned to follow the spiral (long side along it), so neighbors always
+    -- overlap the same way and a walk across two or three never meets a double step.
+    for n = 1, LH.pads do
+        local x, top, z = padSpot(n)
+        local a = math.rad(LH.first_deg + (n - 1) * LH.step_deg)
+        local cf = CFrame.new(x, top - 0.2, z) * CFrame.fromOrientation(0, math.atan2(-math.sin(a), math.cos(a)), 0)
+        solid(string.format("LighthouseStep%02d", n), Vector3.new(LH.pad, 0.4, LH.tread), cf,
+            { Role = "LighthouseStep", Kind = "lighthouse step", Color = stone, Material = Enum.Material.Slate })
+    end
+    -- The landing: one more step, level with the tower's top and reaching onto it.
+    local a = math.rad(LH.first_deg + LH.pads * LH.step_deg)
+    local r = LH.tower_r + 1.2
+    solid("LighthouseLanding", Vector3.new(LH.pad, 0.4, LH.pad),
+        Vector3.new(LH.x + r * math.cos(a), LH.top_y - 0.2, LH.z + r * math.sin(a)),
+        { Role = "LighthouseStep", Kind = "lighthouse landing", Color = stone, Material = Enum.Material.Slate })
+    -- The lamp: light only (nothing collides with it), so the whole top is yours to stand on.
+    solid("LighthouseLamp", Vector3.new(1.6, 1.6, 1.6), Vector3.new(LH.x, LH.top_y + 0.9, LH.z),
+        { Shape = Enum.PartType.Cylinder, Role = "LighthouseLamp", Color = Color3.fromRGB(255, 214, 90),
+          CanCollide = false, CanQuery = false, CanTouch = false })
+end
+
+do
+    local P = CONFIG.pier
+    local wood = Color3.fromRGB(156, 110, 72)
+    local function deck(name, r)
+        solid(name, Vector3.new(r.x[2] - r.x[1], 0.3, r.z[2] - r.z[1]),
+            Vector3.new((r.x[1] + r.x[2]) / 2, P.top_y - 0.15, (r.z[1] + r.z[2]) / 2),
+            { Role = "Plank", Kind = "pier", Color = wood })
+    end
+    deck("PierDeck", P.deck)
+    deck("PierEnd", P.finish)
+    -- Posts down to the sea floor, under the deck's edges.
+    local i = 0
+    for _, x in ipairs({ 46, 49.5, 53, 56.5 }) do
+        local zs = x < 52 and { P.deck.z[1] + 0.3, P.deck.z[2] - 0.3 } or { P.finish.z[1] + 0.3, P.finish.z[2] - 0.3 }
+        for _, z in ipairs(zs) do
+            i = i + 1
+            solid("PierPost" .. i, Vector3.new(0.5, P.top_y, 0.5), Vector3.new(x, P.top_y / 2 - 0.3, z),
+                { Shape = Enum.PartType.Cylinder, Role = "PierPost", Kind = "pier post", Color = Color3.fromRGB(120, 84, 56) })
+        end
+    end
+end
+
+do
+    local SP = CONFIG.signpost
+    solid("SignpostPole", Vector3.new(0.4, SP.height + 0.6, 0.4), Vector3.new(SP.x, (SP.height + 0.6) / 2, SP.z),
+        { Shape = Enum.PartType.Cylinder, Role = "SignPole", Kind = "signpost", Color = Color3.fromRGB(120, 84, 56) })
+    -- One board per area, pointing its way (the four areas sit on the diagonals).
+    for i, b in ipairs({ { "Ball Court", -1, 1 }, { "Lighthouse", 1, 1 }, { "Pier", 1, -1 }, { "Sandcastles", -1, -1 } }) do
+        local dx, dz = b[2], b[3]
+        local yaw = math.atan2(dx, dz)   -- the board's length runs along its direction
+        local cf = CFrame.new(SP.x + dx * 0.9, SP.height - (i - 1) * 0.55, SP.z + dz * 0.9)
+            * CFrame.fromOrientation(0, yaw, 0)
+        local board = solid("SignBoard" .. i, Vector3.new(0.12, 0.45, 1.9), cf,
+            { Role = "SignBoard", Kind = "sign", Color = Color3.fromRGB(236, 218, 176), CanCollide = false })
+        board:SetAttribute("SignText", b[1])
+    end
+end
+
 -- Plot markers: thin flat squares you can walk over.
 if PLOTS.enabled then
     for _, plot in ipairs(PLOTS.list) do
@@ -355,6 +455,10 @@ mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
     },
     regions = REGIONS,
     dune = { ledge = CONFIG.dune.step, ledges = CONFIG.dune.ledges, gaps = CONFIG.dune.gaps },
+    lighthouse = { x = LH.x, z = LH.z, tower_r = LH.tower_r, top_y = LH.top_y, ramp_r = LH.ramp_r, rise = LH.rise,
+                   step_deg = LH.step_deg, first_deg = LH.first_deg, pads = LH.pads },
+    pier = CONFIG.pier,
+    signpost = { x = CONFIG.signpost.x, z = CONFIG.signpost.z },
     center = { CONFIG.center.X, CONFIG.center.Z },
     centre = { CONFIG.center.X, CONFIG.center.Z }, -- the name before job 12, for older adapters  -- spelling: kept
     plots = PLOTS.enabled and (function()
@@ -849,6 +953,8 @@ end
 
 local function clearSpot(x, z)
     if not on_land(x, z) or plotAt(Vector3.new(x, 0, z)) then return false end
+    local LHc = CONFIG.lighthouse   -- not under the lighthouse's spiral
+    if (x - LHc.x) ^ 2 + (z - LHc.z) ^ 2 <= (LHc.ramp_r + LHc.pad + 1) ^ 2 then return false end
     for _, l in ipairs(CONFIG.dune.ledges) do
         if x >= l.x[1] - 2 and x <= l.x[2] + 2 and z >= l.z[1] - 2 and z <= l.z[2] + 2 then return false end
     end
@@ -892,6 +998,23 @@ local function lifeguard(now)
     end
 end
 
+local onTop = {}   -- player -> true while standing on the lighthouse's top
+local function lighthouseTop()
+    for _, player in ipairs(Players:GetPlayers()) do
+        local hrp = hrpOf(player)
+        local up = false
+        if hrp then
+            local d = Vector3.new(hrp.Position.X - LH.x, 0, hrp.Position.Z - LH.z).Magnitude
+            up = d <= LH.tower_r + 0.5 and hrp.Position.Y > LH.top_y + 1.5
+        end
+        if up and not onTop[player] then
+            announce(player.Name .. " reached the top of the lighthouse!")
+            beachEvent("lighthouse", player)
+        end
+        onTop[player] = up or nil
+    end
+end
+
 local lifeguardTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     local now = os.clock()
@@ -899,6 +1022,7 @@ RunService.Heartbeat:Connect(function(dt)
     if lifeguardTimer >= 1 then
         lifeguardTimer = 0
         lifeguard(now)
+        lighthouseTop()
     end
 
     for _, player in ipairs(Players:GetPlayers()) do

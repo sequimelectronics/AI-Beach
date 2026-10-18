@@ -137,6 +137,13 @@ const Beach = (() => {
       '<path d="M11 18V4.5" stroke="' + INK + '" stroke-width="1.2"/><path d="M11 4.8L17 7.3L11 9.8Z" fill="#e8622a" stroke="' + INK + '" stroke-width=".9" stroke-linejoin="round"/>',
     'tall-castle': '<path d="M8 21V9H9.6V7.5H11.2V9H12.8V7.5H14.4V9H16V21Z" fill="#e3c38c" stroke="' + INK + '" stroke-width="1" stroke-linejoin="round"/>' +
       '<path d="M11 21V17.5A1 1 0 0 1 13 17.5V21" fill="#8a5a36"/><path d="M12 1.2L13.3 4L16.2 4.3L14 6.2L14.7 9L12 7.6L9.3 9L10 6.2L7.8 4.3L10.7 4Z" fill="#f7c23c" stroke="' + INK + '" stroke-width=".8" stroke-linejoin="round"/>',
+    // The lighthouse lamp: a striped tower on a rock, its lamp lit, two beams.
+    lighthouse: '<path d="M4 21.5Q12 17.8 20 21.5Z" fill="#9a8f84" stroke="' + INK + '" stroke-width=".9"/>' +
+      '<path d="M9.4 19.6L10.4 8.4H13.6L14.6 19.6Z" fill="#fffdf8" stroke="' + INK + '" stroke-width="1" stroke-linejoin="round"/>' +
+      '<path d="M9.75 15.6H14.25L14.4 17.4H9.6Z M10.1 11.6H13.9L14.05 13.4H9.95Z" fill="#d8483a"/>' +
+      '<rect x="10.2" y="5.4" width="3.6" height="3" rx=".6" fill="#f7c23c" stroke="' + INK + '" stroke-width=".9"/>' +
+      '<path d="M9.6 5.4L12 3L14.4 5.4Z" fill="#d8483a" stroke="' + INK + '" stroke-width=".9" stroke-linejoin="round"/>' +
+      '<path d="M14.4 6.9L21 4.6M14.4 6.9L21 9.2M9.6 6.9L3 4.6M9.6 6.9L3 9.2" stroke="#f7c23c" stroke-width="1.1" stroke-linecap="round"/>',
     goal: ROSETTE('#3b82c4', '<circle cx="12" cy="10" r="3.6" fill="#fff" stroke="' + INK + '" stroke-width=".8"/><path d="M12 8.2L13.6 9.4L13 11.3H11L10.4 9.4Z" fill="' + INK + '"/>'),
     checkers: '<ellipse cx="12" cy="15" rx="8.5" ry="3.6" fill="#8e1f1f" stroke="' + INK + '" stroke-width="1"/><path d="M3.5 11.5V15A8.5 3.6 0 0 0 20.5 15V11.5" fill="#c23a2e" stroke="' + INK + '" stroke-width="1"/>' +
       '<ellipse cx="12" cy="11.5" rx="8.5" ry="3.6" fill="#e0533f" stroke="' + INK + '" stroke-width="1"/><ellipse cx="12" cy="11.5" rx="5" ry="2.1" fill="none" stroke="#ffb4a6" stroke-width="1"/>',

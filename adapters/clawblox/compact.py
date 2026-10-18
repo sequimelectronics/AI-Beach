@@ -393,6 +393,21 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
         gaps = " and ".join(f"x {g['x'][0]:g}..{g['x'][1]:g}" for g in dune.get("gaps") or [])
         lines.append(f"dune (ledges {dune['ledge']:g} high: climb with a running jump): " + "; ".join(parts)
                      + (f". Walk through it at {gaps}" if gaps else ""))
+    lh = layout.get("lighthouse")
+    if lh:
+        lines.append(f"lighthouse: a tower at {lh['x']:g},{lh['z']:g} (radius {lh['tower_r']:g}), its top at y={lh['top_y']:g}. "
+                     f"A spiral of {lh['pads']:g} stepping pads climbs it: pad n's middle is {lh['ramp_r']:g} from the tower's "
+                     f"middle at angle {lh['first_deg']:g} + (n-1)*{lh['step_deg']:g} degrees (0 = east, 90 = north), "
+                     f"its top at y = n*{lh['rise']:g}; walk from pad to pad (no jump needed; pads overlap, so one walk can cross two or three), then onto the top. "
+                     "Reaching the top earns a badge")
+    pier = layout.get("pier")
+    if pier:
+        d, e = pier["deck"], pier["finish"]
+        lines.append(f"pier: a plank deck over the sea x {d['x'][0]:g}..{d['x'][1]:g}, z {d['z'][0]:g}..{d['z'][1]:g}, "
+                     f"widening at its end x {e['x'][0]:g}..{e['x'][1]:g}, z {e['z'][0]:g}..{e['z'][1]:g}; top y={pier['top_y']:g} (a step up)")
+    sp = layout.get("signpost")
+    if sp:
+        lines.append(f"signpost: in the middle of the Plaza at {sp['x']:g},{sp['z']:g}, a board pointing to each area")
     goals = layout.get("goals", [])
     if goals:
         g = goals[0]
