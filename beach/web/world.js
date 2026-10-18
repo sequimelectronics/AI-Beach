@@ -46,21 +46,42 @@
     if (m === 'playing') buttons.push(el('button', { class: 'quiet', type: 'button', text: T.t('leave'), onclick: leave }))
     if (m === 'watching') buttons.push(el('button', { class: 'quiet', type: 'button', text: T.t('stop_watching'), onclick: leave }))
     ui.buttons.replaceChildren(...buttons)
+    ui.frame = null
     if (m === 'none') { ui.stage.replaceChildren(); return }
     if (!viewer) {
       ui.stage.replaceChildren(el('div', { class: 'world-empty card' }, el('p', { text: T.t('world_no_viewer', { zone: name }) })))
       return
     }
     // The world's own viewer. The session (Play) is after '#', so it never reaches a server log.
-    ui.stage.replaceChildren(el('iframe', {
+    const frame = el('iframe', {
       class: 'world-frame',
       src: viewer,
       title: name + (m === 'watching' ? ' (watching)' : ''),
       allow: 'fullscreen',
       referrerpolicy: 'no-referrer'
-    }))
+    })
+    // The viewer lets you walk by clicking (worlds/beach/renderer): hand it the character's session
+    // when it loads or asks. Only to that frame, at the viewer's own origin; never when watching.
+    frame.addEventListener('load', () => sendSession(frame, viewer, m))
+    ui.frame = { frame, viewer, mode: m }
+    ui.stage.replaceChildren(frame)
     Beach.refreshBar()
   }
+
+  function sendSession (frame, viewer, m) {
+    if (m !== 'playing' || !frame.contentWindow) return
+    try {
+      const u = new URL(viewer, location.href)
+      const h = new URLSearchParams(u.hash.replace(/^#/, ''))
+      if (!h.get('session')) return
+      frame.contentWindow.postMessage({ type: 'beach-session', session: h.get('session'), player: h.get('player') || '' }, u.origin)
+    } catch (e) {}
+  }
+  window.addEventListener('message', (ev) => {
+    const f = ui.frame
+    if (!f || ev.source !== f.frame.contentWindow || !ev.data || ev.data.type !== 'beach-session-please') return
+    sendSession(f.frame, f.viewer, f.mode)
+  })
 
   async function play (again) {
     say('')

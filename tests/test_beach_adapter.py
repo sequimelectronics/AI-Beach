@@ -319,6 +319,20 @@ class WorldScriptTests(unittest.TestCase):
         self.assertIn('announce(n .. " is watching from " .. CONFIG.watch.name)', loop)
         self.assertIn('watchersInfo:SetAttribute("Names"', loop)
 
+    def test_people_play_with_the_mouse_and_the_session_stays_put(self):
+        # 10-18: click to walk, click someone to follow, Space to jump. The Beach page hands the viewer
+        # the character's session by message: only while playing, only to its own frame at the viewer's
+        # origin; the viewer takes it only from the page that frames it.
+        js = (ROOT / "worlds" / "beach" / "renderer" / "src" / "index.js").read_text()
+        self.assertIn("ev.source !== window.parent", js)
+        self.assertIn("send('MoveTo'", js)
+        self.assertIn("send('Jump')", js)
+        self.assertIn("api.selectPlayer(id)", js)
+        page = (ROOT / "beach" / "web" / "world.js").read_text()
+        self.assertIn("if (m !== 'playing' || !frame.contentWindow) return", page)
+        self.assertIn("}, u.origin)", page)
+        self.assertIn("ev.source !== f.frame.contentWindow", page)
+
     def test_the_renderer_draws_no_departed_player(self):
         # A character whose player isn't listed any more is skipped (and so removed from the scene),
         # even on an engine without patches/clawblox-live-removals.patch.

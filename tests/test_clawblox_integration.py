@@ -293,7 +293,8 @@ class LiveLighthouseTest(_LiveBeachWorld, unittest.TestCase):
             y = float(re.search(r"at \([-\d.]+,([-\d.]+),", res).group(1))
             self.assertGreater(y, n * lh["rise"] + 2.5 - 0.5, f"pad {n}: {res}")
         res = a.act("MoveTo", {"position": pad(lh["pads"] + 1, lh["tower_r"] + 1.2)})
-        self.assertRegex(res, r"on Lighthouse(Landing|Tower)")   # the landing reaches onto the top
+        y = float(re.search(r"at \([-\d.]+,([-\d.]+),", res).group(1))
+        self.assertGreater(y, lh["top_y"] + 2.0, res)   # up at the top's level (the landing reaches onto it)
         self.assertIn("on LighthouseTower", a.act("MoveTo", {"position": [lh["x"], lh["top_y"], lh["z"]]}))
         heard = ""
         for _ in range(8):

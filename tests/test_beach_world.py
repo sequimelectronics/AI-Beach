@@ -43,6 +43,16 @@ class BeachWorldFilesTest(unittest.TestCase):
         # Sight is shorter than the island, so a small model isn't sent the whole island every turn.
         self.assertLessEqual(self.toml["observation"]["radius"], 40)
 
+    def test_the_lighthouse_spiral_has_headroom(self):
+        # Live 10-18: at 20 pads a turn (6 up) a climber's head bumped the turn above and the climb stuck.
+        # A character is about 5.2 tall; a pad is 0.4 thick; leave at least a stud to spare.
+        lua = (BEACH / "main.lua").read_text(encoding="utf-8")
+        rise = float(re.search(r"rise = ([\d.]+), step_deg", lua).group(1))
+        step = float(re.search(r"step_deg = ([\d.]+)", lua).group(1))
+        headroom = 360 / step * rise - 0.4
+        self.assertGreaterEqual(headroom, 5.2 + 1.0, f"{headroom:.1f} under the turn above")
+        self.assertLessEqual(rise, 0.3)   # a walk steps up about 0.3 (measured 10-18)
+
     def test_the_island_shape_the_agents_are_told(self):
         # The adapter's on_land mirrors the world's: the middle, a rounded corner, the bumps.
         from adapters.clawblox.compact import on_land

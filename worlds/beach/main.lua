@@ -99,12 +99,13 @@ local CONFIG = {
     -- The lighthouse (north-east, on the headland): a striped tower, and a spiral of stepping pads
     -- around it, each `rise` above the last (a walk steps up about 0.3, measured 10-18, so no jumping is
     -- needed: the challenge is following the spiral without stepping off; pads overlap, so a walk can
-    -- cross two or three at once). A turn is 20 pads, 6 up: room for a character's head. Pad n's middle is at angle
+    -- cross two or three at once). A turn is 25 pads, 7.5 up: a character (about 5.2 tall) has room under
+    -- the turn above (live 10-18: at 20 pads a turn, 6 up, heads bumped and the climb stuck). Pad n's middle is at angle
     -- first_deg + (n - 1) * step_deg around the tower, `ramp_r` out, its top at n * rise. The last
     -- pad, the landing, is level with the tower's top, where the lamp is. Reaching the top earns the
     -- lighthouse badge.
-    lighthouse = { x = 40, z = 40, tower_r = 3.5, top_y = 12.3, ramp_r = 6.5, rise = 0.3, step_deg = 18,
-                   first_deg = 225, pads = 40, pad = 3.0, tread = 3.4 },   -- pad: across; tread: along
+    lighthouse = { x = 40, z = 40, tower_r = 4.5, top_y = 16.5, ramp_r = 8, rise = 0.3, step_deg = 14.4,
+                   first_deg = 225, pads = 54, pad = 3.0, tread = 3.4 },   -- pad: across; tread: along
     -- The pier (south-east): a plank deck from the east coast out over the shallows, its top `top_y`
     -- above the sand (a step you can walk up), with a wider end for fishing.
     pier = { deck = { x = { 43, 53 }, z = { -27, -23 } }, finish = { x = { 52, 57 }, z = { -30, -20 } }, top_y = 0.3 },
