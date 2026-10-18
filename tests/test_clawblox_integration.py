@@ -210,22 +210,22 @@ class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
         self.assertEqual(a.rules.world, "beach")
         self.assertIn("Pebble", a.look())  # named, by the Beach's door, even if Pebble is behind Sandy
         # From the Plaza north-west to the Ball Court (along the north shore, goals at its east and west
-        # ends), and kick the soccer ball east from just west of it (the court's middle is -30, 42).
-        self.assertIn("arrived", a.act("MoveTo", {"position": [-14, 0, 20]}))
-        self.assertIn("arrived", a.act("MoveTo", {"position": [-32.2, 0, 42]}))
+        # ends), and kick the soccer ball east from just west of it (the court's middle is -24, 33).
+        self.assertIn("arrived", a.act("MoveTo", {"position": [-12, 0, 16]}))
+        self.assertIn("arrived", a.act("MoveTo", {"position": [-26.2, 0, 33]}))
         res = a.act("Kick", {"direction": [1, 0, 0], "power": 0.5})
         self.assertTrue(res.startswith("Kicked the soccer ball E"), res)
         # Round the dune's east end to the Sandcastles: build two blocks in plot 2 and see the castle.
-        for stop in ([-8, 0, 20], [-8, 0, -16], [-36, 0, -30]):
+        for stop in ([-2, 0, 16], [-2, 0, -13], [-28, 0, -23]):   # one lane east of Pebble, who stands at -6,-6
             a.act("MoveTo", {"position": stop})
         for y in (0.55, 1.55):
             self.assertTrue(a.act("Mold", {"shape": "block"}).startswith("Molded"))
-            res = a.act("Place", {"position": [-40, y, -30]})
+            res = a.act("Place", {"position": [-32, y, -23]})
             self.assertTrue(res.startswith("Placed"), res)
         time.sleep(1.0)
         self.assertRegex(a.look(), r"sandcastle in plot 2 .*: 2 pieces, 2 high")
         # Pebble comes over too, and they talk (both at the Sandcastles).
-        for stop in ([-8, 0, -16], [-34, 0, -24]):
+        for stop in ([-6, 0, -13], [-26, 0, -20]):
             b.act("MoveTo", {"position": stop})
         b.hear()
         a.say("hello Pebble")
@@ -242,7 +242,7 @@ class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
         card = a.map_card()
         for words in ("the Ball Court", "the Sandcastles", "the Lighthouse", "the Pier", "dune", "island"):
             self.assertIn(words, card)
-        for stop in ([-14, 0, 20], [-30, 0, 36]):
+        for stop in ([-12, 0, 16], [-24, 0, 28]):
             self.assertIn("arrived", a.act("MoveTo", {"position": stop}))
         self.assertIn("in the Ball Court", a.look())
         b.hear()
@@ -252,11 +252,11 @@ class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
         self.assertTrue(a.say("can anyone hear me?", shout=True).startswith("shouted"))
         self.assertIn("Coral shouts: can anyone hear me?", b.hear())
         # South through the dune's gap, then up DuneMiddle from the castle side: two running jumps.
-        for stop in ([-29.5, 0, 20], [-29.5, 0, -8], [-37.5, 0, -8]):
+        for stop in ([-23.5, 0, 16], [-23.5, 0, -8], [-31, 0, -8]):
             a.act("MoveTo", {"position": stop})
-        res = a.act("MoveTo", {"position": [-37.5, 1.4, 0.5], "jump": True})   # the lower strip
+        res = a.act("MoveTo", {"position": [-31, 1.4, 0.5], "jump": True})   # the lower strip
         self.assertIn("on DuneMiddle", res)
-        res = a.act("MoveTo", {"position": [-37.5, 2.8, 4], "jump": True})     # the top
+        res = a.act("MoveTo", {"position": [-31, 2.8, 4], "jump": True})     # the top
         self.assertIn("on DuneMiddleTop", res)
         self.assertIn("between regions", a.look())
 
@@ -274,10 +274,10 @@ class LiveLifeguardTest(_LiveBeachWorld, unittest.TestCase):
         from adapters.clawblox.world import beach_layout
         a = self.adapter("Sandy")
         a.look()
-        for stop in ([-14, 0, 20], [-36, 0, 36]):
+        for stop in ([-12, 0, 16], [-29, 0, 28]):
             a.act("MoveTo", {"position": stop})
-        self.assertTrue(a.act("Pickup", {"position": [-36, 0.55, 38]}).startswith("Picked up"))
-        for stop in ([-14, 0, 20], [2, 0, 2]):
+        self.assertTrue(a.act("Pickup", {"position": [-29, 0.55, 30]}).startswith("Picked up"))
+        for stop in ([-12, 0, 16], [2, 0, 2]):
             a.act("MoveTo", {"position": stop})
         self.assertTrue(a.act("Place", {"position": [4, 0.55, 2]}).startswith("Placed"))
         a.act("MoveTo", {"position": [-6, 0, -6]})

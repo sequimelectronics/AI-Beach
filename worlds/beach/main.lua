@@ -16,8 +16,8 @@ local PLOTS = {
     enabled = true,
     half_size = 2.5, -- each plot is a 5 x 5 square
     list = {   -- two north-south columns of four at the Sandcastles (south-west)
-        { id = 1, x = -40, z = -20 }, { id = 2, x = -40, z = -30 }, { id = 3, x = -40, z = -40 }, { id = 4, x = -40, z = -50 },
-        { id = 5, x = -28, z = -20 }, { id = 6, x = -28, z = -30 }, { id = 7, x = -28, z = -40 }, { id = 8, x = -28, z = -50 },
+        { id = 1, x = -32, z = -15 }, { id = 2, x = -32, z = -23 }, { id = 3, x = -32, z = -31 }, { id = 4, x = -32, z = -39 },
+        { id = 5, x = -21, z = -15 }, { id = 6, x = -21, z = -23 }, { id = 7, x = -21, z = -31 }, { id = 8, x = -21, z = -39 },
     },
 }
 
@@ -29,11 +29,11 @@ local PLOTS = {
 -- only shouts carry there. Keep in step with [[speech.regions]] in world.toml.
 --------------------------------------------------------------------------------
 local REGIONS = {
-    { name = "the Plaza", x = { -12, 12 }, z = { -12, 12 } },
-    { name = "the Ball Court", x = { -70, -12 }, z = { 12, 70 } },
-    { name = "the Sandcastles", x = { -70, -12 }, z = { -70, -12 } },
-    { name = "the Lighthouse", x = { 12, 70 }, z = { 12, 70 } },
-    { name = "the Pier", x = { 12, 70 }, z = { -70, -12 } },
+    { name = "the Plaza", x = { -10, 10 }, z = { -10, 10 } },
+    { name = "the Ball Court", x = { -58, -10 }, z = { 10, 58 } },
+    { name = "the Sandcastles", x = { -58, -10 }, z = { -58, -10 } },
+    { name = "the Lighthouse", x = { 10, 58 }, z = { 10, 58 } },
+    { name = "the Pier", x = { 10, 58 }, z = { -58, -10 } },
 }
 
 --------------------------------------------------------------------------------
@@ -43,13 +43,13 @@ local REGIONS = {
 -- test for "is this sand or sea"; the adapter's map card describes the same shapes.
 --------------------------------------------------------------------------------
 local ISLAND = {
-    half = 55, corner_r = 18, top_y = 0,   -- ~110 across: every area one walk from the Plaza
+    half = 45, corner_r = 15, top_y = 0,   -- ~90 across: every area one walk from the Plaza
     bumps = {
-        { name = "the headland", x = 48, z = 48, r = 16 },
-        { name = "the castle beach", x = -55, z = -24, r = 10 },
-        { name = "the pier point", x = 55, z = -18, r = 8 },
+        { name = "the headland", x = 39, z = 39, r = 13 },
+        { name = "the castle beach", x = -45, z = -20, r = 8 },
+        { name = "the pier point", x = 45, z = -15, r = 7 },
     },
-    wall = 70,   -- invisible walls at x = +/-70 and z = +/-70, in the shallows
+    wall = 58,   -- invisible walls at x = +/-58 and z = +/-58, in the shallows
 }
 
 local function on_land(x, z)
@@ -77,20 +77,20 @@ local CONFIG = {
     -- The ball court (north-west) runs east-west along the north shore, the sea along its long side
     -- (a hard kick ends in the water: a gentle threat). Goals `line` either side of its middle, at
     -- its east and west ends.
-    field = { x = -30, z = 42 },
-    goal = { line = 16, half_width = 3, height = 3, return_after = 3 },
-    center = Vector3.new(-30, 0, 42),   -- where a scored ball goes back to: the court's middle
+    field = { x = -24, z = 33 },
+    goal = { line = 14, half_width = 3, height = 3, return_after = 3 },
+    center = Vector3.new(-24, 0, 33),   -- where a scored ball goes back to: the court's middle
     -- The dune between the court and the castles: an uneven ridge of three sand ledges 1.4 high
     -- (a walk climbs 1.0 at most; a running jump about 1.7), two with a second ledge on top.
-    -- Walk through the gap at x -32..-27, or round its east end by the Plaza.
+    -- Walk through the gap at x -26..-21, or round its east end by the Plaza.
     dune = {
         step = 1.4,
         ledges = {
-            { name = "DuneWest", x = { -55, -42 }, z = { -4, 4 }, top = { x = { -52, -45 }, z = { -2, 2 } } },
-            { name = "DuneMiddle", x = { -43, -32 }, z = { -1, 7 }, top = { x = { -40, -35 }, z = { 2, 6 } } },
-            { name = "DuneEast", x = { -27, -17 }, z = { -6, 2 } },
+            { name = "DuneWest", x = { -45, -35 }, z = { -4, 4 }, top = { x = { -42, -37 }, z = { -2, 2 } } },
+            { name = "DuneMiddle", x = { -36, -26 }, z = { -1, 7 }, top = { x = { -33, -29 }, z = { 2, 6 } } },
+            { name = "DuneEast", x = { -21, -13 }, z = { -6, 2 } },
         },
-        gaps = { { x = { -32, -27 } }, { x = { -17, -12 } } },
+        gaps = { { x = { -26, -21 } }, { x = { -13, -10 } } },
     },
     -- The lifeguard: a ball left outside the Ball Court, untouched and still, for `after` seconds is
     -- picked up and hidden somewhere on the island's sand (in a region, never in the sea, on the dune
@@ -111,17 +111,17 @@ local CONFIG = {
     -- Watching (when the world runs with an AI Beach): people and agents who watch have no
     -- character; their names show at this spot, on a patch of sand off the west coast outside
     -- the walls, where nothing can reach; the world announces each one.
-    watch = { name = "the lifeguard chair", x = -77, z = -30 },
+    watch = { name = "the lifeguard chair", x = -64, z = -26 },
 }
 
 local BALLS = {
     -- name, kind, diameter, density, friction, elasticity, home x/z, extra drag on sand
     { name = "SoccerBall", kind = "soccer ball", d = 1.2, density = 0.8, friction = 0.6, elasticity = 0.5,
-      color = Color3.fromRGB(245, 245, 245), home = { -30, 42 }, sand_drag = 1.2 },
+      color = Color3.fromRGB(245, 245, 245), home = { -24, 33 }, sand_drag = 1.2 },
     { name = "Volleyball", kind = "volleyball", d = 1.1, density = 0.3, friction = 0.5, elasticity = 0.85,
-      color = Color3.fromRGB(250, 214, 64), home = { -36, 38 }, sand_drag = 1.6 },
+      color = Color3.fromRGB(250, 214, 64), home = { -29, 30 }, sand_drag = 1.6 },
     { name = "BeachBall", kind = "beach ball", d = 1.8, density = 0.05, friction = 0.5, elasticity = 0.7,
-      color = Color3.fromRGB(235, 80, 90), home = { -24, 46 }, sand_drag = 2.5,
+      color = Color3.fromRGB(235, 80, 90), home = { -19, 36 }, sand_drag = 2.5,
       -- Air resistance stand-in (the engine has none): lift cancels most of gravity,
       -- quadratic drag slows it in flight, and a light breeze nudges it along the beach.
       air = { lift = 0.8, drag = 0.06, breeze = Vector3.new(0, 0, 0.6) } },

@@ -28,25 +28,25 @@ mode = "regions"
 
 [[speech.regions]]
 name = "the Plaza"
-x = [-12.0, 12.0]
-z = [-12.0, 12.0]
+x = [-10.0, 10.0]
+z = [-10.0, 10.0]
 
 [[speech.regions]]
 name = "the Ball Court"
-x = [-70.0, -12.0]
-z = [12.0, 70.0]
+x = [-58.0, -10.0]
+z = [10.0, 58.0]
 
 [[speech.regions]]
 name = "the Sandcastles"
-x = [-70.0, -12.0]
-z = [-70.0, -12.0]
+x = [-58.0, -10.0]
+z = [-58.0, -10.0]
 
 [[speech.regions]]
 name = "the Lighthouse"
-x = [12.0, 70.0]
-z = [12.0, 70.0]
+x = [10.0, 58.0]
+z = [10.0, 58.0]
 
 [[speech.regions]]
 name = "the Pier"
-x = [12.0, 70.0]
-z = [-70.0, -12.0]
+x = [10.0, 58.0]
+z = [-58.0, -10.0]

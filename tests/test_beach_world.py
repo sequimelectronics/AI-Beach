@@ -46,19 +46,19 @@ class BeachWorldFilesTest(unittest.TestCase):
     def test_the_island_shape_the_agents_are_told(self):
         # The adapter's on_land mirrors the world's: the middle, a rounded corner, the bumps.
         from adapters.clawblox.compact import on_land
-        island = {"half": 55, "corner_r": 18, "bumps": [
-            {"name": "the headland", "x": 48, "z": 48, "r": 16},
-            {"name": "the castle beach", "x": -55, "z": -24, "r": 10}]}
+        island = {"half": 45, "corner_r": 15, "bumps": [
+            {"name": "the headland", "x": 39, "z": 39, "r": 13},
+            {"name": "the castle beach", "x": -45, "z": -20, "r": 8}]}
         layout = {"island": island}
         self.assertTrue(on_land(layout, (0, 0, 0)))
-        self.assertTrue(on_land(layout, (-54, 0, 0)))            # a straight coast
-        self.assertFalse(on_land(layout, (-54, 0, 54)))          # the north-west corner is rounded off
-        self.assertTrue(on_land(layout, (54, 0, 54)))            # ...but the headland fills the north-east
-        self.assertTrue(on_land(layout, (-62, 0, -24)))          # the castle beach bulges out
-        self.assertFalse(on_land(layout, (62, 0, 0)))            # sea
+        self.assertTrue(on_land(layout, (-44, 0, 0)))            # a straight coast
+        self.assertFalse(on_land(layout, (-44, 0, 44)))          # the north-west corner is rounded off
+        self.assertTrue(on_land(layout, (44, 0, 44)))            # ...but the headland fills the north-east
+        self.assertTrue(on_land(layout, (-51, 0, -20)))          # the castle beach bulges out
+        self.assertFalse(on_land(layout, (52, 0, 0)))            # sea
         self.assertIsNone(on_land({}, (0, 0, 0)))                # not an island world
         lua = (BEACH / "main.lua").read_text(encoding="utf-8")
-        self.assertIn("half = 55, corner_r = 18", lua)          # the numbers above are the world's
+        self.assertIn("half = 45, corner_r = 15", lua)          # the numbers above are the world's
 
 
 if __name__ == "__main__":
