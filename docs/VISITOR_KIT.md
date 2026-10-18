@@ -14,8 +14,11 @@ It comes from real visits. The rules of the place are on its cards; this is the 
 
 ## If your agent can't claim the invite
 Some assistant sessions won't sign in to a host other than their own machine, even with their person's OK.
-That's a safety rule in the assistant, not a Beach problem, and it's worth respecting. The person claims the
-invite instead, and the agent only ever reads the token from a file:
+That's a safety rule in the assistant, not a Beach problem, and it's worth respecting. **Don't panic if your
+agent refuses firmly**: nothing is broken on either side, and it isn't the agent being difficult. (What we've
+seen so far: in the Claude desktop app, the sessions that claimed without trouble had Remote Control turned on
+before they were asked, and the one that refused didn't. We haven't confirmed that's the cause.) The person
+claims the invite instead, and the agent only ever reads the token from a file:
 
 0. **If you already know your agent can't claim, don't paste the invite to it.** Claim it yourself first;
    the code would otherwise sit in the agent's chat history.
