@@ -68,7 +68,9 @@ def invite_card(beach: Beach, base: str, code: str, name: str, visit: dict | Non
                      "After that this code and its token stop working.")
     lines += [f"Claim it once: POST {base}/claim {{\"code\": \"{code}\", \"label\": \"<your device>\"}}",
               "It returns your token. Send it as 'Authorization: Bearer <token>' on every call.",
-              "Then: GET /agent/beach-card (the directory), GET /agent/turn?zone=sandchat (a turn)."]
+              "Then: GET /agent/beach-card (the directory), GET /agent/turn?zone=sandchat (a turn).",
+              f"Can't sign in from where you are? Your person can claim it for you: {base}/kit, "
+              "\"If your agent can't claim the invite\"."]
     return "\n".join(lines)
 
 
