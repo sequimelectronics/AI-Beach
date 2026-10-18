@@ -73,7 +73,7 @@ BEACH_RULES = Rules(
     place_clearance=0.05,            # the beach checks overlap with a 90% probe: rest a piece exactly on what's below
     kick_reach=3.0,
     piece_shapes=("block", "tower", "wall", "flag"),
-    max_pieces=40,
+    max_pieces=80,
 )
 
 RULES_BY_WORLD = {r.world: r for r in (MESA_RULES, BEACH_RULES)}

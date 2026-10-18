@@ -15,73 +15,107 @@
 local PLOTS = {
     enabled = true,
     half_size = 2.5, -- each plot is a 5 x 5 square
-    list = {
-        { id = 1, x = -13, z = -15 },
-        { id = 2, x = -13, z = -5 },
-        { id = 3, x = -13, z = 5 },
-        { id = 4, x = -13, z = 15 },
+    list = {   -- two rows of four at the Sandcastles (south-west)
+        { id = 1, x = -66, z = -36 }, { id = 2, x = -54, z = -36 }, { id = 3, x = -42, z = -36 }, { id = 4, x = -30, z = -36 },
+        { id = 5, x = -66, z = -52 }, { id = 6, x = -54, z = -52 }, { id = 7, x = -42, z = -52 }, { id = 8, x = -30, z = -52 },
     },
 }
 
 --------------------------------------------------------------------------------
--- REGIONS (10-18): the beach is long, and each area is its own place. Agents always know
--- where every region is (the map); they see moving things only within the world's
--- observation radius, and speech is heard within the speaker's region (a shout carries
--- everywhere). Keep in step with [[speech.regions]] in world.toml.
+-- REGIONS (10-18, the keeper's island): four corners and a plaza in the middle, each its own
+-- place. Agents always know where every region is (the map); they see moving things only
+-- within the world's observation radius, and speech is heard within the speaker's region (a
+-- shout carries everywhere). The bands between regions (the dune, the paths) are between:
+-- only shouts carry there. Keep in step with [[speech.regions]] in world.toml.
 --------------------------------------------------------------------------------
 local REGIONS = {
-    { name = "the Ball Field", x = { -21, 28 }, z = { 52, 102 } },
-    { name = "the Sandcastles", x = { -26, 28 }, z = { -25, 22 } },
+    { name = "the Plaza", x = { -16, 16 }, z = { -16, 16 } },
+    { name = "the Ball Court", x = { -100, -16 }, z = { 16, 100 } },
+    { name = "the Sandcastles", x = { -100, -16 }, z = { -100, -16 } },
+    { name = "the Lighthouse", x = { 16, 100 }, z = { 16, 100 } },
+    { name = "the Pier", x = { 16, 100 }, z = { -100, -16 } },
 }
+
+--------------------------------------------------------------------------------
+-- THE ISLAND: a rounded square (half = 80, corners rounded with corner_r) and a few rounded
+-- bumps (the lighthouse headland in the north-east, a bulge on the castle coast, one by the
+-- pier), with shallow sea all around out to the invisible walls. on_land() below is the one
+-- test for "is this sand or sea"; the adapter's map card describes the same shapes.
+--------------------------------------------------------------------------------
+local ISLAND = {
+    half = 80, corner_r = 26, top_y = 0,
+    bumps = {
+        { name = "the headland", x = 70, z = 70, r = 22 },
+        { name = "the castle beach", x = -80, z = -30, r = 14 },
+        { name = "the pier point", x = 80, z = -24, r = 10 },
+    },
+    wall = 100,   -- invisible walls at x = +/-100 and z = +/-100, in the shallows
+}
+
+local function on_land(x, z)
+    local I = ISLAND
+    local ax, az = math.abs(x), math.abs(z)
+    if ax <= I.half and az <= I.half then
+        local inner = I.half - I.corner_r
+        local dx, dz = math.max(ax - inner, 0), math.max(az - inner, 0)
+        if dx * dx + dz * dz <= I.corner_r * I.corner_r then return true end
+    end
+    for _, b in ipairs(I.bumps) do
+        if (x - b.x) ^ 2 + (z - b.z) ^ 2 <= b.r * b.r then return true end
+    end
+    return false
+end
 
 --------------------------------------------------------------------------------
 -- WORLD SETTINGS
 --------------------------------------------------------------------------------
 local CONFIG = {
     gravity = 35,                 -- a little above Earth at this scale (~28 if a 5-stud character is 1.75 m); mesa uses 10
-    -- A long beach (10-18): the Ball Field in the north, a dune, the Sandcastles in the middle,
-    -- and open sand to the south (the pier and the lighthouse come next).
-    sand = { x = { -20, 18 }, z = { -125, 100 }, top_y = 0 },
-    sea_edge_x = 18,              -- the shoreline: x > 18 is shallow water
-    sea_wall_x = 28,              -- invisible wall 10 into the shallows
-    land_wall_x = -21,
-    end_wall_z = { south = -127, north = 102 },
-    spawn_points = {               -- at the Sandcastles, the middle of the beach
-        { -4, -14 }, { 4, -8 }, { -4, -2 }, { 4, 4 }, { -4, 10 }, { 4, 16 },
+    spawn_points = {               -- at the Plaza, the middle of the island: every area is one walk away
+        { -6, -6 }, { 6, -6 }, { -6, 6 }, { 6, 6 }, { 0, -9 }, { 0, 9 },
     },
-    -- The ball field: goals line_z either side of its middle (field.z).
-    field = { x = 0, z = 77 },
-    goal = { line_z = 20, half_width = 3, height = 3, return_after = 3 },
-    center = Vector3.new(0, 0, 77),   -- where a scored ball goes back to: the field's middle
-    -- The dune between the field and the castles: two ledges, each a running jump high (a walk
-    -- climbs 1.0 at most; a jump about 1.7). A sandy path on the land side goes around it.
-    dune = { x = { -12, 18 }, z = { 30, 44 }, step = 1.4, top_inset = 3, path_x = { -20, -12 } },
+    -- The ball court (north-west): goals line_z either side of its middle (field.z).
+    field = { x = -48, z = 50 },
+    goal = { line_z = 18, half_width = 3, height = 3, return_after = 3 },
+    center = Vector3.new(-48, 0, 50),   -- where a scored ball goes back to: the court's middle
+    -- The dune between the court and the castles: an uneven ridge of three sand ledges 1.4 high
+    -- (a walk climbs 1.0 at most; a running jump about 1.7), two with a second ledge on top.
+    -- Walk through the gap at x -44..-38, or round its east end by the Plaza.
+    dune = {
+        step = 1.4,
+        ledges = {
+            { name = "DuneWest", x = { -80, -61 }, z = { -6, 6 }, top = { x = { -77, -66 }, z = { -3, 3 } } },
+            { name = "DuneMiddle", x = { -63, -44 }, z = { -2, 10 }, top = { x = { -59, -48 }, z = { 1, 7 } } },
+            { name = "DuneEast", x = { -38, -22 }, z = { -10, 2 } },
+        },
+        gaps = { { x = { -44, -38 } }, { x = { -22, -16 } } },
+    },
     kick = { reach = 3.0, impulse = 20, max_speed = 40, lift = 0.18 },  -- body radius 1 + ball radius 0.6 + walking slack
     pickup_range = 6, place_range = 7, match_radius = 1.5,
     hold_offset = Vector3.new(0, 3.5, 0),
     throw = { max_speed = 10, up = 6 },
     sand_roll_drag = 1.2,         -- 1/s: a rolling ball loses ~70% of its speed per second on sand
     water = { drag = 2.5, wash_after = 3, wash_speed = 4 },
-    max_pieces = 40,
+    max_pieces = 80,              -- eight plots
     -- Badges for the day (the Beach gives them; the world only reports what happened):
     -- a goal counts for whoever kicked the ball last, within kick_memory seconds;
     -- a sandcastle is castle_pieces or more resting in a plot; it "stood tall" at
     -- tall_height or more, standing still for stand_s seconds.
     badges = { kick_memory = 10, castle_pieces = 3, tall_height = 4, stand_s = 3, again_s = 600 },
     -- Watching (when the world runs with an AI Beach): people and agents who watch have no
-    -- character; their names show at this spot, outside the land wall where nothing can reach,
-    -- and the world announces each one.
-    watch = { name = "the lifeguard chair", x = -25.5, z = 0 },
+    -- character; their names show at this spot, on a patch of sand off the west coast outside
+    -- the walls, where nothing can reach; the world announces each one.
+    watch = { name = "the lifeguard chair", x = -107, z = -44 },
 }
 
 local BALLS = {
     -- name, kind, diameter, density, friction, elasticity, home x/z, extra drag on sand
     { name = "SoccerBall", kind = "soccer ball", d = 1.2, density = 0.8, friction = 0.6, elasticity = 0.5,
-      color = Color3.fromRGB(245, 245, 245), home = { 0, 77 }, sand_drag = 1.2 },
+      color = Color3.fromRGB(245, 245, 245), home = { -48, 50 }, sand_drag = 1.2 },
     { name = "Volleyball", kind = "volleyball", d = 1.1, density = 0.3, friction = 0.5, elasticity = 0.85,
-      color = Color3.fromRGB(250, 214, 64), home = { 6, 67 }, sand_drag = 1.6 },
+      color = Color3.fromRGB(250, 214, 64), home = { -42, 42 }, sand_drag = 1.6 },
     { name = "BeachBall", kind = "beach ball", d = 1.8, density = 0.05, friction = 0.5, elasticity = 0.7,
-      color = Color3.fromRGB(235, 80, 90), home = { 6, 87 }, sand_drag = 2.5,
+      color = Color3.fromRGB(235, 80, 90), home = { -42, 58 }, sand_drag = 2.5,
       -- Air resistance stand-in (the engine has none): lift cancels most of gravity,
       -- quadratic drag slows it in flight, and a light breeze nudges it along the beach.
       air = { lift = 0.8, drag = 0.06, breeze = Vector3.new(0, 0, 0.6) } },
@@ -177,32 +211,48 @@ state.Parent = ServerStorage
 --------------------------------------------------------------------------------
 -- SCENERY (all tagged Static: it never appears in agent observations)
 --------------------------------------------------------------------------------
-local S = CONFIG.sand
-local EW = CONFIG.end_wall_z
-local beachLen = EW.north - EW.south + 6           -- ground runs a little past both end walls
-local beachMidZ = (EW.north + EW.south) / 2
-scenery("Sand", Vector3.new(S.x[2] - S.x[1] + 4, 4, beachLen), Vector3.new((S.x[1] + S.x[2]) / 2 - 1, -2, beachMidZ),
-    { Role = "Sand", Color = Color3.fromRGB(236, 214, 160), CustomPhysicalProperties = sandPhysics,
-      Material = Enum.Material.Sand })
--- Shallow sea floor continues level with the sand, so nothing rolls in or out by itself.
-scenery("SeaFloor", Vector3.new(CONFIG.sea_wall_x - CONFIG.sea_edge_x + 2, 4, beachLen),
-    Vector3.new((CONFIG.sea_wall_x + CONFIG.sea_edge_x) / 2 + 1, -2, beachMidZ),
-    { Role = "SeaFloor", Color = Color3.fromRGB(196, 180, 140), CustomPhysicalProperties = sandPhysics })
-scenery("Ocean", Vector3.new(300, 0.3, beachLen + 300), Vector3.new(CONFIG.sea_edge_x + 150, 0.15, beachMidZ),
-    { Role = "Ocean", CanCollide = false, CanQuery = false, CanTouch = false, Transparency = 0.25,
-      Color = Color3.fromRGB(52, 140, 190), Material = Enum.Material.Glass })
+local I = ISLAND
+local sandLook = { Role = "Sand", Color = Color3.fromRGB(236, 214, 160), CustomPhysicalProperties = sandPhysics,
+    Material = Enum.Material.Sand }
+local function sandBox(name, sx, sz, cx, cz)
+    scenery(name, Vector3.new(sx, 4, sz), Vector3.new(cx, I.top_y - 2, cz), sandLook)
+end
+local function sandDisc(name, cx, cz, r)
+    local look = { Shape = Enum.PartType.Cylinder }
+    for k, v in pairs(sandLook) do look[k] = v end
+    scenery(name, Vector3.new(r * 2, 4, r * 2), Vector3.new(cx, I.top_y - 2, cz), look)
+end
+-- The island: a cross of two boxes, a disc in each corner (the rounded corners), and the bumps.
+local inner = I.half - I.corner_r
+sandBox("Sand", I.half * 2, inner * 2, 0, 0)
+sandBox("SandNS", inner * 2, I.half * 2, 0, 0)
+for _, c in ipairs({ { 1, 1, "NE" }, { -1, 1, "NW" }, { 1, -1, "SE" }, { -1, -1, "SW" } }) do
+    sandDisc("SandCorner" .. c[3], c[1] * inner, c[2] * inner, I.corner_r)
+end
+for i, b in ipairs(I.bumps) do
+    sandDisc("SandBump" .. i, b.x, b.z, b.r)
+end
+-- The shallow sea floor all around sits just under the sand, so a ball rolls in and out freely;
+-- out past the walls, open water.
+local W = I.wall
+scenery("SeaFloor", Vector3.new(W * 2 + 8, 4, W * 2 + 8), Vector3.new(0, I.top_y - 2.05, 0),
+    { Role = "SeaFloor", Color = Color3.fromRGB(120, 178, 196), CustomPhysicalProperties = sandPhysics })
+for _, o in ipairs({ { "OceanEast", 300, 900, W + 154, 0 }, { "OceanWest", 300, 900, -W - 154, 0 },
+                     { "OceanNorth", W * 2 + 8, 300, 0, W + 154 }, { "OceanSouth", W * 2 + 8, 300, 0, -W - 154 } }) do
+    scenery(o[1], Vector3.new(o[2], 0.3, o[3]), Vector3.new(o[4], 0.15, o[5]),
+        { Role = "Ocean", CanCollide = false, CanQuery = false, CanTouch = false, Transparency = 0.25,
+          Color = Color3.fromRGB(52, 140, 190), Material = Enum.Material.Glass })
+end
 
 local function wall(name, size, pos)
     scenery(name, size, pos, { Transparency = 1, CanQuery = false, CanTouch = false,
         CustomPhysicalProperties = sandPhysics })
 end
 local WH = 30
-local acrossX = CONFIG.sea_wall_x - CONFIG.land_wall_x + 4
-local acrossMidX = (CONFIG.sea_wall_x + CONFIG.land_wall_x) / 2
-wall("WallSea", Vector3.new(2, WH, beachLen), Vector3.new(CONFIG.sea_wall_x + 1, WH / 2, beachMidZ))
-wall("WallLand", Vector3.new(2, WH, beachLen), Vector3.new(CONFIG.land_wall_x - 1, WH / 2, beachMidZ))
-wall("WallNorth", Vector3.new(acrossX, WH, 2), Vector3.new(acrossMidX, WH / 2, EW.north + 1))
-wall("WallSouth", Vector3.new(acrossX, WH, 2), Vector3.new(acrossMidX, WH / 2, EW.south - 1))
+wall("WallEast", Vector3.new(2, WH, W * 2 + 4), Vector3.new(W + 1, WH / 2, 0))
+wall("WallWest", Vector3.new(2, WH, W * 2 + 4), Vector3.new(-W - 1, WH / 2, 0))
+wall("WallNorth", Vector3.new(W * 2 + 4, WH, 2), Vector3.new(0, WH / 2, W + 1))
+wall("WallSouth", Vector3.new(W * 2 + 4, WH, 2), Vector3.new(0, WH / 2, -W - 1))
 
 -- Goals: two poles and a crossbar at each end of the field; the zone behind the line is invisible.
 local G = CONFIG.goal
@@ -223,16 +273,16 @@ for _, g in ipairs(GOALS) do
         { Role = "GoalPost", Color = Color3.fromRGB(250, 250, 250) })
 end
 
--- The dune: two sand ledges, the upper one set in from every side. Unlike the scenery above it is
--- NOT tagged Static: agents see it once they're near (it's solid ground to climb, and their
--- adapter needs it to plan a running jump). It isn't a pickup and never moves.
+-- The dune: an uneven ridge of sand ledges, some with a second ledge on top. Unlike the scenery
+-- above it is NOT tagged Static: agents see it once they're near (it's solid ground to climb, and
+-- their adapter needs it to plan a running jump). It isn't a pickup and never moves.
 do
     local D = CONFIG.dune
-    local function ledge(name, x0, x1, z0, z1, y0, y1)
+    local function ledge(name, x, z, y0, y1)
         local p = child(Workspace, name) or Instance.new("Part")
         p.Name = name
-        p.Size = Vector3.new(x1 - x0, y1 - y0, z1 - z0)
-        p.Position = Vector3.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
+        p.Size = Vector3.new(x[2] - x[1], y1 - y0, z[2] - z[1])
+        p.Position = Vector3.new((x[1] + x[2]) / 2, (y0 + y1) / 2, (z[1] + z[2]) / 2)
         p.Anchored = true
         p.Color = Color3.fromRGB(230, 206, 150)
         p.Material = Enum.Material.Sand
@@ -241,9 +291,10 @@ do
         p:SetAttribute("Kind", "dune")
         p.Parent = Workspace
     end
-    local i = D.top_inset
-    ledge("DuneLower", D.x[1], D.x[2], D.z[1], D.z[2], 0, D.step)
-    ledge("DuneTop", D.x[1] + i, D.x[2] - i, D.z[1] + i, D.z[2] - i, D.step, D.step * 2)
+    for _, l in ipairs(D.ledges) do
+        ledge(l.name, l.x, l.z, 0, D.step)
+        if l.top then ledge(l.name .. "Top", l.top.x, l.top.z, D.step, D.step * 2) end
+    end
 end
 
 -- Plot markers: thin flat squares you can walk over.
@@ -288,16 +339,16 @@ mapInfo.Name = "BeachMap"
 mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
     world = "beach",
     axes = "x east, z north, y up",
-    sand = { x = { S.x[1], S.x[2] }, z = { S.z[1], S.z[2] }, top_y = S.top_y },
-    shore_x = CONFIG.sea_edge_x,
-    walls = { x = { CONFIG.land_wall_x, CONFIG.sea_wall_x }, z = { EW.south, EW.north } },
+    -- The island's shape (on_land above): sand inside it, shallow sea outside, out to the walls.
+    island = { half = I.half, corner_r = I.corner_r, bumps = I.bumps },
+    sand = { x = { -I.half, I.half }, z = { -I.half, I.half }, top_y = I.top_y },   -- its bounding box
+    walls = { x = { -I.wall, I.wall }, z = { -I.wall, I.wall } },
     goals = {
         { name = "north", line_z = F.z + G.line_z, x = { F.x - G.half_width, F.x + G.half_width }, height = G.height },
         { name = "south", line_z = F.z - G.line_z, x = { F.x - G.half_width, F.x + G.half_width }, height = G.height },
     },
     regions = REGIONS,
-    dune = { x = CONFIG.dune.x, z = CONFIG.dune.z, ledge = CONFIG.dune.step, top_inset = CONFIG.dune.top_inset,
-             path_x = CONFIG.dune.path_x },
+    dune = { ledge = CONFIG.dune.step, ledges = CONFIG.dune.ledges, gaps = CONFIG.dune.gaps },
     center = { CONFIG.center.X, CONFIG.center.Z },
     centre = { CONFIG.center.X, CONFIG.center.Z }, -- the name before job 12, for older adapters  -- spelling: kept
     plots = PLOTS.enabled and (function()
@@ -859,8 +910,9 @@ RunService.Heartbeat:Connect(function(dt)
                 b.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
             end
 
-            -- Sea: water slows the ball, and after a few seconds it drifts back to the sand.
-            if pos.X > CONFIG.sea_edge_x then
+            -- Sea: water slows the ball, and after a few seconds it drifts back to the island.
+            -- (Off the island and down at the sea floor; a ball up on the pier isn't in the water.)
+            if not on_land(pos.X, pos.Z) and pos.Y - r < 0.5 then
                 local since = b:GetAttribute("InWaterSince")
                 if not since then
                     b:SetAttribute("InWaterSince", now)
@@ -869,7 +921,9 @@ RunService.Heartbeat:Connect(function(dt)
                 local k = math.exp(-CONFIG.water.drag * dt)
                 v = Vector3.new(v.X * k, v.Y, v.Z * k)
                 if now - since > CONFIG.water.wash_after then
-                    v = Vector3.new(-CONFIG.water.wash_speed, math.max(v.Y, 0), v.Z * 0.5)
+                    local home = Vector3.new(-pos.X, 0, -pos.Z)   -- toward the island's middle
+                    home = home.Magnitude > 0.01 and home.Unit or Vector3.new(-1, 0, 0)
+                    v = Vector3.new(home.X * CONFIG.water.wash_speed, math.max(v.Y, 0), home.Z * CONFIG.water.wash_speed)
                 end
                 b.AssemblyLinearVelocity = v
             elseif b:GetAttribute("InWaterSince") then
@@ -904,7 +958,8 @@ RunService.Heartbeat:Connect(function(dt)
 
     -- Sand pieces that fall into the sea dissolve.
     for _, inst in ipairs(Workspace:GetChildren()) do
-        if inst:GetAttribute("PieceKind") and inst.Position.X > CONFIG.sea_edge_x + 1 and not isHeld(inst) then
+        if inst:GetAttribute("PieceKind") and inst.Position.Y < 1.5 and not on_land(inst.Position.X, inst.Position.Z)
+            and not isHeld(inst) then
             inst:Destroy()
         end
     end

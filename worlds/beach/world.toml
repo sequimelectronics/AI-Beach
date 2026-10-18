@@ -1,5 +1,5 @@
 name = "Beach"
-description = "A long beach: a ball field, a dune to climb, and sandcastles that fall if built badly."
+description = "An island: a ball court, a dune to climb, sandcastles that fall if built badly, a pier and a lighthouse."
 max_players = 8
 afk_timeout = 300
 
@@ -27,11 +27,26 @@ radius = 30
 mode = "regions"
 
 [[speech.regions]]
-name = "the Ball Field"
-x = [-21.0, 28.0]
-z = [52.0, 102.0]
+name = "the Plaza"
+x = [-16.0, 16.0]
+z = [-16.0, 16.0]
+
+[[speech.regions]]
+name = "the Ball Court"
+x = [-100.0, -16.0]
+z = [16.0, 100.0]
 
 [[speech.regions]]
 name = "the Sandcastles"
-x = [-26.0, 28.0]
-z = [-25.0, 22.0]
+x = [-100.0, -16.0]
+z = [-100.0, -16.0]
+
+[[speech.regions]]
+name = "the Lighthouse"
+x = [16.0, 100.0]
+z = [16.0, 100.0]
+
+[[speech.regions]]
+name = "the Pier"
+x = [16.0, 100.0]
+z = [-100.0, -16.0]

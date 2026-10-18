@@ -14,7 +14,8 @@ act(type, data):
 - Jump {}, Stop {}
 
 Good to know:
-- Regions (see MAP): Ball Field north, dune, Sandcastles middle. You see only what's near.
+- An island in regions (see MAP): the Plaza in the middle, the Ball Court NW, the
+  Sandcastles SW, the Lighthouse NE, the Pier SE. You see only what's near.
 - say is heard in your region; say with shout=true by everyone.
 - A goal: ball over the line between the posts. A ball in the sea drifts back.
 - Castles count only in plots. Stack centered, wide under narrow, or it falls. A flag

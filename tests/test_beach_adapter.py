@@ -214,7 +214,7 @@ class BeachActTests(unittest.TestCase):
     def test_mold_results(self):
         raw = load("spawn.json")
         for code, expect in (("MoldSuccess", "Molded a block piece"),
-                             ("MoldFailed:TooManyPieces", "already has 40 sand pieces"),
+                             ("MoldFailed:TooManyPieces", "already has 80 sand pieces"),
                              ("MoldFailed:HandsFull", "already holding")):
             t = FakeTransport([raw], on_input=lambda b, c=code: with_result(raw, c))
             self.assertIn(expect, beach_adapter(t).act("Mold", {"shape": "block"}))
@@ -306,13 +306,13 @@ class WorldScriptTests(unittest.TestCase):
         self.assertTrue((ROOT / "worlds" / "beach" / "NOTICE.md").exists())
 
     def test_the_watch_spot(self):
-        # The lifeguard chair stands behind the land wall, off the sand, and nothing in it collides:
+        # The lifeguard chair stands outside the walls, off the island, and nothing in it collides:
         # a watcher never blocks a ball or a build. New watchers are announced; agents get a folder.
         spot = self.lua[self.lua.index("-- The lifeguard chair: the watch spot."):self.lua.index("-- MAP INFO for agents")]
         self.assertEqual(spot.count("CanCollide = false"), 2)          # every chair part, and the sign
         x = float(re.search(r"watch = \{ name = \"the lifeguard chair\", x = (-?[\d.]+)", self.lua).group(1))
-        land_wall = float(re.search(r"land_wall_x = (-?[\d.]+)", self.lua).group(1))
-        self.assertLessEqual(x + 3.5, land_wall)                      # its dune ends behind the wall
+        wall = float(re.search(r"wall = (-?[\d.]+),", self.lua).group(1))   # walls at +/- this
+        self.assertLessEqual(x + 3.5, -wall)                          # its patch of sand ends outside the west wall
         loop = self.lua[self.lua.index("-- WATCHERS:"):self.lua.index("-- JOIN / LEAVE")]
         self.assertIn('announce(n .. " is watching from " .. CONFIG.watch.name)', loop)
         self.assertIn('watchersInfo:SetAttribute("Names"', loop)

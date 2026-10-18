@@ -160,7 +160,8 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
     rows = []
     for e in objs:
         r = _object_row(e, snap, statics)
-        r["sea"] = shore is not None and e.pos[0] > shore
+        land = on_land(layout, e.pos)
+        r["sea"] = (not land and e.pos[1] < 1.5) if land is not None else (shore is not None and e.pos[0] > shore)
         plot = e.attrs.get("InPlot")
         r["plot"] = int(plot) if isinstance(plot, (int, float)) else None
         rows.append(r)
@@ -187,6 +188,20 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
         ],
         "watching": {"spot": spot, "names": watching} if watching else None,
     }
+
+
+def on_land(layout: dict | None, pos) -> bool | None:
+    """Is this point on the island's sand (the world's on_land)? None when the world isn't an island."""
+    island = (layout or {}).get("island")
+    if not island:
+        return None
+    x, z = pos[0], pos[2]
+    half, r = island["half"], island["corner_r"]
+    if abs(x) <= half and abs(z) <= half:
+        dx, dz = max(abs(x) - (half - r), 0), max(abs(z) - (half - r), 0)
+        if dx * dx + dz * dz <= r * r:
+            return True
+    return any((x - b["x"]) ** 2 + (z - b["z"]) ** 2 <= b["r"] ** 2 for b in island.get("bumps") or [])
 
 
 def region_at(layout: dict | None, pos) -> str | None:
@@ -346,12 +361,21 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
     walls = layout.get("walls", {})
     center = layout.get("center") or layout.get("centre")   # older worlds say "centre"  # spelling: kept
     lines = ["MAP (beach; x = east, z = north, y = up; distances in studs)"]
-    lines.append(f"sand: flat, y={sand['top_y']:g}, x {sand['x'][0]:g}..{sand['x'][1]:g}, "
-                 f"z {sand['z'][0]:g}..{sand['z'][1]:g}")
-    wz = walls.get("z", [-32, 32])
-    lines.append(f"sea: east of x={layout['shore_x']:g} is shallow water; balls that go in drift back "
-                 f"to the sand after a few seconds. Invisible walls at x={walls.get('x', ['?', '?'])[0]}"
-                 f" and x={walls.get('x', ['?', '?'])[1]}, z={wz[0]:g} and z={wz[1]:g}")
+    island = layout.get("island")
+    if island:
+        bumps = "; ".join(f"{b['name']} round {b['x']:g},{b['z']:g} r{b['r']:g}" for b in island.get("bumps") or [])
+        lines.append(f"island: flat sand y={sand['top_y']:g}, a rounded square x and z -{island['half']:g}..{island['half']:g} "
+                     f"(corners rounded, radius {island['corner_r']:g})" + (f", plus {bumps}" if bumps else ""))
+        wx = walls.get("x", ["?", "?"])
+        lines.append(f"sea: all around the island, shallow; balls that go in drift back after a few seconds. "
+                     f"Invisible walls at x and z {wx[0]:g} and {wx[1]:g}")
+    else:
+        lines.append(f"sand: flat, y={sand['top_y']:g}, x {sand['x'][0]:g}..{sand['x'][1]:g}, "
+                     f"z {sand['z'][0]:g}..{sand['z'][1]:g}")
+        wz = walls.get("z", [-32, 32])
+        lines.append(f"sea: east of x={layout['shore_x']:g} is shallow water; balls that go in drift back "
+                     f"to the sand after a few seconds. Invisible walls at x={walls.get('x', ['?', '?'])[0]}"
+                     f" and x={walls.get('x', ['?', '?'])[1]}, z={wz[0]:g} and z={wz[1]:g}")
     regions = layout.get("regions") or []
     if regions:
         lines.append("regions (you see moving things only nearby; talk is heard in your own region, "
@@ -359,11 +383,16 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
                          f"{r['name']} x {r['x'][0]:g}..{r['x'][1]:g}, z {r['z'][0]:g}..{r['z'][1]:g}"
                          for r in regions))
     dune = layout.get("dune")
-    if dune:
-        lines.append(f"dune: x {dune['x'][0]:g}..{dune['x'][1]:g}, z {dune['z'][0]:g}..{dune['z'][1]:g}, "
-                     f"two ledges {dune['ledge']:g} high (the top one set in {dune['top_inset']:g} from each "
-                     f"side): climb with a running jump. Or walk around it on the path at x "
-                     f"{dune['path_x'][0]:g}..{dune['path_x'][1]:g}")
+    if dune and dune.get("ledges"):
+        parts = []
+        for d in dune["ledges"]:
+            t = f"x {d['x'][0]:g}..{d['x'][1]:g}, z {d['z'][0]:g}..{d['z'][1]:g}"
+            if d.get("top"):
+                t += f" (a second ledge on it at x {d['top']['x'][0]:g}..{d['top']['x'][1]:g}, z {d['top']['z'][0]:g}..{d['top']['z'][1]:g})"
+            parts.append(t)
+        gaps = " and ".join(f"x {g['x'][0]:g}..{g['x'][1]:g}" for g in dune.get("gaps") or [])
+        lines.append(f"dune (ledges {dune['ledge']:g} high: climb with a running jump): " + "; ".join(parts)
+                     + (f". Walk through it at {gaps}" if gaps else ""))
     goals = layout.get("goals", [])
     if goals:
         g = goals[0]

@@ -202,51 +202,56 @@ class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
         self.assertIn("castle plots", a.map_card())
         self.assertEqual(a.rules.world, "beach")
         self.assertIn("Pebble", a.look())  # named, by the Beach's door, even if Pebble is behind Sandy
-        # Up the land-side path past the dune to the ball field, and kick the soccer ball from just
-        # south of it (the field's middle is z=77).
-        for stop in ([-16, 0, 25], [-16, 0, 50]):
-            self.assertIn("arrived", a.act("MoveTo", {"position": stop}))
-        self.assertIn("arrived", a.act("MoveTo", {"position": [0, 0, 74.8]}))
+        # From the Plaza north-west to the Ball Court, and kick the soccer ball from just south of it
+        # (the court's middle is -48, 50).
+        self.assertIn("arrived", a.act("MoveTo", {"position": [-10, 0, 20]}))
+        self.assertIn("arrived", a.act("MoveTo", {"position": [-48, 0, 47.8]}))
         res = a.act("Kick", {"direction": [0, 0, 1], "power": 0.5})
         self.assertTrue(res.startswith("Kicked the soccer ball N"), res)
-        # Back to the Sandcastles: build two blocks in plot 2 and see the castle summary.
-        for stop in ([-16, 0, 50], [-16, 0, 25], [-10, 0, -5]):
+        # Round the dune's east end to the Sandcastles: build two blocks in plot 2 and see the castle.
+        for stop in ([-10, 0, 20], [-10, 0, -20], [-51, 0, -38]):
             a.act("MoveTo", {"position": stop})
         for y in (0.55, 1.55):
             self.assertTrue(a.act("Mold", {"shape": "block"}).startswith("Molded"))
-            res = a.act("Place", {"position": [-13, y, -5]})
+            res = a.act("Place", {"position": [-54, y, -36]})
             self.assertTrue(res.startswith("Placed"), res)
         time.sleep(1.0)
         self.assertRegex(a.look(), r"sandcastle in plot 2 .*: 2 pieces, 2 high")
-        # Chat both ways (both at the Sandcastles).
+        # Pebble comes over too, and they talk (both at the Sandcastles).
+        for stop in ([-10, 0, -20], [-46, 0, -40]):
+            b.act("MoveTo", {"position": stop})
+        b.hear()
         a.say("hello Pebble")
         self.assertIn("Sandy: hello Pebble", b.hear())
         bundle = a.turn_bundle()
         self.assertLess(bundle["total_tokens"], 8000)
 
     def test_regions_shout_and_the_dune(self):
-        # 10-18: a long beach. Speech stays in the speaker's region; a shout carries everywhere.
-        # The dune is two ledges, each a running jump high (needs patches/clawblox-region-speech.patch).
+        # 10-18, the island. Speech stays in the speaker's region; a shout carries everywhere. The dune
+        # is a ridge of 1.4 ledges, each a running jump high (needs patches/clawblox-region-speech.patch).
         a = self.adapter("Coral")
         b = self.adapter("Shell")
-        b.look()   # Shell stays at the Sandcastles (the spawn points are there)
-        self.assertIn("the Ball Field", a.map_card())
-        self.assertIn("dune", a.map_card())
-        for stop in ([-16, 0, 25], [-16, 0, 50], [0, 0, 70]):
+        b.look()   # Shell stays at the Plaza (the spawn points are there)
+        card = a.map_card()
+        for words in ("the Ball Court", "the Sandcastles", "the Lighthouse", "the Pier", "dune", "island"):
+            self.assertIn(words, card)
+        for stop in ([-10, 0, 20], [-40, 0, 40]):
             self.assertIn("arrived", a.act("MoveTo", {"position": stop}))
+        self.assertIn("in the Ball Court", a.look())
         b.hear()
-        a.say("only the field can hear this")
+        a.say("only the court can hear this")
         time.sleep(0.5)
-        self.assertNotIn("only the field", b.hear())
+        self.assertNotIn("only the court", b.hear())
         self.assertTrue(a.say("can anyone hear me?", shout=True).startswith("shouted"))
         self.assertIn("Coral shouts: can anyone hear me?", b.hear())
-        # Back down the path, then up the dune from the castle side: two running jumps.
-        for stop in ([-16, 0, 50], [-16, 0, 25], [5, 0, 24]):
+        # South through the dune's gap, then up DuneMiddle from the castle side: two running jumps.
+        for stop in ([-41, 0, 20], [-41, 0, -8], [-53, 0, -8]):
             a.act("MoveTo", {"position": stop})
-        res = a.act("MoveTo", {"position": [5, 1.4, 31.8], "jump": True})   # the lower ledge's middle strip
-        self.assertIn("on DuneLower", res)
-        res = a.act("MoveTo", {"position": [5, 2.8, 37], "jump": True})     # the top's middle
-        self.assertIn("on DuneTop", res)
+        res = a.act("MoveTo", {"position": [-53, 1.4, -0.5], "jump": True})   # the lower strip
+        self.assertIn("on DuneMiddle", res)
+        res = a.act("MoveTo", {"position": [-53, 2.8, 4], "jump": True})      # the top
+        self.assertIn("on DuneMiddleTop", res)
+        self.assertIn("between regions", a.look())
 
 
 
