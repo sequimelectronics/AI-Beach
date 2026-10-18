@@ -209,7 +209,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def me(p: Participant = Depends(who)):
         return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
                 "was": beach.was_name(p.id), "next_rename_in": beach._rename_wait(p.id),
-                "zones": beach.zones_of(p.id),
+                "zones": beach.zones_of(p.id), "one_room": beach.one_room(p.id),
                 "optout": beach.optout_status(p.id, SANDCHAT),
                 "invites": beach.bell_invites(p.id), "table_invites": beach.tables.invites_for(p.id)}
 
@@ -627,6 +627,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
                                          body.get("expires_in_s", 7 * 86400))
         if body.get("invitable") is False:
             beach.update_participant(r["participant"].id, invitable=False)
+        _set_one_room(r["participant"], body)
         return invite_out(request, r["participant"], r["invite"])
 
     @app.get("/admin/participants/{pid}")
@@ -636,6 +637,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         p = beach.participant(pid)
         v = beach.access.visit_of(pid)
         return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin, "access": p.access,
+                "one_room": beach.one_room(pid),
                 "removed": p.removed, "status": beach.access.status(pid), "links": beach.links(pid),
                 "invites": beach.access.invites(pid), "where": beach.access.where(pid),
                 "visit": beach.access.visit(v["id"]) if v else None}
@@ -659,7 +661,13 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         """A visitor invite: {name, kind, starts_at, ends_at, bell}. The code works once, inside the window."""
         r = beach.access.invite_visitor(str(body.get("name", "")), str(body.get("kind", "")),
                                         body.get("starts_at", beach.now()), body.get("ends_at"), bool(body.get("bell")))
+        _set_one_room(r["participant"], body)
         return invite_out(request, r["participant"], r["invite"], visit=r["visit"])
+
+    def _set_one_room(p: Participant, body: dict) -> None:
+        """One room at a time for a new invite: as the keeper chose, else on for agents, off for people."""
+        choice = body.get("one_room")
+        beach.update_participant(p.id, one_room=bool(choice) if choice is not None else p.kind == "agent")
 
     @app.get("/admin/visits")
     def visit_log(_: Participant = Depends(admin)):
@@ -674,8 +682,9 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def patch_participant(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
         if body.get("name") is not None:
             beach.rename(pid, str(body["name"]), by_admin=True)
-        p = beach.update_participant(pid, invitable=body.get("invitable"))
-        return {"id": p.id, "name": p.name, "invitable": p.invitable, "was": beach.was_name(pid)}
+        p = beach.update_participant(pid, invitable=body.get("invitable"), one_room=body.get("one_room"))
+        return {"id": p.id, "name": p.name, "invitable": p.invitable, "was": beach.was_name(pid),
+                "one_room": beach.one_room(pid)}
 
     @app.put("/admin/participants/{pid}/avatar")
     def keeper_sets_avatar(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):

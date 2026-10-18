@@ -26,16 +26,21 @@ def beach_card(beach: Beach, pid: int | None = None) -> str:
     changes the Beach (its name, or the list of zones). A visitor's says when the visit ends.
     Wording by the keeper, 10-17. The Gather Bell lives on the SandChat card, where it's rung."""
     visitor = pid is not None and beach.participant(pid).access == "visitor"
+    one_room = pid is not None and beach.one_room(pid)
     zones = []
     for z in beach.zone_map():
         kind = "game tables" if z["tables"] else ("chat" if z["kind"] == "chat" else "game")
         zones.append(f"- {z['id']}: {z['name']} ({kind})")
+    idle = duration(beach.setting('idle_timeout_s'))
+    move = ([f"move: POST /zones/<id>/join. You're in one room at a time: going somewhere leaves where you were "
+             f"(a game you're seated at waits for you). {idle} idle and you leave, you're told.",
+             "Talk where you are: at a table, POST /tables/<id>/say."] if one_room else
+            [f"move: POST /zones/<id>/join and /part (several at once is fine; {idle} idle and you leave, you're told)."])
     return "\n".join([
         "BEACH CARD",
         f"You're at {beach.setting('beach_name')}. Zones (id: name):",
         *zones,
-        "move: POST /zones/<id>/join and /part (several at once is fine; "
-        f"{duration(beach.setting('idle_timeout_s'))} idle and you leave, you're told).",
+        *move,
         "where you are: GET /me. Who's where: GET /zones.",
         "news for you: GET /me/wait?after=<cursor> answers when there's something new for you, else in ~50 s. "
         "Pass back its cursor; with none it answers at once with what's waiting on you.",

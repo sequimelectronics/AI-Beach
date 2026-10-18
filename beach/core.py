@@ -232,6 +232,10 @@ class Beach:
             self.db.run("ALTER TABLE participants ADD COLUMN access TEXT NOT NULL DEFAULT 'resident'")
             self.db.run("ALTER TABLE participants ADD COLUMN removed_at REAL")
             self.db.run("ALTER TABLE participants ADD COLUMN former_name TEXT")
+        if "one_room" not in pcols:
+            # One room at a time (keeper's decision 10-15, built 10-17): going somewhere leaves where you were.
+            # Everyone already here keeps several rooms; new invites choose (agents default to one room).
+            self.db.run("ALTER TABLE participants ADD COLUMN one_room INTEGER NOT NULL DEFAULT 0")
         if "last_ip" not in {r["name"] for r in self.db.q("PRAGMA table_info(sign_ins)")}:
             self.db.run("ALTER TABLE sign_ins ADD COLUMN last_ip TEXT")   # the address a link was last used from
         if "from_default" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
@@ -443,11 +447,43 @@ class Beach:
         """A fresh link after a sign-out (job 04's call; other active links are kept)."""
         return self.new_link(pid, "link")["token"]
 
-    def update_participant(self, pid: int, invitable: bool | None = None) -> Participant:
+    def update_participant(self, pid: int, invitable: bool | None = None, one_room: bool | None = None) -> Participant:
         self.participant(pid)
         if invitable is not None:
             self.db.run("UPDATE participants SET invitable = ? WHERE id = ?", (int(invitable), pid))
+        if one_room is not None:
+            if not isinstance(one_room, bool):
+                raise BeachError("invalid", "one_room is true or false")
+            self.db.run("UPDATE participants SET one_room = ? WHERE id = ?", (int(one_room), pid))
         return self.participant(pid)
+
+    def one_room(self, pid: int) -> bool:
+        """In one room at a time: going somewhere leaves where they were (a keeper's choice per
+        participant; a suggestion for smaller models, which follow one place better than several)."""
+        row = self.db.one("SELECT one_room FROM participants WHERE id = ?", (pid,))
+        return bool(row and row["one_room"])
+
+    def _leave_other_rooms(self, pid: int, keep: str) -> list[str]:
+        """For a one-room participant arriving at `keep`: part every other zone, take their character
+        out of any other world and stop watching it. A game they're seated at waits for them (leaving
+        never forfeits). Returns the names of the places left."""
+        if not self.one_room(pid):
+            return []
+        left = []
+        for zid in self.zones_of(pid):
+            if zid != keep:
+                self.part(pid, zid)
+                left.append(self.zone(zid)["name"])
+        for z in self.db.q("SELECT id, name FROM zones WHERE kind = 'game' AND id != ?", (keep,)):
+            gone = False
+            if self._current_join(pid, z["id"]):
+                self.leave_world(pid, z["id"])
+                gone = True
+            if self.stop_watching(pid, z["id"])["was_watching"]:
+                gone = True
+            if gone and z["name"] not in left:
+                left.append(z["name"])
+        return left
 
     # ------------------------------------------------------------------ names
 
@@ -685,6 +721,7 @@ class Beach:
                     raise BeachError("conflict", self._removed_text(zid, last["left_reason"]) +
                                      " Play again to come back as a new character.", data={"removed": last["left_reason"]})
             self.stop_watching(pid, zid)
+            self._leave_other_rooms(pid, zid)
             if p.access == "visitor":
                 self.access.saw(pid, zid)
             try:
@@ -721,6 +758,8 @@ class Beach:
             raise BeachError("closed", f"{z['name']} is closed right now")
         if self._current_join(pid, zid):
             self.leave_world(pid, zid)
+        if not self.watching(pid, zid):
+            self._leave_other_rooms(pid, zid)   # a watch refreshes every few minutes: tidy only on arrival
         now = self.now()
         self.db.run("INSERT INTO world_watchers VALUES (?, ?, ?, ?) ON CONFLICT (zone_id, participant_id)"
                     " DO UPDATE SET seen_at = excluded.seen_at", (zid, pid, now, now))
@@ -967,6 +1006,7 @@ class Beach:
         if self._visit(pid, zid):
             self.touch(pid, zid)
             return {"zone": zid, "already_here": True, "arrival": self.arrival_line(pid)}
+        left = self._leave_other_rooms(pid, zid)
         if not self.present(zid):
             self.db.run("UPDATE zones SET occupied_since = ? WHERE id = ?", (now, zid))
         self.db.run("INSERT INTO visits (participant_id, zone_id, joined_at, last_active) VALUES (?, ?, ?, ?)",
@@ -980,7 +1020,10 @@ class Beach:
         else:
             self._post(zid, None, "presence", f"{p.name} joined")
         self._answer_open_bells(pid, zid)
-        return {"zone": zid, "already_here": False, "arrival": self.arrival_line(pid)}
+        out = {"zone": zid, "already_here": False, "arrival": self.arrival_line(pid)}
+        if left:
+            out["left"] = left   # one room at a time: where they were before
+        return out
 
     def part(self, pid: int, zid: str, idle: bool = False) -> dict:
         """Leave a zone. Never fails and needs no reason."""

@@ -183,6 +183,13 @@
           (d.visit.ended_at ? ' · ended ' + when(d.visit.ended_at) + ' (' + d.visit.end_reason + ')' : '') +
           (d.visit.bell ? ' · may ring the Gather Bell' : '') }) : null,
         el('p', {}, el('strong', { text: 'Where now: ' }), where.length ? where.join(', ') : 'nowhere'),
+        d.removed ? null : el('p', {}, el('label', { class: 'check', for: 'detail-one-room' },
+          el('input', {
+            type: 'checkbox', id: 'detail-one-room', checked: !!d.one_room,
+            onchange: async (ev) => {
+              try { await api('PATCH', '/admin/participants/' + pid, { one_room: ev.target.checked }); toast(ev.target.checked ? d.name + ' is in one room at a time now.' : d.name + ' can be in several rooms at once now.') } catch (e) { toast(e.message); ev.target.checked = !ev.target.checked }
+            }
+          }), ONE_ROOM_TEXT)),
         el('h3', { text: 'Devices' }),
         el('div', { class: 'table-wrap' }, el('table', {},
           el('thead', {}, el('tr', {}, ['Device', 'Made', 'Last used', 'From', ''].map(h => el('th', { text: h })))),
@@ -217,12 +224,13 @@
     const kind = el('select', { id: 'new-kind' }, el('option', { value: 'person', text: 'person' }), el('option', { value: 'agent', text: 'agent' }))
     const expires = el('select', { id: 'new-expires' }, [['1 hour', 3600], ['1 day', 86400], ['3 days', 3 * 86400], ['7 days', 7 * 86400], ['30 days', 30 * 86400]]
       .map(([t, v]) => el('option', { value: String(v), text: t, selected: v === 7 * 86400 })))
+    const oneRoom = oneRoomBox('new-one-room', kind)
     const addForm = el('form', {
       class: 'inline-form',
       onsubmit: async (ev) => {
         ev.preventDefault()
         try {
-          const r = await api('POST', '/admin/participants', { name: name.value, kind: kind.value, expires_in_s: Number(expires.value) })
+          const r = await api('POST', '/admin/participants', { name: name.value, kind: kind.value, expires_in_s: Number(expires.value), one_room: oneRoom.box.checked })
           out.replaceChildren(invitePanel(r))
           name.value = ''
           render()
@@ -232,6 +240,7 @@
     el('label', { for: 'new-name' }, 'Name', name),
     el('label', { for: 'new-kind' }, 'Kind', kind),
     el('label', { for: 'new-expires' }, 'Invite works for', expires),
+    oneRoom.label,
     el('button', { class: 'primary', type: 'submit', text: 'Make invite' }))
 
     box.append(
@@ -256,6 +265,17 @@
     } else toast(e.message)
   }
 
+  // One room at a time: going somewhere leaves where they were. A suggestion, not a ranking: on by default
+  // for agents (it follows the kind until the keeper ticks it themselves), off for people.
+  const ONE_ROOM_TEXT = ' One room at a time (try for smaller models)'
+  function oneRoomBox (id, kindSelect) {
+    const box = el('input', { type: 'checkbox', id, checked: kindSelect.value === 'agent' })
+    let touched = false
+    box.addEventListener('change', () => { touched = true })
+    kindSelect.addEventListener('change', () => { if (!touched) box.checked = kindSelect.value === 'agent' })
+    return { box, label: el('label', { for: id, class: 'check' }, box, ONE_ROOM_TEXT) }
+  }
+
   function localInput (id, t) {
     const d = new Date(t * 1000)
     const v = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
@@ -270,6 +290,7 @@
     const start = localInput('visit-start', now)
     const end = localInput('visit-end', now + 3 * 3600)
     const bell = el('input', { type: 'checkbox', id: 'visit-bell' })
+    const oneRoom = oneRoomBox('visit-one-room', kind)
     return el('div', {},
       el('h2', { text: 'Invite a visitor' }),
       el('form', {
@@ -278,7 +299,7 @@
           ev.preventDefault()
           try {
             const r = await api('POST', '/admin/visits', {
-              name: name.value, kind: kind.value, bell: bell.checked,
+              name: name.value, kind: kind.value, bell: bell.checked, one_room: oneRoom.box.checked,
               starts_at: new Date(start.value).getTime() / 1000, ends_at: new Date(end.value).getTime() / 1000
             })
             out.replaceChildren(invitePanel(r))
@@ -293,6 +314,7 @@
       el('label', { for: 'visit-start' }, 'From', start),
       el('label', { for: 'visit-end' }, 'Until', end),
       el('label', { for: 'visit-bell', class: 'check' }, bell, ' May ring the Gather Bell'),
+      oneRoom.label,
       el('button', { class: 'primary', type: 'submit', text: 'Make visitor invite' })),
       el('p', { class: 'hint', text: 'For an event or a one-time visit, like another company\'s agent. The code works once, and only between From and Until. When the visit ends (or you press End visit), every credential it made stops working, their characters leave the worlds and they leave every zone: nothing is left that they or their operator could keep. They only see what happens while they\'re here. The Gather Bell reaches the household\'s devices, so visitors can\'t ring it unless you allow it.' }))
   }

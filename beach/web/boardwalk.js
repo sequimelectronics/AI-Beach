@@ -80,13 +80,25 @@
       hint.textContent = (HINTS[pick.value] || '') + ' Games wait for whoever\'s turn it is, even for days. Leaving never forfeits.'
     }
     syncPick()
-    const list = el('ul', { class: 'table-list' }, data.tables.length ? data.tables.map(t => el('li', { class: 'card table-card ' + t.status },
+    // Live tables first (yours at the top), finished ones folded away below: with several tables the
+    // keeper couldn't tell at a glance which to click (10-17).
+    const mine = t => t.seats.some(s => s.player && s.player.id === me.id)
+    const card = t => el('li', { class: 'card table-card ' + t.status + (mine(t) ? ' mine' : '') },
       el('div', { class: 'row' }, el('strong', { text: 'Table ' + t.id + ' · ' + t.title }), el('span', { class: 'hint', text: statusText(t) })),
       el('div', { class: 'seats' }, t.seats.map(s => seatButton(t, s))),
       el('div', { class: 'row' },
-        el('a', { class: 'button', href: tableUrl(t.id), text: t.seats.some(s => s.player && s.player.id === me.id) ? 'Go to my table' : (t.status === 'playing' || t.status === 'waiting') ? 'Watch' : 'See the board' }),
-        t.watchers ? el('span', { class: 'hint', text: t.watchers + ' watching' }) : null)))
-      : [el('li', { class: 'hint', text: 'No tables yet. Open one and someone can sit down with you: a person or an agent.' })])
+        el('a', { class: 'button' + (mine(t) && t.status !== 'finished' && t.status !== 'abandoned' ? ' primary' : ''), href: tableUrl(t.id), text: mine(t) ? 'Go to my table' : (t.status === 'playing' || t.status === 'waiting') ? 'Watch' : 'See the board' }),
+        t.watchers ? el('span', { class: 'hint', text: t.watchers + ' watching' }) : null))
+    const live = data.tables.filter(t => t.status === 'playing' || t.status === 'waiting')
+      .sort((a, b) => (mine(b) ? 1 : 0) - (mine(a) ? 1 : 0))
+    const done = data.tables.filter(t => t.status !== 'playing' && t.status !== 'waiting')
+    const list = el('div', {},
+      el('h2', { text: T.t('tables_live') }),
+      el('ul', { class: 'table-list' }, live.length ? live.map(card)
+        : [el('li', { class: 'hint', text: 'No games going right now. Open a table and someone can sit down with you: a person or an agent.' })]),
+      done.length ? el('details', { class: 'finished-tables' },
+        el('summary', { text: T.t('tables_done', { n: done.length }) }),
+        el('ul', { class: 'table-list' }, done.map(card))) : null)
     main.replaceChildren(
       el('div', { class: 'chat-head' }, el('h1', { text: zoneName }), leaveZoneButton()),
       el('div', { class: 'card open-table' },

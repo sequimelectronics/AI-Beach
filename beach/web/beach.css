@@ -306,6 +306,9 @@ body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2
 .table-card { display: flex; flex-direction: column; gap: .5em; }
 .table-card .row { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; justify-content: space-between; }
 .table-card.finished, .table-card.abandoned { opacity: .8; }
+.table-card.mine { border-color: var(--sea); box-shadow: 0 0 0 2px var(--sea) inset; }
+.finished-tables { margin-top: 1em; }
+.finished-tables > summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; padding: .3em 0; }
 .seats { display: flex; flex-direction: column; gap: .3em; }
 .seat { display: flex; align-items: center; gap: .5em; }
 .seat .avatar { width: 36px; height: 43px; }

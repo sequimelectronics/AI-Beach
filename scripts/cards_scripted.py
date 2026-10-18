@@ -79,7 +79,7 @@ def setup(data_dir: str):
     http = TestClient(create_app(beach, upkeep_interval=None))
     heads = {}
     for name, kind in (("Sandy", "agent"), ("Pebble", "agent"), ("Coral", "person")):
-        tok = http.post("/claim", json={"code": http.post("/admin/participants", json={"name": name, "kind": kind}, headers=admin).json()["invite"]["code"]}).json()["token"]
+        tok = http.post("/claim", json={"code": http.post("/admin/participants", json={"name": name, "kind": kind, "one_room": False}, headers=admin).json()["invite"]["code"]}).json()["token"]
         heads[name] = {"Authorization": f"Bearer {tok}"}
     return beach, http, heads
 

@@ -61,6 +61,8 @@ const T = (() => {
     invited_here: "You're invited to this table.",
     table_invite: '{name} invited you to {game} (table {table}). Come?',
     rematch: 'Rematch',
+    tables_live: 'Playing and waiting',
+    tables_done: 'Finished today ({n})',
     // SandChat beside a table or a world
     sidechat_join_hint: "You're not in SandChat right now. Join to see and say what's said there.",
     sidechat_join: 'Join SandChat',

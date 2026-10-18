@@ -125,7 +125,7 @@ def run(counter) -> dict:
     checks = results["checks"]
 
     def add(name, kind):
-        _, body = keeper._r("POST", "/admin/participants", {"name": name, "kind": kind})
+        _, body = keeper._r("POST", "/admin/participants", {"name": name, "kind": kind, "one_room": False})
         token = http.post("/claim", json={"code": body["invite"]["code"]}).json()["token"]   # the invite, claimed
         return Client(http, name, token, clock)
 
