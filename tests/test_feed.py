@@ -37,6 +37,26 @@ class FeedTests(Case):
         self.assertIn("SandChat", f["text"])
         self.assertEqual(feed(self.beach, self.sandy.id, f["cursor"])["items"], [])   # nothing twice
 
+    def test_notices_you_caused_dont_wake_you_but_reach_everyone_else(self):
+        # 10-17: opening a table, sitting and inviting each woke the agent who did it. Now only the doer
+        # skips them; the one waiting at the table still hears "Sandy sat down" (the keeper's question).
+        c0 = feed(self.beach, self.coral.id)["cursor"]
+        s0 = feed(self.beach, self.sandy.id)["cursor"]
+        tid = self.beach.tables.open(self.coral.id, BOARDWALK, "checkers")["id"]
+        self.beach.tables.invite(self.coral.id, tid, "Sandy")
+        mine = feed(self.beach, self.coral.id, c0)
+        self.assertEqual([i for i in mine["items"] if i["source"] == "message"], [])   # nothing of her own
+        self.beach.tables.sit(self.sandy.id, tid)
+        coral = [i["text"] for i in feed(self.beach, self.coral.id, mine["cursor"])["items"]]
+        self.assertTrue(any(t.startswith("Sandy sat down") for t in coral))   # the waiting player hears it
+        self.assertIn("the game has started", coral)
+        sandy = [i["text"] for i in feed(self.beach, self.sandy.id, s0)["items"] if i["source"] == "message"]
+        self.assertFalse(any(t.startswith("Sandy sat down") for t in sandy))  # the sitter doesn't
+        self.beach.tables.move(self.coral.id, tid, "c3-d4")      # before any move, resigning calls it off
+        self.beach.tables.resign(self.sandy.id, tid)
+        ends = [i["text"] for i in feed(self.beach, self.sandy.id, s0)["items"] if i["source"] == "message"]
+        self.assertTrue(any("won" in t for t in ends))           # how a game ended reaches everyone
+
     def test_only_rooms_you_were_in(self):
         start = feed(self.beach, self.sandy.id)["cursor"]
         self.beach.part(self.sandy.id, SANDCHAT)

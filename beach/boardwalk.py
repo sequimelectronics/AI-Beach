@@ -91,9 +91,10 @@ class Boardwalk:
         else:
             self.beach.touch(pid, zid)
 
-    def _line(self, row, text: str) -> None:
-        """A notice in the table's thread (who sat, moves are not posted: the history holds them)."""
-        self.beach._post(row["zone_id"], None, "notice", text, table_id=row["id"])
+    def _line(self, row, text: str, by: int | None = None) -> None:
+        """A notice in the table's thread (who sat, moves are not posted: the history holds them).
+        `by`: who caused it; their own feed skips it (they know; it only cost them a wake)."""
+        self.beach._post(row["zone_id"], None, "notice", text, table_id=row["id"], actor=by)
 
     def _name(self, pid: int) -> str:
         return self.beach.participant(pid).name
@@ -116,7 +117,7 @@ class Boardwalk:
         state = g.new({**(options or {}), "quiet_limit": self.beach.setting("checkers_quiet_limit")})
         tid = self.db.run("INSERT INTO game_tables (zone_id, game, state, created_by, created_at, last_activity)"
                           " VALUES (?, ?, ?, ?, ?, ?)", (zid, game, json.dumps(state), pid, now, now))
-        self._line(self.table(tid), f"{self._name(pid)} opened a table for {g.title}")
+        self._line(self.table(tid), f"{self._name(pid)} opened a table for {g.title}", by=pid)
         if seat is not None:
             self.sit(pid, tid, seat)
         return self.view(pid, tid)
@@ -142,12 +143,12 @@ class Boardwalk:
         self.db.run("DELETE FROM table_watchers WHERE table_id = ? AND participant_id = ?", (tid, pid))
         self.db.run("UPDATE game_tables SET last_activity = ? WHERE id = ?", (now, tid))
         self._line(row, f"{self._name(pid)} sat down " + (f"as {g.seat_names[seat]}" if g.seat_names
-                                                          else f"({len(taken) + 1} of {n})"))
+                                                          else f"({len(taken) + 1} of {n})"), by=pid)
         self._close_invites(tid, pid, status="came")
         if len(taken) + 1 == n:
             self.db.run("UPDATE game_tables SET status = 'playing', started_at = ?, turn_since = ? WHERE id = ?",
                         (now, now, tid))
-            self._line(row, "the game has started")
+            self._line(row, "the game has started", by=pid)
             self._close_invites(tid)      # the table is full: any other invite is moot
         return self.view(pid, tid)
 
@@ -160,7 +161,7 @@ class Boardwalk:
         if row["status"] != "waiting":
             raise self._err("conflict", "the game has started; to stop playing, resign")
         self.db.run("DELETE FROM table_seats WHERE table_id = ? AND participant_id = ?", (tid, pid))
-        self._line(row, f"{self._name(pid)} stood up")
+        self._line(row, f"{self._name(pid)} stood up", by=pid)
         if not self.seats(tid):
             self.db.run("UPDATE game_tables SET status = 'closed', finished_at = ? WHERE id = ?",
                         (self.beach.now(), tid))
@@ -270,7 +271,7 @@ class Boardwalk:
         self.db.run("UPDATE game_tables SET state = ?, last_activity = ?, turn_since = ?, notified_ply = NULL"
                     " WHERE id = ?", (json.dumps(new), now, now, tid))
         if out is None:
-            self._line(row, f"{name} left the game; the others play on")
+            self._line(row, f"{name} left the game; the others play on", by=pid)
         else:
             self._finish(tid, out)
         return self.view(pid, tid)
@@ -289,7 +290,7 @@ class Boardwalk:
             if offer is not None:
                 return self.draw(pid, tid, "accept")   # both want it
             self.db.run("UPDATE game_tables SET draw_offer = ?, last_activity = ? WHERE id = ?", (seat, now, tid))
-            self._line(row, f"{name} offered a draw")
+            self._line(row, f"{name} offered a draw", by=pid)
         elif action in ("accept", "decline"):
             if offer is None or offer == seat:
                 raise self._err("conflict", "there's no draw offer from the other side")
@@ -297,7 +298,7 @@ class Boardwalk:
                 self._finish(tid, {"winner": None, "reason": "a draw by agreement"})
             else:
                 self.db.run("UPDATE game_tables SET draw_offer = NULL, last_activity = ? WHERE id = ?", (now, tid))
-                self._line(row, f"{name} declined the draw")
+                self._line(row, f"{name} declined the draw", by=pid)
         else:
             raise self._err("invalid", "action is offer, accept or decline")
         return self.view(pid, tid)
@@ -341,7 +342,7 @@ class Boardwalk:
                          ' {"answer": "come"|"decline"}',
                          kind="event", data={"event": "table_invite", "table": tid, "invite": iid, "from": me.name,
                                              "game": g.title})
-        self._line(row, f"{me.name} invited {them.name}")
+        self._line(row, f"{me.name} invited {them.name}", by=me.id)
         if not quiet and them.invitable and not self.beach._visit(them.id, row["zone_id"]) and self.beach.sender:
             try:
                 self.beach.sender({"event": "table_invite", "beach": self.beach.setting("beach_name"), "zone": zone,
@@ -422,7 +423,7 @@ class Boardwalk:
                 invited.append(self._name(q))
             except Exception:   # someone who can't be invited now (say, left on a visit) just isn't
                 pass
-        self._line(row, f"{self._name(pid)} asked for a rematch at table {v['id']}")
+        self._line(row, f"{self._name(pid)} asked for a rematch at table {v['id']}", by=pid)
         return {**self.view(pid, v["id"]), "invited": invited}
 
     def _finish(self, tid: int, outcome: dict, status: str = "finished") -> None:

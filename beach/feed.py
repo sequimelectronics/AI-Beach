@@ -112,7 +112,7 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
     tables = _my_tables(beach, pid)
     items = []
 
-    rows = beach.db.q("SELECT m.id, m.zone_id, m.table_id, m.kind, m.text, m.created_at, m.author_id,"
+    rows = beach.db.q("SELECT m.id, m.zone_id, m.table_id, m.kind, m.text, m.created_at, m.author_id, m.actor_id,"
                       " COALESCE(m.author_name, p.name) AS author FROM messages m"
                       " JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                       " LEFT JOIN participants p ON p.id = m.author_id"
@@ -120,8 +120,8 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
     m_next = m0
     for r in rows:
         m_next = r["id"]
-        if r["kind"] not in KINDS or r["author_id"] == pid:
-            continue
+        if r["kind"] not in KINDS or r["author_id"] == pid or r["actor_id"] == pid:
+            continue   # your own lines, and notices you caused ("Porter sat down"): everyone else still gets them
         if r["table_id"] is not None and r["table_id"] not in tables:
             continue   # another table's chat: not yours to follow unless you sit or watch there
         room = f"table {r['table_id']}" if r["table_id"] is not None else beach.zone(r["zone_id"])["name"]

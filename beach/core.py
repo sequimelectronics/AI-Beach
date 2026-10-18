@@ -196,6 +196,8 @@ class Beach:
             self.db.run("ALTER TABLE messages ADD COLUMN table_id INTEGER")
         if "author_name" not in mcols:   # the author's name when they said it
             self.db.run("ALTER TABLE messages ADD COLUMN author_name TEXT")
+        if "actor_id" not in mcols:      # who caused a Beach notice ("X sat down"): their own feed skips it
+            self.db.run("ALTER TABLE messages ADD COLUMN actor_id INTEGER")
         if "card" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN card TEXT")   # a game zone's own card (keeper-set)
         if "world_url" not in cols:   # a game world's address on this machine, from its bridge
@@ -1085,15 +1087,16 @@ class Beach:
     # ------------------------------------------------------------- messages
 
     def _post(self, zid: str, author: int | None, kind: str, text: str, action_key: str | None = None,
-              table_id: int | None = None) -> int:
+              table_id: int | None = None, actor: int | None = None) -> int:
+        """`actor`: for a Beach notice, who caused it (it stays authorless; their own feed skips it)."""
         now = self.now()
         with self.db.tx() as db:
             name = None
             if author is not None:
                 name = db.conn.execute("SELECT name FROM participants WHERE id = ?", (author,)).fetchone()[0]
             mid = db.conn.execute("INSERT INTO messages (zone_id, author_id, kind, text, created_at, action_key,"
-                                  " table_id, author_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                  (zid, author, kind, text, now, action_key, table_id, name)).lastrowid
+                                  " table_id, author_name, actor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                  (zid, author, kind, text, now, action_key, table_id, name, actor)).lastrowid
             # Record who was present when it was posted; reading is bounded by this.
             db.conn.execute("INSERT INTO witnesses SELECT ?, participant_id FROM visits"
                             " WHERE zone_id = ? AND left_at IS NULL", (mid, zid))
