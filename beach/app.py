@@ -686,6 +686,15 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return {"id": p.id, "name": p.name, "invitable": p.invitable, "was": beach.was_name(pid),
                 "one_room": beach.one_room(pid)}
 
+    @app.get("/admin/held-names")
+    def held_names(_: Participant = Depends(admin)):
+        """Names nobody may take yet (given up by a rename or a removal within a day)."""
+        return {"held": beach.held_names()}
+
+    @app.post("/admin/held-names/release")
+    def release_held_name(body: dict = Body(...), keeper: Participant = Depends(admin)):
+        return beach.release_name(keeper, str(body.get("name", "")))
+
     @app.put("/admin/participants/{pid}/avatar")
     def keeper_sets_avatar(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
         return beach.set_avatar(pid, body, by_admin=True)

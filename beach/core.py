@@ -241,6 +241,9 @@ class Beach:
         if "from_default" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
             # A rename away from a name the Beach gave (the keeper's "Beach-keeper"): no "(was ...)".
             self.db.run("ALTER TABLE name_history ADD COLUMN from_default INTEGER NOT NULL DEFAULT 0")
+        if "released_at" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
+            # The keeper ended this name's hold early (re-inviting the same person); the row stays as history.
+            self.db.run("ALTER TABLE name_history ADD COLUMN released_at REAL")
 
     def _seed(self) -> None:
         now = self.now()
@@ -346,12 +349,38 @@ class Beach:
                 same = r["name"].casefold() == name.casefold()
                 raise BeachError("conflict", f"there is already a participant called {r['name']}" if same else
                                  f"'{name}' is too easy to mistake for {r['name']}")
-        recent = self.now() - self.setting("rename_hint_s")
-        for r in self.db.q("SELECT participant_id, old_name FROM name_history WHERE at > ? AND from_default = 0",
-                           (recent,)):
-            if r["participant_id"] != pid and identity.skeleton(r["old_name"]) == sk:
+        for r in self.held_names():
+            if r["participant_id"] != pid and identity.skeleton(r["name"]) == sk:
                 raise BeachError("conflict", f"'{name}' was someone's name until recently; choose another")
         return name
+
+    def held_names(self) -> list[dict]:
+        """Names given up (by a rename or a removal) within rename_hint_s: nobody else may take them yet,
+        so nobody can pose as that person in the history. The keeper can release one early."""
+        recent = self.now() - self.setting("rename_hint_s")
+        return [{"id": r["id"], "participant_id": r["participant_id"], "name": r["old_name"],
+                 "since": r["at"], "until": r["at"] + self.setting("rename_hint_s"),
+                 "removed": r["new_name"].endswith("(removed)")}
+                for r in self.db.q("SELECT * FROM name_history WHERE at > ? AND from_default = 0"
+                                   " AND released_at IS NULL ORDER BY id", (recent,))]
+
+    def release_name(self, admin: Participant, name: str) -> dict:
+        """Keeper only: end a held name's hold early (say, re-inviting the same person after removing an
+        unclaimed slot). Recorded in the audit log; old messages keep their author, so the former holder
+        and the new one stay apart in the history."""
+        if not admin.is_admin:
+            raise BeachError("forbidden", "only the keeper can release a held name")
+        sk = identity.skeleton(" ".join((name or "").split()))
+        rows = [r for r in self.held_names() if identity.skeleton(r["name"]) == sk]
+        if not rows:
+            raise BeachError("not_found", f"'{name}' isn't held")
+        now = self.now()
+        with self.db.tx() as db:
+            for r in rows:
+                db.conn.execute("UPDATE name_history SET released_at = ? WHERE id = ?", (now, r["id"]))
+            db.conn.execute("INSERT INTO audit (at, admin_id, what, detail) VALUES (?, ?, 'release_name', ?)",
+                            (now, admin.id, rows[0]["name"]))
+        return {"released": rows[0]["name"]}
 
     def add_participant(self, name: str, kind: str, invitable: bool = True,
                         is_admin: bool = False) -> tuple[Participant, str]:
@@ -531,7 +560,7 @@ class Beach:
     def was_name(self, pid: int) -> str | None:
         """The name this participant had until recently (within rename_hint_s), else None."""
         row = self.db.one("SELECT old_name, at FROM name_history WHERE participant_id = ? AND from_default = 0"
-                          " ORDER BY id DESC LIMIT 1", (pid,))
+                          " AND released_at IS NULL ORDER BY id DESC LIMIT 1", (pid,))
         if row and self.now() - row["at"] < self.setting("rename_hint_s"):
             first = self.db.one("SELECT old_name FROM name_history WHERE participant_id = ? AND at > ?"
                                 " AND from_default = 0 ORDER BY id LIMIT 1",

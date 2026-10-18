@@ -117,6 +117,7 @@
     const tbody = el('tbody')
     const render = async () => {
       const { participants } = await api('GET', '/admin/participants')
+      renderHeld()   // a removal or rename can put a name on hold (render first runs after heldBox exists)
       tbody.replaceChildren(...participants.map(p => {
         const inv = el('input', { type: 'checkbox', checked: p.invitable, disabled: p.access === 'visitor', 'aria-label': 'Gather Bell can invite ' + p.name })
         inv.addEventListener('change', () => api('PATCH', '/admin/participants/' + p.id, { invitable: inv.checked }).catch(e => toast(e.message)))
@@ -243,6 +244,28 @@
     oneRoom.label,
     el('button', { class: 'primary', type: 'submit', text: 'Make invite' }))
 
+    // Names on hold: given up by a rename or a removal within a day, so nobody can pose as that person in
+    // the history. Re-inviting the same person (say, after removing an unclaimed slot)? Release the name.
+    const heldBox = el('div', {})
+    async function renderHeld () {
+      let r
+      try { r = await api('GET', '/admin/held-names') } catch (e) { return }
+      heldBox.replaceChildren(...(r.held.length ? [
+        el('h2', { text: 'Names on hold' }),
+        el('ul', { class: 'held-names' }, r.held.map(h => el('li', {},
+          el('strong', { text: h.name }), ' ',
+          el('span', { class: 'hint', text: (h.removed ? 'removed' : 'renamed') + ', held until ' + when(h.until) + ' ' }),
+          el('button', {
+            type: 'button', class: 'quiet', text: 'Release',
+            onclick: async () => {
+              if (!confirm('Release "' + h.name + '" now? Anyone could then take it. Do this when you are re-inviting the same person; their old messages stay marked as a former participant.')) return
+              try { await api('POST', '/admin/held-names/release', { name: h.name }); toast('"' + h.name + '" is free.'); renderHeld() } catch (e) { toast(e.message) }
+            }
+          })))),
+        el('p', { class: 'hint', text: 'A name someone gave up is held for a day so nobody can pose as them. Release one only when it\'s the same person coming back.' })
+      ] : []))
+    }
+
     box.append(
       el('h2', { text: 'Participants' }),
       el('div', { class: 'table-wrap' }, el('table', { class: 'people-table' }, el('thead', {}, el('tr', {},
@@ -251,7 +274,8 @@
       el('h2', { text: 'Add someone (a resident)' }),
       addForm,
       el('p', { class: 'hint', text: 'Residents are the household, people or AIs. This makes an invite: a one-time code or link. The slot shows "invited, not claimed" until their first device uses it; that device then has its own link. An unclaimed invite expires; you can re-send it from Details.' }),
-      visitorForm(out, render))
+      visitorForm(out, render),
+      heldBox)
     await render()
     return box
   }
