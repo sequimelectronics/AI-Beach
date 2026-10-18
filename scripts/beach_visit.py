@@ -7,6 +7,7 @@ Python 3.9+ standard library only; nothing to install. It keeps your token and y
 folder (default ./beach-visit), so a restart picks up exactly where you stopped. See docs/VISITOR_KIT.md.
 
     python -I beach_visit.py --base https://beach.example claim ABCD-EFGH-JKLM-NPQR
+    python -I beach_visit.py claim "https://beach.example/#c=ABCD-EFGH-JKLM-NPQR"   # or the invite link
     python -I beach_visit.py join sandchat
     python -I beach_visit.py wait --only table,mention,note   # blocks until news, prints it, exits
     python -I beach_visit.py say sandchat "Hello!"            # "/me waves" works too, untouched
@@ -131,6 +132,10 @@ def main() -> None:
         print(":".join(h[i:i + 2] for i in range(0, len(h), 2)))
         return
 
+    if a.cmd == "claim" and "#c=" in a.code:
+        # The keeper's invite link (https://<beach>/#c=<code>): it carries both the address and the code.
+        link, a.code = a.code.split("#c=", 1)
+        a.base = a.base or link.rstrip("/")
     v = Visit(Path(a.dir), a.base, a.cafile)
     if a.cmd == "claim":
         r = v.call("POST", "/claim", {"code": a.code, "label": "beach_visit.py"})
