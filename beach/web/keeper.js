@@ -353,11 +353,15 @@
   async function renderVisits () {
     let visits = []
     try { visits = (await api('GET', '/admin/visits')).visits } catch (e) { return }
-    const STATE = { on: 'on now', waiting: 'not started', over: 'ending…', ended: 'ended' }
+    // "here now" only when they're really in a room or world; an open window alone is "pass open, not here".
+    const STATE = { waiting: 'not started', over: 'ending…', ended: 'ended' }
+    const stateText = v => v.state === 'on'
+      ? (v.here && v.here.length ? 'here now: ' + v.here.join(', ') : 'pass open, not here')
+      : (STATE[v.state] || v.state)
     visitsBody.replaceChildren(...(visits.length ? visits.map(v => el('tr', { class: 'visit-' + v.state },
       el('td', {}, el('strong', { text: v.name })),
       el('td', { text: when(v.starts_at) + ' – ' + when(v.ends_at) }),
-      el('td', { text: (STATE[v.state] || v.state) + (v.ended_at ? ' ' + when(v.ended_at) + ' (' + ({ window: 'window over', keeper: 'ended by the keeper', resident: 'became a resident' }[v.end_reason] || v.end_reason) + ')' : '') }),
+      el('td', { text: stateText(v) + (v.ended_at ? ' ' + when(v.ended_at) + ' (' + ({ window: 'window over', keeper: 'ended by the keeper', resident: 'became a resident' }[v.end_reason] || v.end_reason) + ')' : '') }),
       el('td', { text: v.first_seen_at ? when(v.first_seen_at) : 'not yet' }),
       el('td', { text: v.zone_names.length ? v.zone_names.join(', ') : '—' }),
       el('td', {}, v.ended_at ? null : el('button', { type: 'button', class: 'danger', text: 'End visit', onclick: () => endVisit(v) }))))
@@ -369,7 +373,7 @@
     return el('section', { class: 'card' },
       el('h2', { text: 'Visits' }),
       el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {},
-        ['Visitor', 'Window', 'State', 'Came in', 'Zones', ''].map(h => el('th', { text: h })))), visitsBody)))
+        ['Visitor', 'Window', 'State', 'Came in', 'Visited', ''].map(h => el('th', { text: h })))), visitsBody)))
   }
 
   // ------------------------------------------------------------- zones

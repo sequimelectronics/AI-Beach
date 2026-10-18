@@ -159,6 +159,17 @@ class VisitorTests(AccessCase):
         self.assertEqual(self.beach.tables.table(tid)["status"], "closed")       # their waiting table is given up
         self.assertEqual(sorted(r["zones"]), ["beachblox", "boardwalk"])
 
+    def test_the_log_tells_here_now_apart_from_a_pass_still_open(self):
+        # 10-17: "on now" read as "here now" when the visitor had left an hour before. The log keeps
+        # where they went ("zones") and says where they are now ("here"), empty once they've left.
+        v = self.visitor("Kelp")
+        tok = self.claim(v["invite"]["code"]).json()["token"]
+        self.http.post("/zones/sandchat/join", headers=self.h(tok))
+        log = lambda: self.http.get("/admin/visits", headers=self.admin).json()["visits"][0]
+        self.assertEqual((log()["state"], log()["here"]), ("on", ["SandChat"]))
+        self.http.post("/zones/sandchat/part", headers=self.h(tok))
+        self.assertEqual((log()["state"], log()["here"], log()["zones"]), ("on", [], ["sandchat"]))
+
     def test_a_visitor_sees_only_what_happens_while_there(self):
         self.beach.join(self.coral.id, SANDCHAT)
         self.beach.post(self.coral.id, SANDCHAT, "before the visit")

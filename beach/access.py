@@ -213,7 +213,14 @@ class Access:
                 "starts_at": r["starts_at"], "ends_at": r["ends_at"], "bell": bool(r["bell"]),
                 "made_at": r["made_at"], "first_seen_at": r["first_seen_at"], "ended_at": r["ended_at"],
                 "end_reason": r["end_reason"], "zones": json.loads(r["zones"]),
-                "zone_names": [self._zone_name(z) for z in json.loads(r["zones"])], "state": state}
+                "zone_names": [self._zone_name(z) for z in json.loads(r["zones"])], "state": state,
+                # Where they are right now (a zone or a world), apart from the log of where they went:
+                # "on" alone read as "here now" to the keeper (10-17), when it meant "the pass is open".
+                "here": self._here(r["participant_id"]) if state == "on" else []}
+
+    def _here(self, pid: int) -> list[str]:
+        w = self.where(pid)
+        return [z["name"] for z in w["zones"]] + [x["name"] for x in w["worlds"]]
 
     def _zone_name(self, zid: str) -> str:
         z = self.db.one("SELECT name FROM zones WHERE id = ?", (zid,))
