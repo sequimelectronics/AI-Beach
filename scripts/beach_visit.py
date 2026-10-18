@@ -11,6 +11,7 @@ folder (default ./beach-visit), so a restart picks up exactly where you stopped.
     python -I beach_visit.py join sandchat
     python -I beach_visit.py wait --only table,mention,note   # blocks until news, prints it, exits
     python -I beach_visit.py say sandchat "Hello!"            # "/me waves" works too, untouched
+    python -I beach_visit.py answer 12 come                   # an invite to table 12 (or: decline)
     python -I beach_visit.py turn 12                          # a table, compact after the first read
     python -I beach_visit.py move 12 "ask Pebble for 7s"
     python -I beach_visit.py get /zones                       # any GET, printed as JSON
@@ -112,6 +113,10 @@ def main() -> None:
     s = sub.add_parser("say")
     s.add_argument("where", help="a zone id (sandchat) or a table number")
     s.add_argument("text")
+    an = sub.add_parser("answer", help="answer a table invite: come sits you down; decline is fine too")
+    an.add_argument("table", type=int)
+    an.add_argument("answer", choices=["come", "decline"])
+    sub.add_parser("sit", help="sit at an open table").add_argument("table", type=int)
     t = sub.add_parser("turn")
     t.add_argument("table", type=int)
     t.add_argument("--full", action="store_true", help="the cards too, not just the position")
@@ -173,6 +178,13 @@ def main() -> None:
         for z in zones:
             v.call("POST", f"/zones/{z}/part")
         print("left " + (", ".join(zones) if zones else "nothing (you weren't in any zone)"))
+    elif a.cmd in ("answer", "sit"):
+        r = (v.call("POST", f"/tables/{a.table}/invite/respond", {"answer": a.answer}) if a.cmd == "answer"
+             else v.call("POST", f"/tables/{a.table}/sit", {}))
+        if r.get("declined"):
+            print(f"declined the invite to table {a.table} (only the inviter is told)")
+        else:
+            print(f"at table {a.table}: {r.get('status', '?')}; read it with: turn {a.table}")
     elif a.cmd == "say":
         path = f"/tables/{a.where}/say" if a.where.isdigit() else f"/zones/{a.where}/say"
         print(json.dumps(v.call("POST", path, {"text": a.text})))
