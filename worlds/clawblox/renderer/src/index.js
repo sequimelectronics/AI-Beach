@@ -454,6 +454,126 @@ function createEntityVisual(entity) {
   return mesh
 }
 
+// PLAYING WITH THE MOUSE (10-18, as in the beach world's viewer). The Beach page that frames this
+// viewer passes the character's session in a message (the engine page keeps it from the renderer).
+//   click the ground   -> your robot walks there
+//   click a robot      -> the camera follows it; again, or Esc, to stop
+//   Space              -> jump
+// A drag still turns the camera: only a short, still click counts.
+function createPlayControls(ctx, camera, scene, entityObjects) {
+  const canvas = ctx.canvas
+  const base = window.location.pathname.replace(/\/[^/]*$/, '')
+  let session = null
+  let players = []
+  const raycaster = new THREE.Raycaster()
+  const ndc = new THREE.Vector2()
+  let down = null
+  let marker = null
+  let markerUntil = 0
+
+  function onMessage (ev) {
+    if (ev.source !== window.parent || !ev.data || ev.data.type !== 'beach-session') return
+    session = typeof ev.data.session === 'string' && ev.data.session ? ev.data.session : null
+  }
+  async function send (type, data) {
+    if (!session) return false
+    try {
+      const r = await fetch(base + '/input', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Session': session },
+        body: JSON.stringify({ type, data: data || {} }),
+      })
+      return r.ok
+    } catch (_) { return false }
+  }
+  function replay () { return ctx.runtime?.internal?.get ? ctx.runtime.internal.get('replay') : null }
+  function follow (entityId) {
+    const api = replay()
+    const p = players.find(x => x && x.root_part_id === entityId)
+    if (!api || !p || p.id == null) return
+    const id = String(p.id)
+    const now = api.getSelectedPlayerId ? api.getSelectedPlayerId() : null
+    if (now === id) api.clearSelectedPlayer ? api.clearSelectedPlayer() : api.selectPlayer(null)
+    else api.selectPlayer(id)
+  }
+  function unfollow () {
+    const api = replay()
+    if (api) api.clearSelectedPlayer ? api.clearSelectedPlayer() : api.selectPlayer(null)
+  }
+  function isRobot (id) { return players.some(x => x && x.root_part_id === id) }
+  function pick (ev) {
+    const rect = canvas.getBoundingClientRect()
+    ndc.set(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(ndc, camera)
+    raycaster.camera = camera
+    for (const hit of raycaster.intersectObjects([...entityObjects.values()], true)) {
+      if (hit.object.isSprite || hit.point.y > 200) continue
+      let o = hit.object
+      while (o && !(o.userData && o.userData.entityId != null)) o = o.parent
+      if (o && isRobot(o.userData.entityId)) return { person: o.userData.entityId }
+      if (hit.object.material && hit.object.material.transparent && hit.object.material.opacity < 0.05) continue
+      for (const obj of entityObjects.values()) {   // a click right by a robot counts as clicking it
+        if (isRobot(obj.userData.entityId) && Math.hypot(obj.position.x - hit.point.x, obj.position.z - hit.point.z) < 1.6) {
+          return { person: obj.userData.entityId }
+        }
+      }
+      return { spot: hit.point }
+    }
+    return null
+  }
+  function showMarker (p) {
+    if (!marker) {
+      marker = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, side: THREE.DoubleSide }))
+      marker.rotation.x = -Math.PI / 2
+      scene.add(marker)
+    }
+    marker.position.set(p.x, p.y + 0.08, p.z)
+    marker.visible = true
+    markerUntil = performance.now() + 1500
+    setTimeout(() => { if (marker && performance.now() >= markerUntil) marker.visible = false }, 1600)
+  }
+  function onDown (ev) { down = { x: ev.clientX, y: ev.clientY, t: performance.now(), button: ev.button } }
+  function onUp (ev) {
+    const d = down
+    down = null
+    if (!d || ev.button !== d.button) return
+    if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 6 || performance.now() - d.t > 450) return
+    const what = pick(ev)
+    if (!what) return
+    if (what.person != null) { follow(what.person); return }
+    if (d.button !== 0 || !session) return
+    showMarker(what.spot)
+    void send('MoveTo', { position: [what.spot.x, what.spot.y, what.spot.z] })
+  }
+  function onContext (ev) {
+    const what = pick(ev)
+    if (what && what.person != null) ev.preventDefault()
+  }
+  function onKey (ev) {
+    const t = ev.target
+    if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+    if (ev.code === 'Space' && session) { ev.preventDefault(); void send('Jump') }
+    else if (ev.key === 'Escape') unfollow()
+  }
+  window.addEventListener('message', onMessage)
+  canvas.addEventListener('pointerdown', onDown)
+  canvas.addEventListener('pointerup', onUp)
+  canvas.addEventListener('contextmenu', onContext)
+  window.addEventListener('keydown', onKey)
+  try { if (window.parent !== window) window.parent.postMessage({ type: 'beach-session-please' }, '*') } catch (_) {}
+  return {
+    setPlayers (list) { players = Array.isArray(list) ? list : [] },
+    dispose () {
+      window.removeEventListener('message', onMessage)
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointerup', onUp)
+      canvas.removeEventListener('contextmenu', onContext)
+      window.removeEventListener('keydown', onKey)
+      if (marker) scene.remove(marker)
+    },
+  }
+}
+
 export function createRenderer(ctx) {
   const scene = new THREE.Scene()
   const captureConfig = globalThis.__mesaCaptureConfig && typeof globalThis.__mesaCaptureConfig === 'object'
@@ -522,6 +642,7 @@ export function createRenderer(ctx) {
   }
   const entityObjects = new Map()
   const colliderDebugObjects = new Map()
+  const controls = createPlayControls(ctx, camera, scene, entityObjects)
   const modelController = ctx.runtime.three.createModelEntityController(THREE, {
     onError(err, meta) {
       ctx.log('warn', 'Model entity load failed', { err: String(err), ...meta })
@@ -597,6 +718,7 @@ export function createRenderer(ctx) {
       let obj = entityObjects.get(entity.id)
       if (!obj) {
         obj = createEntityVisual(entity)
+        obj.userData.entityId = entity.id
         entityObjects.set(entity.id, obj)
         scene.add(obj)
       }
@@ -653,6 +775,7 @@ export function createRenderer(ctx) {
     }
 
     const players = obs.players || []
+    controls.setPlayers(players)
     const selectedId = obs && obs.selected_player_id ? String(obs.selected_player_id) : null
     const selectedTarget = selectedId
       ? players.find((player) => String(player?.id || '') === selectedId)
@@ -709,6 +832,7 @@ export function createRenderer(ctx) {
     },
 
     unmount() {
+      controls.dispose()
       if (ctx.runtime?.internal?.remove) ctx.runtime.internal.remove('camera')
       if (cameraModes?.dispose) cameraModes.dispose()
       for (const obj of entityObjects.values()) scene.remove(obj)

@@ -61,6 +61,9 @@
   }
   function tableUrl (tid) { return '/boardwalk?zone=' + encodeURIComponent(zid) + '&table=' + tid }
 
+  // The lobby redraws every 5 s: keep what you picked for a new table across redraws (10-18: the
+  // picker kept snapping back to 2-player checkers before the keeper could click).
+  const chosen = { game: null, players: null }
   async function renderLobby (main) {
     let data
     try { data = await api('GET', '/zones/' + encodeURIComponent(zid) + '/tables') } catch (e) { main.replaceChildren(el('p', { class: 'error', text: e.message })); return }
@@ -70,10 +73,14 @@
       crazy8: 'Match the suit or the rank; eights are wild. First to empty their hand wins.',
       gofish: 'Ask each other for cards; four of a kind make a book. Most books wins.'
     }
-    const players = el('select', { 'aria-label': 'Players' }, [2, 3, 4, 5].map(n => el('option', { value: n, text: n + ' players' })))
+    const players = el('select', { 'aria-label': 'Players', onchange: () => { chosen.players = players.value } },
+      [2, 3, 4, 5].map(n => el('option', { value: n, text: n + ' players' })))
+    if (chosen.players) players.value = chosen.players
     const playersLabel = el('label', {}, 'Players', players)
     const hint = el('p', { class: 'hint' })
-    const pick = el('select', { 'aria-label': 'Game', onchange: () => syncPick() }, games.map(([k, g]) => el('option', { value: k, text: g.title[0].toUpperCase() + g.title.slice(1) })))
+    const pick = el('select', { 'aria-label': 'Game', onchange: () => { chosen.game = pick.value; syncPick() } },
+      games.map(([k, g]) => el('option', { value: k, text: g.title[0].toUpperCase() + g.title.slice(1) })))
+    if (chosen.game && data.games[chosen.game]) pick.value = chosen.game
     function syncPick () {
       const g = data.games[pick.value]
       playersLabel.hidden = g.players[1] <= 2

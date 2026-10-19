@@ -332,6 +332,16 @@ class WorldScriptTests(unittest.TestCase):
         self.assertIn("if (m !== 'playing' || !frame.contentWindow) return", page)
         self.assertIn("}, u.origin)", page)
         self.assertIn("ev.source !== f.frame.contentWindow", page)
+        # The same controls in the ClawBlox viewer (robots: walk, follow, jump).
+        claw = (ROOT / "worlds" / "clawblox" / "renderer" / "src" / "index.js").read_text()
+        for needle in ("ev.source !== window.parent", "send('MoveTo'", "send('Jump')", "api.selectPlayer(id)"):
+            self.assertIn(needle, claw)
+
+    def test_the_boardwalk_keeps_your_new_table_choice(self):
+        # 10-18: the lobby redraws every 5 s and kept snapping the picker back to 2-player checkers.
+        js = (ROOT / "beach" / "web" / "boardwalk.js").read_text()
+        self.assertIn("if (chosen.game && data.games[chosen.game]) pick.value = chosen.game", js)
+        self.assertIn("if (chosen.players) players.value = chosen.players", js)
 
     def test_the_renderer_draws_no_departed_player(self):
         # A character whose player isn't listed any more is skipped (and so removed from the scene),
