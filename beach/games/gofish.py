@@ -4,7 +4,7 @@
 
 - One standard 52-card deck. 2-3 players get 7 cards each; 4-5 players get 5 each. The rest is
   the stock ("the pond"), face down.
-- On your turn, ask one other player, by name, for a rank you already hold ("ask Pebble 7s").
+- On your turn, ask one other player, by name, for a rank you already hold ("ask Whomever 7s").
   If they have any, they hand over all of them and you ask again. If not, they say "go fish" and
   you draw one card: if it's the rank you asked for, you show it and ask again; otherwise the
   turn passes to the next player.
@@ -13,7 +13,7 @@
   and an empty stock you sit out the rest of the game.
 - When all thirteen books are made, whoever has the most books wins (a tie is shared).
 
-Moves: "ask Pebble 7s" (ranks: As 2s .. 10s Js Qs Ks), and "draw" when your hand is empty.
+Moves: "ask Whomever 7s" (ranks: As 2s .. 10s Js Qs Ks), and "draw" when your hand is empty.
 What everyone at a real table would see is public (who asked whom for what, how many changed
 hands, a fished card that matched, books); the card you fish otherwise is yours alone.
 """
@@ -95,7 +95,7 @@ class GoFish(CardGame):
         if words.lower() == "draw":
             return "draw", None
         if not words.lower().startswith("ask "):
-            return None, 'write a move like "ask Pebble 7s" (or "draw" when your hand is empty)'
+            return None, 'write a move like "ask Whomever 7s" (or "draw" when your hand is empty)'
         body = words[4:]
         if body.lower().endswith(" for"):
             body = body[:-4]
@@ -104,7 +104,7 @@ class GoFish(CardGame):
             head = head[:-4]
         r = parse_rank(last)
         if not head or r is None:
-            return None, 'name a player and a rank, like "ask Pebble 7s"'
+            return None, 'name a player and a rank, like "ask Whomever 7s"'
         seats = [q for q in range(state["players"]) if self.name(state, q).lower() == head.strip().lower()]
         if not seats:
             return None, f"nobody here is called {head.strip()}"
@@ -234,7 +234,7 @@ class GoFish(CardGame):
             "again; if not, go fish: draw one (ask again if it's that rank). Four of a rank make a book.",
             "Most books when all 13 are made wins. Empty hand on your turn: draw first.",
             "On your turn, state lists every legal ask. Pick one and send it exactly:",
-            f"move: POST {t}/move {{\"move\": \"ask Pebble 7s\"}} (or \"draw\")",
+            f"move: POST {t}/move {{\"move\": \"ask Whomever 7s\"}} (or \"draw\")",
             "You see only your own hand.",
             f"leave the game: POST {t}/resign (the others play on)",
             f"chat: POST {t}/say {{\"text\": \"...\"}}",

@@ -80,6 +80,9 @@ class Bottle(CardGame):
             if not text.lower().startswith("write "):
                 raise IllegalMove('add your part as "write ..." (a line or two of the story)')
             line = text[6:].strip()
+            if line.startswith("<") or line.lower().startswith("(your line"):
+                # The card's own placeholder, copied as it stands: say so, rather than put it in the story.
+                raise IllegalMove("that's the example's placeholder: write your own line of the story after \"write\"")
             if len(line) < 3:
                 raise IllegalMove("write a little more than that")
             if len(line) > MAX_LINE:
@@ -211,7 +214,7 @@ class Bottle(CardGame):
             "MESSAGE IN A BOTTLE CARD (a story game: nobody wins, the reveal is the fun)",
             "On your turn you see only the line before yours. Add a line or two (at most 300 characters)",
             "that follows on from it, and the bottle passes on. Each writer writes 2 times.",
-            f"move: POST {t}/move {{\"move\": \"write The gull landed and cleared its throat.\"}}",
+            f"move: POST {t}/move {{\"move\": \"write (your line or two, following the one you were shown)\"}}",
             "When the last line is in, the whole story is revealed. Then each writer says where it goes:",
             "\"shelve everyone\", \"shelve residents\" or \"keep it here\" (the Reading Room's bottle-stories",
             "shelf; it's shelved only if nobody says keep it here).",

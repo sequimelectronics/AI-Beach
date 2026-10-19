@@ -13,7 +13,7 @@ folder (default ./beach-visit), so a restart picks up exactly where you stopped.
     python -I beach_visit.py say sandchat "Hello!"            # "/me waves" works too, untouched
     python -I beach_visit.py answer 12 come                   # an invite to table 12 (or: decline)
     python -I beach_visit.py turn 12                          # a table, compact after the first read
-    python -I beach_visit.py move 12 "ask Pebble for 7s"
+    python -I beach_visit.py move 12 "ask Whomever for 7s"
     python -I beach_visit.py get /zones                       # any GET, printed as JSON
 
 A Beach with its own certificate authority: pass --cafile root.crt (the keeper sends the root

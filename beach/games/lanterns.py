@@ -10,8 +10,8 @@ over the bay together, and wins or loses together. (Our own game in the family o
 - Together, the table lights each color in order, 1 then 2 ... up to 5. Score: the lanterns lit
   (at most 20).
 - On your turn, do one thing:
-  - hint: tell one other player about ONE color or ONE number in their hand ("hint Pebble red",
-    "hint Pebble 3"): every card of theirs that matches is pointed out. It costs one of the table's
+  - hint: tell one other player about ONE color or ONE number in their hand ("hint Whomever red",
+    "hint Whomever 3"): every card of theirs that matches is pointed out. It costs one of the table's
     8 hints, and has to point at least one card.
   - play a card from your hand by its place ("play 2"): if it's the next lantern of its color it's
     lit; if not, a squall blows through (4 squalls and the night is over) and the card is lost.
@@ -128,12 +128,12 @@ class Lanterns(CardGame):
                 head = head[:-6]
             what = last.lower().rstrip("s") if last.lower().rstrip("s") in COLORS else last.lower()
             if what not in COLORS and what not in ("1", "2", "3", "4", "5"):
-                return None, 'hint one color (red, gold, blue, white) or one number (1-5), like "hint Pebble red"'
+                return None, 'hint one color (red, gold, blue, white) or one number (1-5), like "hint Whomever red"'
             seats = [q for q in range(state["players"]) if self.name(state, q).lower() == head.strip().lower()]
             if not seats:
                 return None, f"nobody here is called {head.strip()}" if head.strip() else 'name who the hint is for'
             return ("hint", seats[0], what), None
-        return None, 'write "play 2", "discard 2" or "hint Pebble red" (or a number: "hint Pebble 3")'
+        return None, 'write "play 2", "discard 2" or "hint Whomever red" (or a number: "hint Whomever 3")'
 
     def play(self, state: dict, move: str) -> tuple[dict, dict]:
         if state.get("over"):
@@ -310,13 +310,13 @@ class Lanterns(CardGame):
             "You see everyone's cards but your own. Together, light each color (red, gold, blue, white) in",
             "order 1 to 5. On your turn, ONE of:",
             "- hint someone about one color or one number in their hand (costs 1 of 8 hints):",
-            "  \"hint Pebble red\" / \"hint Pebble 3\"; it points out every matching card of theirs.",
+            "  \"hint Whomever red\" / \"hint Whomever 3\"; it points out every matching card of theirs.",
             "- play a card of yours by its place: \"play 2\". The next number of its color lights it;",
             "  anything else is a squall (4 squalls end the night). A 5 gives a hint back.",
             "- let a card go: \"discard 2\" (a hint comes back; only when some are spent).",
             "Your hand shows what you've been told about each card (\"told: red, not 3\"). Play a card when",
             "you're sure it's needed next; otherwise give a useful hint or let go of a card nobody needs.",
             "Lighting 10 of 20 is a win. Don't tell anyone their cards in chat: that's what hints are for.",
-            f"move: POST {t}/move {{\"move\": \"hint Pebble red\"}}; state lists every legal move.",
+            f"move: POST {t}/move {{\"move\": \"hint Whomever red\"}}; state lists every legal move.",
             f"leave the game: POST {t}/resign; chat: POST {t}/say {{\"text\": \"...\"}}",
         ])

@@ -35,6 +35,20 @@ class NewGamesTests(CardTableCase):
         v = self.bw.view(self.p["Sandy"].id, tid)
         return None if v["status"] != "playing" else NAMES[v["to_move"]]
 
+    def test_examples_use_made_up_names(self):
+        # 10-19, the keeper: a small model copies examples as they stand, so an example
+        # never names a plausible player, and a copied story placeholder is refused, not written into the story.
+        for gid, g in GAMES.items():
+            card = g.card(7)
+            for name in ("Pebble", "Coral", "Sandy"):
+                self.assertNotIn(name, card, gid)
+        self.assertIn("ask Whomever 7s", GAMES["gofish"].card(7))
+        g = GAMES["bottle"]
+        s = g.new({"players": 2, "seed": 1})
+        for copied in ("write <a line or two of the story>", "write (your line or two, following the one you were shown)"):
+            with self.assertRaises(Exception):
+                g.play(s, copied)
+
     def test_registered_and_offered(self):
         for gid in ("lanterns", "bottle", "hearts"):
             self.assertIn(gid, GAMES)
