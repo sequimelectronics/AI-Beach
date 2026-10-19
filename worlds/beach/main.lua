@@ -34,6 +34,7 @@ local REGIONS = {
     { name = "the Sandcastles", x = { -58, -10 }, z = { -58, -10 } },
     { name = "the Lighthouse", x = { 10, 58 }, z = { 10, 58 } },
     { name = "the Pier", x = { 10, 58 }, z = { -58, -10 } },
+    { name = "the Sand Gardens", x = { 10, 58 }, z = { -10, 10 } },
 }
 
 --------------------------------------------------------------------------------
@@ -111,6 +112,17 @@ local CONFIG = {
     pier = { deck = { x = { 43, 53 }, z = { -27, -23 } }, finish = { x = { 52, 57 }, z = { -30, -20 } }, top_y = 0.3 },
     -- The signpost in the middle of the Plaza: a board pointing to each area.
     signpost = { x = 0, z = 0, height = 4.2 },
+    -- The Sand Gardens (keeper's idea, 10-18): two boxes of smooth sand on the east side. Draw {"box": n}
+    -- makes you that box's artist: walking inside it draws a groove, a jump lifts the stick, and nobody
+    -- else's steps mark it. Draw can also walk a shape for you (the shapes below) or your own strokes.
+    -- Rake clears your box. A box frees itself when its artist leaves or stops drawing for `free_after`
+    -- seconds (the picture stays). A picture of `badge_marks` grooves earns the sand-art badge.
+    gardens = {
+        boxes = { { id = 1, x = 22, z = 0, half = 7 }, { id = 2, x = 37, z = 0, half = 7 } },
+        cell = 0.5, cap = 600, free_after = 180, badge_marks = 40, near = 12,
+        shapes = { "circle", "square", "triangle", "star", "heart", "spiral", "wave", "zigzag" },
+        size = { default = 5, min = 1.5, max = 6.5 }, max_points = 240, max_strokes = 12,
+    },
     kick = { reach = 3.0, impulse = 20, max_speed = 40, lift = 0.18 },  -- body radius 1 + ball radius 0.6 + walking slack
     pickup_range = 6, place_range = 7, match_radius = 1.5,
     hold_offset = Vector3.new(0, 3.5, 0),
@@ -394,14 +406,31 @@ do
     solid("SignpostPole", Vector3.new(0.4, SP.height + 0.6, 0.4), Vector3.new(SP.x, (SP.height + 0.6) / 2, SP.z),
         { Shape = Enum.PartType.Cylinder, Role = "SignPole", Kind = "signpost", Color = Color3.fromRGB(120, 84, 56) })
     -- One board per area, pointing its way (the four areas sit on the diagonals).
-    for i, b in ipairs({ { "Ball Court", -1, 1 }, { "Lighthouse", 1, 1 }, { "Pier", 1, -1 }, { "Sandcastles", -1, -1 } }) do
+    for i, b in ipairs({ { "Ball Court", -1, 1 }, { "Lighthouse", 1, 1 }, { "Sand Gardens", 1, 0 }, { "Pier", 1, -1 },
+                         { "Sandcastles", -1, -1 } }) do
         local dx, dz = b[2], b[3]
         local yaw = math.atan2(dx, dz)   -- the board's length runs along its direction
-        local cf = CFrame.new(SP.x + dx * 0.9, SP.height - (i - 1) * 0.55, SP.z + dz * 0.9)
+        local len = math.sqrt(dx * dx + dz * dz)
+        local cf = CFrame.new(SP.x + dx / len * 0.9, SP.height - (i - 1) * 0.5, SP.z + dz / len * 0.9)
             * CFrame.fromOrientation(0, yaw, 0)
         local board = solid("SignBoard" .. i, Vector3.new(0.12, 0.45, 1.9), cf,
             { Role = "SignBoard", Kind = "sign", Color = Color3.fromRGB(236, 218, 176), CanCollide = false })
         board:SetAttribute("SignText", b[1])
+    end
+end
+
+-- The Sand Gardens' boxes: a low wooden frame you step over (nothing in it collides).
+do
+    local wood = Color3.fromRGB(150, 108, 70)
+    for _, b in ipairs(CONFIG.gardens.boxes) do
+        local h, w = b.half, 0.3
+        for _, e in ipairs({ { 0, h, h * 2 + w, w }, { 0, -h, h * 2 + w, w }, { h, 0, w, h * 2 + w }, { -h, 0, w, h * 2 + w } }) do
+            scenery(string.format("GardenFrame%d_%g_%g", b.id, e[1], e[2]), Vector3.new(e[3], 0.12, e[4]),
+                Vector3.new(b.x + e[1], 0.06, b.z + e[2]),
+                { Role = "GardenFrame", Color = wood, CanCollide = false, CanQuery = false, CanTouch = false })
+        end
+        scenery("GardenSand" .. b.id, Vector3.new(h * 2, 0.02, h * 2), Vector3.new(b.x, 0.01, b.z),
+            { Role = "GardenSand", Color = Color3.fromRGB(242, 226, 184), CanCollide = false, CanQuery = false, CanTouch = false })
     end
 end
 
@@ -461,6 +490,7 @@ mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
                    step_deg = LH.step_deg, first_deg = LH.first_deg, pads = LH.pads },
     pier = CONFIG.pier,
     signpost = { x = CONFIG.signpost.x, z = CONFIG.signpost.z },
+    gardens = { boxes = CONFIG.gardens.boxes, shapes = CONFIG.gardens.shapes, size = CONFIG.gardens.size },
     center = { CONFIG.center.X, CONFIG.center.Z },
     centre = { CONFIG.center.X, CONFIG.center.Z }, -- the name before job 12, for older adapters  -- spelling: kept
     plots = PLOTS.enabled and (function()
@@ -800,6 +830,9 @@ local function doMold(player, data)
     result(player, "MoldSuccess")
 end
 
+-- Sand art (below) is defined after this handler; declared here so the handler can reach it.
+local artJob, boxOf, doDraw, doRake
+
 if AgentInputService then
     AgentInputService.InputReceived:Connect(function(player, kind, data)
         -- Only players the Beach has let in may act (see scripts/ServerScriptService/BeachDoor.lua).
@@ -810,6 +843,11 @@ if AgentInputService then
         local c = player.Character
         local hum = c and c:FindFirstChild("Humanoid")
         if not hum then return end
+        if kind == "MoveTo" or kind == "Stop" or kind == "Jump" then
+            artJob[player] = (artJob[player] or 0) + 1   -- stops a shape being walked for you
+            local bx = boxOf(player)
+            if bx and bx.busy then bx.busy, bx.pen, bx.dirty = false, true, true; player:SetAttribute("ArtBusy", false) end
+        end
         if kind == "MoveTo" then
             local p = vec(data and data.position)
             if not p then return result(player, "MoveToFailed:InvalidPosition") end
@@ -828,6 +866,10 @@ if AgentInputService then
             doKick(player, data)
         elseif kind == "Mold" then
             doMold(player, data)
+        elseif kind == "Draw" then
+            doDraw(player, data)
+        elseif kind == "Rake" then
+            doRake(player)
         else
             result(player, "InvalidAction")
         end
@@ -957,6 +999,9 @@ local function clearSpot(x, z)
     if not on_land(x, z) or plotAt(Vector3.new(x, 0, z)) then return false end
     local LHc = CONFIG.lighthouse   -- not under the lighthouse's spiral
     if (x - LHc.x) ^ 2 + (z - LHc.z) ^ 2 <= (LHc.ramp_r + LHc.pad + 1) ^ 2 then return false end
+    for _, b in ipairs(CONFIG.gardens.boxes) do
+        if math.abs(x - b.x) <= b.half + 1 and math.abs(z - b.z) <= b.half + 1 then return false end
+    end
     for _, l in ipairs(CONFIG.dune.ledges) do
         if x >= l.x[1] - 2 and x <= l.x[2] + 2 and z >= l.z[1] - 2 and z <= l.z[2] + 2 then return false end
     end
@@ -1017,14 +1062,318 @@ local function lighthouseTop()
     end
 end
 
+--------------------------------------------------------------------------------
+-- SAND ART (the Sand Gardens)
+--------------------------------------------------------------------------------
+local GD = CONFIG.gardens
+local gardensInfo = child(Workspace, "SandGardens") or Instance.new("Folder")
+gardensInfo.Name = "SandGardens"
+gardensInfo.Parent = Workspace
+local boxes = {}          -- id -> { cfg, artist, marks = {key -> part}, count, last, pen, busy, badged, dirty }
+for _, b in ipairs(GD.boxes) do
+    boxes[b.id] = { cfg = b, artist = nil, marks = {}, count = 0, last = nil, pen = true, busy = false,
+                    badged = false, dirty = true, active = 0 }
+end
+artJob = {}               -- player -> job number (a new move or Draw cancels a running shape)
+
+function boxOf(player)
+    for _, bx in pairs(boxes) do
+        if bx.artist == player then return bx end
+    end
+    return nil
+end
+
+local function inBox(bx, x, z)
+    local b = bx.cfg
+    return math.abs(x - b.x) <= b.half - 0.2 and math.abs(z - b.z) <= b.half - 0.2
+end
+
+local function groove(bx, x, z)
+    local b, c = bx.cfg, GD.cell
+    local i = math.floor((x - (b.x - b.half)) / c)
+    local j = math.floor((z - (b.z - b.half)) / c)
+    local n = math.floor(b.half * 2 / c)
+    if i < 0 or j < 0 or i >= n or j >= n then return end
+    local key = i * 1000 + j
+    if bx.marks[key] or bx.count >= GD.cap then return end
+    local p = scenery(string.format("Groove%d_%d_%d", b.id, i, j), Vector3.new(c + 0.08, 0.04, c + 0.08),
+        Vector3.new(b.x - b.half + (i + 0.5) * c, 0.03, b.z - b.half + (j + 0.5) * c),
+        { Role = "Groove", Color = Color3.fromRGB(196, 170, 120), CanCollide = false, CanQuery = false, CanTouch = false })
+    bx.marks[key] = p
+    bx.count = bx.count + 1
+    bx.dirty = true
+end
+
+local function rake(bx)
+    for _, p in pairs(bx.marks) do p:Destroy() end
+    bx.marks, bx.count, bx.badged, bx.dirty, bx.last = {}, 0, false, true, nil
+end
+
+local function freeBox(bx)
+    if bx.artist then
+        artJob[bx.artist] = (artJob[bx.artist] or 0) + 1
+        if bx.artist.Parent ~= nil then bx.artist:SetAttribute("ArtBox", nil) end
+    end
+    bx.artist, bx.busy, bx.last, bx.pen, bx.dirty = nil, false, nil, true, true
+end
+
+-- A text picture of a box for agents: one character per stud, north at the top, east to the right.
+local function thumbnail(bx)
+    local b = bx.cfg
+    local n = math.floor(b.half * 2)
+    local per = math.floor(1 / GD.cell)
+    local rows = {}
+    for row = n - 1, 0, -1 do
+        local line = {}
+        for col = 0, n - 1 do
+            local on = false
+            for di = 0, per - 1 do
+                for dj = 0, per - 1 do
+                    if bx.marks[(col * per + di) * 1000 + (row * per + dj)] then on = true end
+                end
+            end
+            line[#line + 1] = on and "#" or "."
+        end
+        rows[#rows + 1] = table.concat(line)
+    end
+    return table.concat(rows, "/")
+end
+
+local function publishGardens()
+    for id, bx in pairs(boxes) do
+        if bx.dirty then
+            bx.dirty = false
+            gardensInfo:SetAttribute("Box" .. id .. "Art", thumbnail(bx))
+            gardensInfo:SetAttribute("Box" .. id .. "Marks", bx.count)
+            gardensInfo:SetAttribute("Box" .. id .. "Artist", bx.artist and (bx.artist:GetAttribute("BeachName") or bx.artist.Name) or "")
+            gardensInfo:SetAttribute("Box" .. id .. "Busy", bx.busy)
+        end
+    end
+end
+
+-- Every tick: an artist on the ground inside their box leaves a groove along their path.
+local function drawTick(now)
+    for _, bx in pairs(boxes) do
+        local player = bx.artist
+        if player and player.Parent == nil then
+            freeBox(bx)
+        elseif player then
+            local hrp = hrpOf(player)
+            local onGround = hrp and hrp.Position.Y < 2.95
+            if hrp and onGround and bx.pen and inBox(bx, hrp.Position.X, hrp.Position.Z) then
+                local pos = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+                local from = bx.last or pos
+                local d = (pos - from).Magnitude
+                local steps = math.max(1, math.ceil(d / (GD.cell * 0.5)))
+                if d < 3 then
+                    for k = 1, steps do
+                        local q = from:Lerp(pos, k / steps)
+                        groove(bx, q.X, q.Z)
+                    end
+                else
+                    groove(bx, pos.X, pos.Z)
+                end
+                if d > 0.05 then bx.active = now end
+                bx.last = pos
+                if not bx.badged and bx.count >= GD.badge_marks then
+                    bx.badged = true
+                    announce(string.format("%s drew a picture in the sand (box %d).",
+                        player:GetAttribute("BeachName") or player.Name, bx.cfg.id))
+                    beachEvent("sand_art", player)
+                end
+            else
+                bx.last = nil   -- a jump, or out of the box: the next groove starts fresh
+            end
+            if not bx.busy and now - bx.active > GD.free_after then freeBox(bx) end
+        end
+    end
+end
+
+-- Shapes, as strokes of points around (0, 0) with radius 1; Draw scales them by "size".
+local function shapeStrokes(name)
+    local pts = {}
+    local function add(x, z) pts[#pts + 1] = { x, z } end
+    if name == "circle" then
+        for k = 0, 32 do local a = k / 32 * 2 * math.pi; add(math.cos(a), math.sin(a)) end
+    elseif name == "square" then
+        add(-1, -1); add(1, -1); add(1, 1); add(-1, 1); add(-1, -1)
+    elseif name == "triangle" then
+        add(0, 1); add(0.87, -0.5); add(-0.87, -0.5); add(0, 1)
+    elseif name == "star" then
+        for k = 0, 5 do local a = math.rad(90 + k * 144); add(math.cos(a), math.sin(a)) end
+    elseif name == "heart" then
+        for k = 0, 40 do
+            local t = k / 40 * 2 * math.pi
+            add(16 * math.sin(t) ^ 3 / 17, (13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)) / 17 + 0.15)
+        end
+    elseif name == "spiral" then
+        for k = 0, 60 do local t = k / 60; local a = t * 2.5 * 2 * math.pi; add(t * math.cos(a), t * math.sin(a)) end
+    elseif name == "wave" then
+        for k = 0, 40 do local x = -1 + k / 20; add(x, 0.5 * math.sin(x * 3 * math.pi)) end
+    elseif name == "zigzag" then
+        for k = 0, 6 do add(-1 + k / 3, (k % 2 == 0) and -0.6 or 0.6) end
+    else
+        return nil
+    end
+    return { pts }
+end
+
+-- Walk the strokes (box-local points): the stick is up between strokes. Runs as its own task;
+-- a new move or Draw from the player stops it.
+local function walkStrokes(player, bx, strokes)
+    artJob[player] = (artJob[player] or 0) + 1
+    local job = artJob[player]
+    bx.busy, bx.dirty = true, true
+    player:SetAttribute("ArtBusy", true)
+    task.spawn(function()
+        local c = player.Character
+        local hum = c and c:FindFirstChild("Humanoid")
+        local function go(x, z, timeout)
+            if not hum then return false end
+            local target = Vector3.new(bx.cfg.x + x, 0, bx.cfg.z + z)
+            hum:MoveTo(target)
+            local t = 0
+            while t < timeout do
+                task.wait(0.05)
+                t = t + 0.05
+                if artJob[player] ~= job or bx.artist ~= player then return false end
+                local hrp = hrpOf(player)
+                if not hrp then return false end
+                if Vector3.new(hrp.Position.X - target.X, 0, hrp.Position.Z - target.Z).Magnitude < 0.45 then return true end
+            end
+            return true
+        end
+        local ok = true
+        for _, stroke in ipairs(strokes) do
+            bx.pen = false
+            bx.last = nil
+            if not go(stroke[1][1], stroke[1][2], 12) then ok = false break end
+            bx.pen = true
+            bx.last = nil
+            for k = 2, #stroke do
+                -- walk in short legs so the groove follows the line, not the humanoid's shortcut
+                local a, b = stroke[k - 1], stroke[k]
+                local d = math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2)
+                local legs = math.max(1, math.ceil(d / 1.0))
+                for l = 1, legs do
+                    local f = l / legs
+                    if not go(a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, 4) then ok = false break end
+                end
+                if not ok then break end
+            end
+            if not ok then break end
+        end
+        bx.pen = true
+        if artJob[player] == job then
+            bx.busy, bx.dirty = false, true
+            bx.active = os.clock()
+            publishGardens()   -- the finished picture first, so whoever waits on ArtBusy sees it
+            player:SetAttribute("ArtBusy", false)
+            result(player, ok and "DrawDone" or "DrawStopped")
+        end
+    end)
+end
+
+function doDraw(player, data)
+    data = type(data) == "table" and data or {}
+    local mine = boxOf(player)
+    if data.stop or (data.toggle and mine) then
+        if mine then freeBox(mine) end
+        player:SetAttribute("ArtBusy", false)
+        return result(player, mine and "DrawStopped" or "DrawFailed:NotDrawing")
+    end
+    local hrp = hrpOf(player)
+    if not hrp then return result(player, "DrawFailed:NoCharacter") end
+    local id = tonumber(data.box)
+    if not id then   -- the box you're in, or the nearest
+        local best, bd = nil, math.huge
+        for bid, bx in pairs(boxes) do
+            local d = Vector3.new(hrp.Position.X - bx.cfg.x, 0, hrp.Position.Z - bx.cfg.z).Magnitude
+            if d < bd then best, bd = bid, d end
+        end
+        id = best
+    end
+    local bx = boxes[id]
+    if not bx then return result(player, "DrawFailed:NoSuchBox") end
+    if Vector3.new(hrp.Position.X - bx.cfg.x, 0, hrp.Position.Z - bx.cfg.z).Magnitude > bx.cfg.half + GD.near then
+        return result(player, "DrawFailed:TooFar")
+    end
+    if bx.artist and bx.artist ~= player and bx.artist.Parent ~= nil then
+        return result(player, "DrawFailed:Taken")
+    end
+    if mine and mine ~= bx then freeBox(mine) end
+    if bx.artist ~= player then
+        bx.artist, bx.badged, bx.last, bx.pen = player, bx.count >= GD.badge_marks, nil, true
+        player:SetAttribute("ArtBox", id)
+    end
+    bx.active, bx.dirty = os.clock(), true
+    -- A shape or strokes: the world walks them for you.
+    local strokes = nil
+    if data.shape then
+        local unit = shapeStrokes(string.lower(tostring(data.shape)))
+        if not unit then return result(player, "DrawFailed:NoSuchShape") end
+        local size = tonumber(data.size) or GD.size.default
+        size = math.min(math.max(size, GD.size.min), math.min(GD.size.max, bx.cfg.half - 0.5))
+        local cx = math.min(math.max(tonumber(data.x) or 0, -bx.cfg.half), bx.cfg.half)
+        local cz = math.min(math.max(tonumber(data.z) or 0, -bx.cfg.half), bx.cfg.half)
+        strokes = {}
+        for _, st in ipairs(unit) do
+            local out = {}
+            for _, pt in ipairs(st) do out[#out + 1] = { cx + pt[1] * size, cz + pt[2] * size } end
+            strokes[#strokes + 1] = out
+        end
+    elseif type(data.strokes) == "table" then
+        strokes = {}
+        local total, lim = 0, bx.cfg.half - 0.3
+        for _, st in ipairs(data.strokes) do
+            if #strokes >= GD.max_strokes then break end
+            if type(st) == "table" then
+                local out = {}
+                for _, pt in ipairs(st) do
+                    local x, z = type(pt) == "table" and tonumber(pt[1]), type(pt) == "table" and tonumber(pt[2])
+                    if x and z and total < GD.max_points then
+                        out[#out + 1] = { math.min(math.max(x, -lim), lim), math.min(math.max(z, -lim), lim) }
+                        total = total + 1
+                    end
+                end
+                if #out >= 2 then strokes[#strokes + 1] = out end
+            end
+        end
+        if #strokes == 0 then return result(player, "DrawFailed:NoStrokes") end
+    end
+    -- clamp shape points into the box too
+    if strokes then
+        local lim = bx.cfg.half - 0.3
+        for _, st in ipairs(strokes) do
+            for _, pt in ipairs(st) do
+                pt[1] = math.min(math.max(pt[1], -lim), lim)
+                pt[2] = math.min(math.max(pt[2], -lim), lim)
+            end
+        end
+        walkStrokes(player, bx, strokes)
+        return result(player, "DrawStarted")
+    end
+    return result(player, "DrawReady")
+end
+
+function doRake(player)
+    local bx = boxOf(player)
+    if not bx then return result(player, "RakeFailed:NotDrawing") end
+    if bx.busy then artJob[player] = (artJob[player] or 0) + 1; bx.busy = false; player:SetAttribute("ArtBusy", false) end
+    rake(bx)
+    return result(player, "RakeDone")
+end
+
 local lifeguardTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     local now = os.clock()
+    drawTick(now)
     lifeguardTimer = lifeguardTimer + dt
     if lifeguardTimer >= 1 then
         lifeguardTimer = 0
         lifeguard(now)
         lighthouseTop()
+        publishGardens()
     end
 
     for _, player in ipairs(Players:GetPlayers()) do

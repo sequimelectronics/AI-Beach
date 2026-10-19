@@ -312,6 +312,53 @@ class LiveLighthouseTest(_LiveBeachWorld, unittest.TestCase):
 
 
 @unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveSandArtTest(_LiveBeachWorld, unittest.TestCase):
+    """Sand art (10-18): a shape walked for you leaves a picture agents can read; the box is yours
+    (another can't draw in it, and their steps leave nothing); a big enough picture earns the badge;
+    Rake clears it."""
+
+    def test_draw_a_heart_and_rake_it(self):
+        a = self.adapter("Sandy")
+        b = self.adapter("Pebble")
+        a.look()
+        b.look()
+        self.assertIn("sand gardens: box 1 at 22,0", a.map_card())
+        for stop in ([16, 0, 0],):
+            a.act("MoveTo", {"position": stop})
+            b.act("MoveTo", {"position": [16, 0, 4]})
+        view = a.look()
+        self.assertIn("in the Sand Gardens", view)
+        self.assertIn("box 1 at 22,0 (14x14), free, 0 grooves: smooth sand", view)
+        res = a.act("Draw", {"box": 1, "shape": "heart", "size": 5})
+        self.assertTrue(res.startswith("Drew heart in box 1"), res)
+        rows = [line for line in res.splitlines()[2:] if set(line) <= {"#", "."}]
+        self.assertEqual(len(rows), 14, res)
+        marks = int(re.search(r"(\d+) grooves", res).group(1))
+        self.assertGreater(marks, 40, res)
+        # Box 1 is Sandy's: Pebble can't draw there, and Pebble walking through leaves nothing.
+        self.assertIn("another artist", b.act("Draw", {"box": 1}))
+        b.act("MoveTo", {"position": [26, 0, -4]})
+        b.act("MoveTo", {"position": [18, 0, 4]})
+        self.assertIn(f"{marks} grooves", a.look())
+        heard = ""
+        for _ in range(6):
+            heard += a.hear()
+            if "drew a picture in the sand" in heard:
+                break
+            time.sleep(1)
+        self.assertIn("Sandy drew a picture in the sand (box 1).", heard)
+        pid = self.beach.by_name("Sandy").id
+        for _ in range(15):
+            if "sand-art" in self.beach.badges.today(pid):
+                break
+            time.sleep(1)
+        self.assertIn("sand-art", self.beach.badges.today(pid))
+        self.assertEqual(a.act("Rake", {}).splitlines()[0], "Raked your box smooth")
+        time.sleep(1.5)
+        self.assertIn("0 grooves: smooth sand", a.look())
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
 class LiveLifeguardTest(_LiveBeachWorld, unittest.TestCase):
     """The lifeguard (10-18): a ball left outside the Ball Court, untouched and still, is picked up and
     hidden on the island's sand, with a hint. The wait is cut to a few seconds here."""

@@ -651,6 +651,16 @@ function createEntityVisual(entity) {
     return mesh
   }
 
+  // The Sand Gardens: the box's smooth sand, its frame, and the grooves (many: no shadows, cheap material).
+  if (role === 'Groove' || role === 'GardenSand' || role === 'GardenFrame') {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(size[0], size[1], size[2]),
+      new THREE.MeshLambertMaterial({ color: role === 'Groove' ? 0xb8955c : role === 'GardenSand' ? 0xf2e2b8 : 0x966c46 }),
+    )
+    mesh.receiveShadow = role !== 'Groove'
+    return mesh
+  }
+
   if (role === 'GoalPost') {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(size[0], size[1], size[2]),
@@ -722,6 +732,7 @@ function createEntityVisual(entity) {
 //   click the sand (or a step, the pier, the dune)  -> your character walks there
 //   click or right-click a person                   -> the camera follows them; again, or Esc, to stop
 //   Space                                            -> jump (the dune's ledges)
+//   D / R / 1-8 (in the Sand Gardens)               -> draw in the nearest box, rake it, draw a shape
 // A drag still turns the camera: only a short, still click counts.
 function createPlayControls(ctx, camera, scene, entityObjects) {
   const canvas = ctx.canvas
@@ -825,6 +836,12 @@ function createPlayControls(ctx, camera, scene, entityObjects) {
     const t = ev.target
     if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
     if (ev.code === 'Space' && session) { ev.preventDefault(); void send('Jump') }
+    else if (session && (ev.key === 'd' || ev.key === 'D')) void send('Draw', { toggle: true })
+    else if (session && (ev.key === 'r' || ev.key === 'R')) void send('Rake')
+    else if (session && /^[1-8]$/.test(ev.key)) {
+      const shapes = ['circle', 'square', 'triangle', 'star', 'heart', 'spiral', 'wave', 'zigzag']
+      void send('Draw', { shape: shapes[Number(ev.key) - 1] })
+    }
     else if (ev.key === 'Escape') unfollow()
   }
 

@@ -50,3 +50,8 @@ z = [10.0, 58.0]
 name = "the Pier"
 x = [10.0, 58.0]
 z = [-58.0, -10.0]
+
+[[speech.regions]]
+name = "the Sand Gardens"
+x = [10.0, 58.0]
+z = [-10.0, 10.0]

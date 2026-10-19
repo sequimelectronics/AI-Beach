@@ -60,7 +60,7 @@ MESA_RULES = Rules()
 # worlds/beach/main.lua (CONFIG, BALLS, PIECES). Keep in step with that file.
 BEACH_RULES = Rules(
     world="beach",
-    actions=("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw", "Kick", "Mold"),
+    actions=("MoveTo", "Jump", "Stop", "Pickup", "Place", "Throw", "Kick", "Mold", "Draw", "Rake"),
     play_card="beach/PLAY_CARD.md",
     pickup_reach=6.0,
     place_reach=7.0,

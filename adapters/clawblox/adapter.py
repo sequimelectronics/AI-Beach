@@ -726,6 +726,59 @@ class ClawbloxAdapter:
                 tail += " The ball goes back to the center."
         return f"Kicked the {kind} {heading} (power {power:g}){clipped}{tail}"
 
+    def _gardens_line(self, snap: Snapshot, box: int | None) -> str:
+        from .compact import gardens_from, garden_text
+        for g in gardens_from(snap, beach_layout(snap)):
+            if box is None or g["box"] == box:
+                return "\n" + "\n".join(garden_text(g))
+        return ""
+
+    def _act_draw(self, data: dict) -> str:
+        keep = {k: data[k] for k in ("box", "shape", "size", "x", "z", "strokes", "stop", "toggle") if k in data}
+        snap = self._send("Draw", keep)
+        code = snap.last_action_result or ""
+        attrs = snap.raw.get("player", {}).get("attributes", {})
+        box = attrs.get("ArtBox")
+        box = int(box) if isinstance(box, (int, float)) else box
+        if code == "DrawStopped":
+            return "Stopped drawing (the box is free again; your picture stays)"
+        if code == "DrawReady":
+            return (f"You're box {box}'s artist: walk inside it to draw a groove (a jump lifts the stick). "
+                    f'Draw {{"stop": true}} when done')
+        if code == "DrawStarted":
+            # The world walks the shape for you; wait for it to finish (a move of yours stops it).
+            waited = 0.0
+            while waited < 120:
+                self.sleep(max(self.poll, 0.5))
+                waited += max(self.poll, 0.5)
+                snap = self._observe()
+                a = snap.raw.get("player", {}).get("attributes", {})
+                if not a.get("ArtBusy"):
+                    break
+            what = data.get("shape") or "your strokes"
+            done = (snap.last_action_result or "") == "DrawDone"
+            return (f"{'Drew' if done else 'Stopped drawing'} {what} in box {box}" + self._gardens_line(snap, box))
+        if code == "DrawFailed:Taken":
+            return "Draw failed: that box has another artist; try the other box"
+        if code == "DrawFailed:TooFar":
+            return "Draw failed: walk to the Sand Gardens first (see MAP: sand gardens)"
+        if code == "DrawFailed:NoSuchShape":
+            return "Draw failed: shape must be circle, square, triangle, star, heart, spiral, wave or zigzag"
+        if code == "DrawFailed:NotDrawing":
+            return "Draw: you weren't drawing"
+        if code.startswith("DrawFailed"):
+            return f"Draw failed: {code.split(':', 1)[-1]}"
+        return f"Draw: the world reported no result (still '{code}'); look to check"
+
+    def _act_rake(self, data: dict) -> str:
+        snap = self._send("Rake", {})
+        code = snap.last_action_result or ""
+        if code == "RakeDone":
+            return "Raked your box smooth"
+        if code == "RakeFailed:NotDrawing":
+            return 'Rake failed: you rake only your own box; Draw {"box": n} first'
+        return f"Rake: {code or 'no result'}"
+
     def _act_mold(self, data: dict) -> str:
         shape = str(data.get("shape", "")).lower()
         if shape not in self.rules.piece_shapes:

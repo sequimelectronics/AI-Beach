@@ -139,6 +139,30 @@ def castles_from(snap: Snapshot, layout: dict | None) -> list[dict]:
     return out
 
 
+def gardens_from(snap: Snapshot, layout: dict | None) -> list[dict]:
+    """The Sand Gardens' boxes (the world's SandGardens folder): artist, grooves, and a text picture."""
+    f = snap.folders.get("SandGardens")
+    boxes = ((layout or {}).get("gardens") or {}).get("boxes") or []
+    if f is None or not boxes:
+        return []
+    out = []
+    for b in boxes:
+        n = b["id"]
+        art = str(f.attrs.get(f"Box{n}Art") or "")
+        out.append({"box": n, "x": b["x"], "z": b["z"], "size": b["half"] * 2,
+                    "artist": str(f.attrs.get(f"Box{n}Artist") or ""), "busy": bool(f.attrs.get(f"Box{n}Busy")),
+                    "marks": int(f.attrs.get(f"Box{n}Marks") or 0), "rows": art.split("/") if art else []})
+    return out
+
+
+def garden_text(g: dict) -> list[str]:
+    who = f"artist {g['artist']}" + (" (drawing)" if g["busy"] else "") if g["artist"] else "free"
+    head = f"box {g['box']} at {g['x']:g},{g['z']:g} ({g['size']:g}x{g['size']:g}), {who}, {g['marks']} grooves"
+    if not g["marks"]:
+        return [head + ": smooth sand"]
+    return [head + " (north up, east right, 1 char = 1 stud):"] + g["rows"]
+
+
 def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[int, str],
                  rules: Rules = MESA_RULES, near: int = NEAR_COUNT) -> dict:
     """The compact view as a plain dict (encoded as text or JSON below).
@@ -187,6 +211,8 @@ def compact_view(snap: Snapshot, statics: list[Entity], names_by_entity: dict[in
             for p in players_in_radius(snap, names_by_entity)
         ],
         "watching": {"spot": spot, "names": watching} if watching else None,
+        # The pictures cost a few hundred tokens: only in the Sand Gardens, where you'd look at them.
+        "gardens": gardens_from(snap, layout) if region_at(layout, snap.me) == "the Sand Gardens" else [],
     }
 
 
@@ -266,6 +292,12 @@ def view_text(v: dict) -> str:
         lines.append("players: nobody else nearby")
     if v.get("watching"):
         lines.append(f"watching from {v['watching']['spot']}: {', '.join(v['watching']['names'])}")
+    if v.get("gardens"):
+        lines.append('sand art: Draw {"box": n} = walk to draw (jump lifts the stick); Draw {"box": n, "shape": '
+                     '"circle|square|triangle|star|heart|spiral|wave|zigzag", "size": 1.5-6.5, "x", "z"}; Draw {"box": n, '
+                     '"strokes": [[[x,z],...],...]} (box-local, -6.5..6.5); Draw {"stop": true}; Rake {} clears yours')
+        for g in v["gardens"]:
+            lines.extend(garden_text(g))
     return "\n".join(lines)
 
 
@@ -405,6 +437,11 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
         d, e = pier["deck"], pier["finish"]
         lines.append(f"pier: a plank deck over the sea x {d['x'][0]:g}..{d['x'][1]:g}, z {d['z'][0]:g}..{d['z'][1]:g}, "
                      f"widening at its end x {e['x'][0]:g}..{e['x'][1]:g}, z {e['z'][0]:g}..{e['z'][1]:g}; top y={pier['top_y']:g} (a step up)")
+    gd = layout.get("gardens")
+    if gd and gd.get("boxes"):
+        lines.append("sand gardens: " + "; ".join(
+            f"box {b['id']} at {b['x']:g},{b['z']:g} ({b['half'] * 2:g}x{b['half'] * 2:g})" for b in gd["boxes"])
+            + ". Draw there; your look shows each box's picture while you're in the Sand Gardens")
     sp = layout.get("signpost")
     if sp:
         lines.append(f"signpost: in the middle of the Plaza at {sp['x']:g},{sp['z']:g}, a board pointing to each area")

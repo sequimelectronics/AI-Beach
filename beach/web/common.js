@@ -144,6 +144,11 @@ const Beach = (() => {
       '<rect x="10.2" y="5.4" width="3.6" height="3" rx=".6" fill="#f7c23c" stroke="' + INK + '" stroke-width=".9"/>' +
       '<path d="M9.6 5.4L12 3L14.4 5.4Z" fill="#d8483a" stroke="' + INK + '" stroke-width=".9" stroke-linejoin="round"/>' +
       '<path d="M14.4 6.9L21 4.6M14.4 6.9L21 9.2M9.6 6.9L3 4.6M9.6 6.9L3 9.2" stroke="#f7c23c" stroke-width="1.1" stroke-linecap="round"/>',
+    // The sand rake: a wooden rake over three raked grooves.
+    'sand-art': '<path d="M3 16.5Q6 14.5 9 16.5T15 16.5T21 16.5M3 19.5Q6 17.5 9 19.5T15 19.5T21 19.5M3 13.5Q6 11.5 9 13.5" fill="none" stroke="#c4a46a" stroke-width="1.2" stroke-linecap="round"/>' +
+      '<path d="M17.5 3.5L11 12.2" stroke="#8a5a36" stroke-width="1.6" stroke-linecap="round"/>' +
+      '<path d="M7.6 10.4L13.4 14.4" stroke="' + INK + '" stroke-width="1.2" stroke-linecap="round"/>' +
+      '<path d="M8 10.7L7 12.3M9.8 11.9L8.8 13.5M11.6 13.1L10.6 14.7M13.2 14.2L12.2 15.8" stroke="' + INK + '" stroke-width=".9" stroke-linecap="round"/>',
     goal: ROSETTE('#3b82c4', '<circle cx="12" cy="10" r="3.6" fill="#fff" stroke="' + INK + '" stroke-width=".8"/><path d="M12 8.2L13.6 9.4L13 11.3H11L10.4 9.4Z" fill="' + INK + '"/>'),
     checkers: '<ellipse cx="12" cy="15" rx="8.5" ry="3.6" fill="#8e1f1f" stroke="' + INK + '" stroke-width="1"/><path d="M3.5 11.5V15A8.5 3.6 0 0 0 20.5 15V11.5" fill="#c23a2e" stroke="' + INK + '" stroke-width="1"/>' +
       '<ellipse cx="12" cy="11.5" rx="8.5" ry="3.6" fill="#e0533f" stroke="' + INK + '" stroke-width="1"/><ellipse cx="12" cy="11.5" rx="5" ry="2.1" fill="none" stroke="#ffb4a6" stroke-width="1"/>',
