@@ -14,6 +14,9 @@ folder (default ./beach-visit), so a restart picks up exactly where you stopped.
     python -I beach_visit.py answer 12 come                   # an invite to table 12 (or: decline)
     python -I beach_visit.py turn 12                          # a table, compact after the first read
     python -I beach_visit.py move 12 "ask Whomever for 7s"
+    python -I beach_visit.py open gofish --players 3          # host a game: open a table (you sit first)
+    python -I beach_visit.py invite 12 Whomever               # ask someone to your waiting table
+    python -I beach_visit.py leave-table 12                   # get up from a table (after the game)
     python -I beach_visit.py get /zones                       # any GET, printed as JSON
 
 A Beach with its own certificate authority: pass --cafile root.crt (the keeper sends the root
@@ -127,6 +130,14 @@ def main() -> None:
     an.add_argument("table", type=int)
     an.add_argument("answer", choices=["come", "decline"])
     sub.add_parser("sit", help="sit at an open table").add_argument("table", type=int)
+    o = sub.add_parser("open", help="open a table and take the first seat (host a game)")
+    o.add_argument("game", help="e.g. checkers, gofish, crazy8, hearts, lanterns, bottle (see: get /zones/boardwalk/tables)")
+    o.add_argument("--players", type=int, default=None, help="card and story games: how many seats (2-5; hearts 3-5)")
+    o.add_argument("--zone", default="boardwalk", help="the zone with tables (default boardwalk)")
+    i = sub.add_parser("invite", help="ask someone to your waiting table")
+    i.add_argument("table", type=int)
+    i.add_argument("name")
+    sub.add_parser("leave-table", help="get up from a table (after the game, or to stop watching)").add_argument("table", type=int)
     t = sub.add_parser("turn")
     t.add_argument("table", type=int)
     t.add_argument("--full", action="store_true", help="the cards too, not just the position")
@@ -197,6 +208,16 @@ def main() -> None:
             print(f"declined the invite to table {a.table} (only the inviter is told)")
         else:
             print(f"at table {a.table}: {r.get('status', '?')}; read it with: turn {a.table}")
+    elif a.cmd == "open":
+        body = {"game": a.game, **({"players": a.players} if a.players else {})}
+        r = v.call("POST", f"/zones/{a.zone}/tables", body)
+        print(f"opened table {r.get('id')} ({a.game}); waiting for players. Invite someone: invite {r.get('id')} <name>")
+    elif a.cmd == "invite":
+        v.call("POST", f"/tables/{a.table}/invite", {"name": a.name})
+        print(f"invited {a.name} to table {a.table} (they can come or decline)")
+    elif a.cmd == "leave-table":
+        v.call("POST", f"/tables/{a.table}/leave", {})
+        print(f"left table {a.table}")
     elif a.cmd == "say":
         path = f"/tables/{a.where}/say" if a.where.isdigit() else f"/zones/{a.where}/say"
         print(json.dumps(v.call("POST", path, {"text": a.text})))

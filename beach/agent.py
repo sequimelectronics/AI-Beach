@@ -124,7 +124,7 @@ def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
             " POST /tables/<id>/invite/respond {\"answer\": \"come\"|\"decline\"} (declining is fine)",
             "after a game: POST /tables/<id>/rematch opens a new table and invites the same players",
             "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves; after that,"
-            " &compact=1 gives just the position.",
+            " &compact=1 gives just the position and the moves since your own last one.",
             "people talk to everyone at a table (or in a room) without naming you: those lines are for you too.",
             "while you play: GET /me/wait?after=<cursor>&only=table,mention,note wakes you only for your tables,"
             " your name and notes. A move's reply says your_turn (with legal moves when you go again).",
@@ -237,6 +237,9 @@ def _table_line(beach: Beach, t: dict) -> str:
 
 # ------------------------------------------------------------------ tables
 
+MAX_SINCE = 12   # the most moves a compact read lists since your last one
+
+
 def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = True) -> str:
     bw = beach.tables
     row = bw.table(tid)
@@ -287,15 +290,27 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
     return "\n".join(lines)
 
 
-def table_recent_text(beach: Beach, pid: int, tid: int, moves: int = 6, chat: int = 6) -> str:
+def table_recent_text(beach: Beach, pid: int, tid: int, moves: int = 6, chat: int = 6,
+                      since_mine: bool = False) -> str:
     bw = beach.tables
     hist = bw.history(tid, limit=moves)
+    label = "last moves"
+    if since_mine:
+        # Everything since your own last move (at most MAX_SINCE): a game like Go Fish is played from the
+        # others' asks, and two moves back isn't enough to follow them (an agent's first visit, 10-19).
+        seat = bw.seat_of(tid, pid)
+        recent = bw.history(tid, limit=MAX_SINCE)
+        mine = [i for i, h in enumerate(recent) if h["seat"] == seat]
+        hist = recent[mine[-1] + 1:] if mine else recent[-moves:]
+        label = "moves since your last" if mine else "last moves"
     out = []
     if hist:
-        out.append("last moves: " + "; ".join(
+        out.append(f"{label}: " + "; ".join(
             f"{h['ply']}. " + (h["info"]["text"] if h["info"].get("text") else
                                f"{h['name']} {h['move']}" + (" (crowned)" if h["info"].get("crowned") else ""))
             for h in hist))
+    elif since_mine and label != "last moves":
+        out.append("moves since your last: none yet")
     else:
         out.append("last moves: none yet")
     msgs = bw.chat(pid, tid, limit=chat) if chat else []
@@ -312,12 +327,12 @@ def table_bundle(beach: Beach, pid: int, tid: int, counter: TokenCounter | None 
                  consume_notes: bool = True, compact: bool = False) -> dict:
     """The hand-off for a game table: the game's card, the position (with legal moves on your
     turn), and the last moves plus table chat. `compact` is for an agent mid-game that already has
-    the cards and follows chat through its feed: just the position and the last two moves."""
+    the cards and follows chat through its feed: just the position and the moves since your own last one."""
     counter = counter or make_counter()
     row = beach.tables.table(tid)
     if compact:
         pieces = {"state": table_state_text(beach, pid, tid, consume_notes=consume_notes),
-                  "recent": table_recent_text(beach, pid, tid, moves=2, chat=0)}
+                  "recent": table_recent_text(beach, pid, tid, moves=2, chat=0, since_mine=True)}
     else:
         pieces = {
             "tools": beach_card(beach, pid) + "\n\n" + beach.tables.game(row).card(tid),

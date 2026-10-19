@@ -49,6 +49,25 @@ class NewGamesTests(CardTableCase):
             with self.assertRaises(Exception):
                 g.play(s, copied)
 
+    def test_compact_read_lists_the_moves_since_yours(self):
+        # 10-19: Go Fish is played from the others' asks; a compact read shows everything since your own move.
+        tid = self.table("gofish", seed=70_000_007)
+        moved = []
+        for _ in range(30):
+            v = self.bw.view(self.p["Sandy"].id, tid)
+            if v["status"] != "playing":
+                break
+            who = NAMES[v["to_move"]]
+            if who == "Sandy" and len(moved) > 3 and moved[-1] != "Sandy":
+                break
+            self.bw.move(self.p[who].id, tid, self.bw.view(self.p[who].id, tid)["legal"][0])
+            moved.append(who)
+        recent = table_bundle(self.beach, self.p["Sandy"].id, tid, consume_notes=False, compact=True)["recent"]["text"]
+        self.assertTrue(recent.startswith("moves since your last: "), recent)
+        last_mine = max(i for i, w in enumerate(moved) if w == "Sandy")
+        others = len(moved) - last_mine - 1
+        self.assertEqual(recent.count("; ") + 1, others, recent)
+
     def test_registered_and_offered(self):
         for gid in ("lanterns", "bottle", "hearts"):
             self.assertIn(gid, GAMES)
