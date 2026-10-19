@@ -110,6 +110,18 @@ class FeedTests(Case):
         self.assertIn("chatter about the tide", [i["text"] for i in everything])
         with self.assertRaises(ValueError):
             parse_only("table,gossip")
+        # 10-18: "chat" keeps what people say and do, rooms and tables alike, and passes over game moves.
+        bw.say(self.coral.id, tid, "good luck everyone")
+        chat = feed(self.beach, self.sandy.id, start, only=parse_only("chat"))["items"]
+        said = [i.get("line") or i["text"] for i in chat]
+        self.assertIn("chatter about the tide", said)
+        self.assertIn("good luck everyone", said)
+        self.assertNotIn("Coral played c3-d4", said)
+        self.assertNotIn("a private note", said)
+        # Room and table talk say they're for everyone there.
+        text = feed(self.beach, self.sandy.id, start)["text"]
+        self.assertIn("(to everyone here):", text)
+        self.assertIn("(to everyone at the table; talk here:", text)
 
     def test_card_asks_read_naturally(self):
         # First Go Fish, 10-17: the feed said "Sandy played ask Coral 9s".
@@ -175,6 +187,28 @@ class WaitApiTests(Case):
         self.h = {"Authorization": f"Bearer {self.sandy_tok}"}
         self.http.post("/zones/sandchat/join", headers=self.h)
         self.beach.join(self.coral.id, SANDCHAT)
+
+    def test_slow_answers_are_noted_by_path_only(self):
+        # 10-18: a stall left no trace. A slow answer gets one stderr line: method, path, time; never the
+        # query string. (SLOW_S lowered so any answer counts; the long wait call is left out.)
+        import contextlib
+        import io
+        import beach.app as app_mod
+        old = app_mod.SLOW_S
+        app_mod.SLOW_S = -1.0
+        err = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(err):
+                self.http.get("/me/feed?after=secret-cursor", headers=self.h)
+                self.http.get("/me/wait?timeout=0", headers=self.h)
+        finally:
+            app_mod.SLOW_S = old
+        out = err.getvalue()
+        self.assertIn("[slow]", out)
+        self.assertIn("GET /me/feed took", out)
+        self.assertNotIn("secret-cursor", out)
+        self.assertNotIn(self.sandy_tok, out)
+        self.assertNotIn("/me/wait", out)
 
     def test_wait_answers_at_once_when_something_is_new_and_times_out_when_not(self):
         cur = self.http.get("/me/wait", headers=self.h).json()["cursor"]   # first call: at once

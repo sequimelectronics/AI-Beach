@@ -573,6 +573,52 @@
       el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save HTTPS settings' }))))
   }
 
+  // Chat actions (/me wave, /me slap @Name): the shorthands everyone can use in chat. Each has one or more
+  // wordings, picked at random; {actor} is whoever does it, {target} whoever it's aimed at (10-18).
+  async function actionsSection () {
+    const box = el('div', {})
+    async function render () {
+      const all = await api('GET', '/admin/actions')
+      const rows = Object.entries(all).map(([name, a]) => el('li', { class: 'card' },
+        el('div', { class: 'row' },
+          el('strong', { text: '/me ' + name + (a.targeted ? ' @Name' : '') }),
+          el('button', {
+            class: 'quiet', type: 'button', text: 'Remove',
+            onclick: async () => {
+              if (!confirm('Remove /me ' + name + '?')) return
+              try { await api('DELETE', '/admin/actions/' + encodeURIComponent(name)); render() } catch (e) { toast(e.message) }
+            }
+          })),
+        el('ul', {}, a.variants.map(v => el('li', { class: 'hint', text: v })))))
+      box.replaceChildren(el('ul', { class: 'table-list' }, rows))
+    }
+    const name = el('input', { type: 'text', id: 'act-name', maxlength: '16', placeholder: 'slap', pattern: '[a-z][a-z0-9]*' })
+    const aimed = el('input', { type: 'checkbox', id: 'act-aimed', checked: true })
+    const words = el('textarea', { id: 'act-words', rows: '3', placeholder: '{actor} slaps {target} around a bit with a large trout.' })
+    await render()
+    return el('section', { class: 'card' },
+      el('h2', { text: 'Chat actions' }),
+      el('p', { class: 'hint', text: 'Shorthands for /me in chat. Write one wording per line: {actor} is who does it, {target} who it is aimed at. Adding a name that exists replaces it.' }),
+      box,
+      el('form', {
+        onsubmit: async (ev) => {
+          ev.preventDefault()
+          const variants = words.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+          try {
+            await api('PUT', '/admin/actions/' + encodeURIComponent(name.value.trim().toLowerCase()), { targeted: aimed.checked, variants })
+            name.value = ''; words.value = ''
+            toast('Saved.')
+            render()
+          } catch (e) { toast(e.message) }
+        }
+      },
+      el('div', { class: 'settings-grid' },
+        el('label', { for: 'act-name' }, 'Name', name, el('span', { class: 'hint', text: 'Lowercase letters and digits.' })),
+        el('label', { for: 'act-words' }, 'Wordings', words)),
+      el('p', {}, el('label', { for: 'act-aimed' }, aimed, ' Aimed at someone (/me name @Name)')),
+      el('p', {}, el('button', { class: 'primary', type: 'submit', text: 'Save action' }))))
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     const map = await Beach.start('keeper')
     if (!map) return
@@ -580,6 +626,6 @@
     if (!map.me.admin) { main.replaceChildren(el('h1', { text: 'Keeper' }), el('p', { text: 'This page is for the Beach-keeper.' })); return }
     settings = await api('GET', '/admin/settings')
     BADGE_LIST = (await api('GET', '/admin/badges')).badges
-    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await visitSection(), await zoneSection(), settingsSection(), await httpsSection())
+    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await visitSection(), await zoneSection(), await actionsSection(), settingsSection(), await httpsSection())
   })
 })()

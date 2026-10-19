@@ -66,7 +66,13 @@ def plural(r: str) -> str:
 
 
 def sort_hand(cards: list[str]) -> list[str]:
+    """By suit, then rank: for games played by suit (Crazy Eights)."""
     return sorted(cards, key=lambda c: (SUITS.index(suit(c)), RANKS.index(rank(c))))
+
+
+def sort_by_rank(cards: list[str]) -> list[str]:
+    """By rank, then suit: for games played in sets (Go Fish), so a pair or three sit together (10-18)."""
+    return sorted(cards, key=lambda c: (RANKS.index(rank(c)), SUITS.index(suit(c))))
 
 
 def shuffled(cards: list[str], seed: int, n: int) -> list[str]:

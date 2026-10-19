@@ -70,6 +70,10 @@ class NotationTests(unittest.TestCase):
                          ["7H", "10D", "QS", None, None, None])
         self.assertEqual([parse_rank(x) for x in ("7s", "7", "Aces", "queens", "10s", "jack", "1s")],
                          ["7", "7", "A", "Q", "10", "J", None])
+        # 10-18: Go Fish hands by rank, so pairs sit together; Crazy Eights keeps suits together.
+        from beach.games.cards import sort_by_rank, sort_hand
+        self.assertEqual(sort_by_rank(["2H", "QH", "2D", "6D", "6C"]), ["2H", "2D", "6D", "6C", "QH"])
+        self.assertEqual(sort_hand(["2H", "QH", "2D"]), ["2H", "QH", "2D"])
 
     def test_registered_with_cards_short_enough(self):
         from beach.agent import make_counter

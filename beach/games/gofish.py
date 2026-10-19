@@ -24,7 +24,7 @@ import json
 
 from . import IllegalMove
 from .cards import (RANKS, CardGame, deck, new_seed, number_word, parse_rank, players_option,
-                    plural, rank, shuffled, sort_hand)
+                    plural, rank, shuffled, sort_by_rank)
 
 
 class GoFish(CardGame):
@@ -43,7 +43,7 @@ class GoFish(CardGame):
         for _ in range(per):
             for s in range(n):
                 hands[s].append(stock.pop())
-        s = {"players": n, "hands": [sort_hand(h) for h in hands], "stock": stock,
+        s = {"players": n, "hands": [sort_by_rank(h) for h in hands], "stock": stock,
              "books": [[] for _ in range(n)], "turn": 0, "ply": 0, "seed": seed, "shuffles": 0,
              "out": [], "over": None, "names": []}
         for seat in range(n):
@@ -142,7 +142,7 @@ class GoFish(CardGame):
         again = False
         if canon == "draw":
             card = s["stock"].pop()
-            s["hands"][seat] = sort_hand(s["hands"][seat] + [card])
+            s["hands"][seat] = sort_by_rank(s["hands"][seat] + [card])
             info["text"] = f"{me} drew a card"
             info["private"] = {"drew": card}
             again = True
@@ -152,13 +152,13 @@ class GoFish(CardGame):
             got = [c for c in s["hands"][q] if rank(c) == r]
             if got:
                 s["hands"][q] = [c for c in s["hands"][q] if rank(c) != r]
-                s["hands"][seat] = sort_hand(s["hands"][seat] + got)
+                s["hands"][seat] = sort_by_rank(s["hands"][seat] + got)
                 info["text"] = f"{me} asked {them} for {plural(r)} and got {number_word(len(got))}"
                 info["got"] = len(got)
                 again = True
             elif s["stock"]:
                 card = s["stock"].pop()
-                s["hands"][seat] = sort_hand(s["hands"][seat] + [card])
+                s["hands"][seat] = sort_by_rank(s["hands"][seat] + [card])
                 if rank(card) == r:
                     a_n = "an" if r in ("A", "8") else "a"
                     info["text"] = f"{me} asked {them} for {plural(r)}: go fish! {me} fished {a_n} {r} and goes again"
@@ -216,7 +216,7 @@ class GoFish(CardGame):
     def text(self, state: dict, seat: int | None) -> str:
         lines = [f"stock: {len(state['stock'])}", self._counts_line(state, seat), self._books_line(state)]
         if seat is not None and seat not in state["out"]:
-            lines.append("your hand: " + (" ".join(state["hands"][seat]) or "empty"))
+            lines.append("your hand: " + (" ".join(sort_by_rank(state["hands"][seat])) or "empty"))
         return "\n".join(lines)
 
     def view(self, state: dict, seat: int | None) -> dict:
@@ -224,7 +224,7 @@ class GoFish(CardGame):
         return {"kind": "cards", "stock": len(state["stock"]),
                 "counts": [len(h) for h in state["hands"]], "books": [list(b) for b in state["books"]],
                 "out": list(state["out"]), "turn": self.to_move(state), "ply": state["ply"],
-                "hand": list(state["hands"][seat]) if mine else None}
+                "hand": sort_by_rank(state["hands"][seat]) if mine else None}
 
     def card(self, table_id: int) -> str:
         t = f"/tables/{table_id}"

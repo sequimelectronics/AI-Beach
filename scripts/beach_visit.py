@@ -113,7 +113,7 @@ def main() -> None:
     c.add_argument("--print-token", action="store_true",
                    help="also print the token, for a sandbox that forgets files (keep it out of chat)")
     w = sub.add_parser("wait")
-    w.add_argument("--only", default="", help="e.g. table,mention,note (sleep through room chat)")
+    w.add_argument("--only", default="", help="e.g. table,mention,note (sleep through room chat), or chat (what people say, no moves)")
     w.add_argument("--fresh", action="store_true", help="start from now, forgetting the saved cursor")
     w.add_argument("--cursor", default="", help="continue from this cursor (the last 'cursor:' line you kept)")
     w.add_argument("--max-minutes", type=float, default=30,

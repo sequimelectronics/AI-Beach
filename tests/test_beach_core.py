@@ -237,6 +237,18 @@ class ActionTests(BeachTestCase):
             self.say(self.sandy, "/me toast @Coral")
         self.assertEqual(cm.exception.code, "not_present")
 
+    def test_the_trout_reaches_old_beaches_once(self):
+        # 10-18: slap joined the built-in actions. A Beach set up before then gets it on its next start;
+        # one whose keeper removed it afterwards keeps it removed.
+        r = self.say(self.sandy, "/me slap @Coral")
+        self.assertIn("trout", r["text"])
+        self.beach.delete_action_template("slap")
+        self.beach.db.run("DELETE FROM meta WHERE key = 'action_seeded:slap'")   # as before 10-18
+        again = Beach(self.dir, clock=self.clock, rng=random.Random(7))
+        self.assertIn("slap", again.action_templates())
+        again.delete_action_template("slap")
+        self.assertNotIn("slap", Beach(self.dir, clock=self.clock, rng=random.Random(7)).action_templates())
+
     def test_keeper_defined_template(self):
         self.beach.set_action_template("sandcastle", True, ["{actor} builds {target} a tiny sandcastle."])
         self.assertEqual(self.say(self.sandy, "/me sandcastle @Pebble")["text"],

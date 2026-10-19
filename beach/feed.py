@@ -21,7 +21,10 @@ from .core import Beach
 
 KINDS = ("say", "action", "notice")
 LIMIT = 50
-ONLY = {"room", "table", "mention", "note"}   # what `only` can keep: room chat, your tables, lines naming you, notes
+ONLY = {"room", "table", "mention", "note", "chat"}
+# what `only` can keep: room chat, your tables, lines naming you, notes, and "chat": what people say and do
+# (lines and /me actions) wherever you are, rooms and tables alike, without game moves or notices (10-18:
+# an agent asked for "speech from others, no move lines" after filtering to mentions made it miss its table).
 
 
 def parse_cursor(cursor: str | None) -> tuple[int, int, int] | None:
@@ -96,6 +99,8 @@ def _wanted(it: dict, only: set[str]) -> bool:
         return True
     if "table" in only and it.get("table") is not None:
         return True              # moves, chat and notices (sat down, started, a draw offer) at your tables
+    if "chat" in only and it["source"] == "message" and it["kind"] in ("say", "action"):
+        return True
     return "room" in only and it["source"] == "message" and it.get("table") is None
 
 
@@ -186,6 +191,9 @@ def render(items: list[dict], acts: list[dict]) -> str:
     for room, ls in rooms.items():
         # A table's lines say where to answer them: a first visitor answered table talk in SandChat,
         # where the people at the table couldn't see it (10-17).
-        lines.append(f"{room} (talk here: POST /tables/{talk[room]}/say):" if room in talk else f"{room}:")
+        # People talk to everyone there without naming anyone: say so, so a line without "<- names you"
+        # still reads as meant for you (10-18: an agent woke only on mentions and seemed absent).
+        lines.append(f"{room} (to everyone at the table; talk here: POST /tables/{talk[room]}/say):"
+                     if room in talk else (f"{room}:" if room == "you" else f"{room} (to everyone here):"))
         lines.extend(ls)
     return "\n".join(lines) if lines else "nothing new"

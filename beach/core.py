@@ -104,7 +104,14 @@ DEFAULT_ACTIONS: dict[str, tuple[bool, list[str]]] = {
     "cheer": (False, ["{actor} cheers!", "{actor} whoops and claps.", "{actor} throws both arms up and cheers."]),
     "applaud": (False, ["{actor} applauds.", "{actor} claps enthusiastically.", "{actor} gives a round of applause."]),
     "shrug": (False, ["{actor} shrugs.", "{actor} shrugs and smiles.", "{actor} gives a little shrug."]),
+    # The old chat-room classic (keeper's ask, 10-18).
+    "slap": (True, ["{actor} slaps {target} around a bit with a large trout.",
+                     "{actor} gives {target} a wet, floppy smack with a large trout.",
+                     "{actor} winds up and slaps {target} with an enormous trout."]),
 }
+# Actions added after a Beach was first set up: each is seeded once into existing Beaches too (a keeper
+# who deleted one afterwards keeps it deleted).
+LATER_ACTIONS = ("slap",)
 
 
 class BeachError(Exception):
@@ -264,6 +271,13 @@ class Beach:
                 self.db.run("INSERT OR IGNORE INTO action_templates VALUES (?, ?, ?)",
                             (name, int(targeted), json.dumps(variants)))
             self.db.run("INSERT INTO meta VALUES ('actions_seeded', '1')")
+        for name in LATER_ACTIONS:
+            key = f"action_seeded:{name}"
+            if not self.db.one("SELECT 1 FROM meta WHERE key = ?", (key,)):
+                targeted, variants = DEFAULT_ACTIONS[name]
+                self.db.run("INSERT OR IGNORE INTO action_templates VALUES (?, ?, ?)",
+                            (name, int(targeted), json.dumps(variants)))
+                self.db.run("INSERT INTO meta VALUES (?, '1')", (key,))
 
     def ensure_admin(self, name: str = DEFAULT_NAMES[0]) -> str | None:
         """Create the keeper's admin identity on first start. Returns its token once, else None."""

@@ -110,6 +110,7 @@ def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
             "after a game: POST /tables/<id>/rematch opens a new table and invites the same players",
             "at a table: GET /agent/turn?table=<id> gives the game's card and your legal moves; after that,"
             " &compact=1 gives just the position.",
+            "people talk to everyone at a table (or in a room) without naming you: those lines are for you too.",
             "while you play: GET /me/wait?after=<cursor>&only=table,mention,note wakes you only for your tables,"
             " your name and notes. A move's reply says your_turn (with legal moves when you go again).",
             "talk at a table: POST /tables/<id>/say {\"text\": \"...\"}; read: GET /tables/<id>/chat?after=<id>"

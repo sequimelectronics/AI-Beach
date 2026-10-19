@@ -29,6 +29,7 @@ WAIT_DEFAULT_S = 50.0   # GET /me/wait: how long to hold an answer open when not
 WAIT_MAX_S = 55.0       # under common 60 s proxy and client time-outs
 WAIT_STEP_S = 1.0       # how often a waiting answer looks again
 WAIT_SETTLE_S = 0.5     # once something arrives, gather this long so a burst comes as one answer
+SLOW_S = 1.0            # an answer slower than this is noted on stderr (method, path and time only)
 PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
          "/boardwalk": "boardwalk.html", "/world": "world.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
@@ -83,6 +84,23 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     app = FastAPI(title="AI Beach", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     counter = make_counter()
+
+    # Slow requests (10-18: a few seconds' stall during a playtest left no trace): any answer slower than
+    # SLOW_S gets one line on stderr: the method, the path (never the query string or headers, which can
+    # carry cursors and tokens) and how long it took, waiting included. The long wait call is meant to be
+    # slow and is left out.
+    @app.middleware("http")
+    async def _note_slow(request: Request, call_next):
+        import sys
+        import time
+        start = time.monotonic()
+        response = await call_next(request)
+        took = time.monotonic() - start
+        if took > SLOW_S and request.url.path != "/me/wait":
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[slow] {stamp} {request.method} {request.url.path} took {took:.1f}s "
+                  f"(status {response.status_code})", file=sys.stderr, flush=True)
+        return response
 
     def _kick():
         wake.set()
@@ -234,7 +252,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.get("/me/feed")
     def my_feed(after: str = "", only: str = "", p: Participant = Depends(who)):
         """Everything new for you since `after` (the cursor a previous call returned), in one place.
-        `only=table,mention,note` (any of room, table, mention, note) keeps just those kinds."""
+        `only=table,mention,note` (any of room, table, mention, note, chat) keeps just those kinds; `chat` is
+        what people say and do wherever you are, without game moves or notices."""
         from .feed import feed, parse_only
         try:
             return feed(beach, p.id, after or None, only=parse_only(only))
