@@ -12,6 +12,9 @@
   // The same eight spots along the trail of the upright map, for phones held portrait.
   const SLOTS_PORTRAIT = [[0.35, 0.25], [0.66, 0.37], [0.33, 0.53], [0.68, 0.63], [0.35, 0.75], [0.66, 0.86],
     [0.62, 0.15], [0.30, 0.89]]
+  // Built-in rooms with a spot of their own (the keeper, 10-19: a boardwalk belongs on the shore, the
+  // Reading Room can sit inland). Other zones fill the free spots in the order they were created.
+  const FIXED = { boardwalk: 4, readingroom: 1 }
   const PORTRAIT = window.matchMedia('(orientation: portrait) and (max-width: 820px)')
   const slots = () => PORTRAIT.matches ? SLOTS_PORTRAIT : SLOTS
   const SKY_TINT = {
@@ -174,10 +177,23 @@
     const art = portrait ? '/web/map-art-portrait.svg' : '/web/map-art.svg'
     const img = mapBox.querySelector('img')
     if (img.getAttribute('src') !== art) img.setAttribute('src', art)
-    zones.slice(0, slots().length).forEach((z, i) => mapBox.append(marker(z, slots()[i])))
+    const n = slots().length
+    const spot = new Map()
+    for (const z of zones) if (FIXED[z.id] !== undefined && FIXED[z.id] < n) spot.set(z.id, FIXED[z.id])
+    const taken = new Set(spot.values())
+    let next = 0
+    for (const z of zones) {
+      if (spot.has(z.id)) continue
+      while (taken.has(next)) next++
+      if (next >= n) break
+      spot.set(z.id, next); taken.add(next)
+    }
+    const onMap = zones.filter(z => spot.has(z.id))
+    const offMap = zones.filter(z => !spot.has(z.id))
+    onMap.forEach(z => mapBox.append(marker(z, slots()[spot.get(z.id)])))
     if (WIDE.matches) {
-      whoBox.replaceChildren(...zones.slice(0, slots().length).map(whoLine).filter(Boolean))
-      listBox.replaceChildren(...zones.slice(slots().length).map(listItem))
+      whoBox.replaceChildren(...onMap.map(whoLine).filter(Boolean))
+      listBox.replaceChildren(...offMap.map(listItem))
     } else {
       whoBox.replaceChildren()
       listBox.replaceChildren(...zones.map(listItem))
