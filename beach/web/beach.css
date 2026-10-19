@@ -299,6 +299,62 @@ td .avatar { width: 36px; height: 43px; }
 .chat-layout > *, .builder > * { min-width: 0; }
 @media (max-width: 760px) { .people li { min-width: 0; } .people li strong { overflow-wrap: anywhere; } }
 
+/* ---------------------------------------------------------------- the newer tables (games.js) */
+.opp-head { display: flex; align-items: center; gap: .5em; flex-wrap: wrap; }
+.opp-head.out { opacity: .6; }
+.opp-head .avatar { width: 34px; height: 40px; }
+/* Lanterns o'er the Bay */
+.bay-wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1em 2em; padding: .4em 0 .8em; }
+.bay { display: flex; gap: .8em; }
+.bay-row { display: flex; flex-direction: column; align-items: center; color: #fffdf7; }
+.bay-row .hint { color: #f1e6cc; }
+.lantern { display: inline-block; width: 40px; line-height: 0; }
+.lantern svg { width: 100%; height: auto; filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, .3)); }
+.lantern.lit svg { width: 52px; }
+.lantern.lit { width: 52px; }
+.lantern.dark svg { opacity: .55; }
+.bay-facts { color: #fffdf7; }
+.bay-facts p { margin: .2em 0; }
+.bay-facts .hint { color: #f1e6cc; }
+.dots { display: inline-flex; gap: 3px; vertical-align: middle; }
+.dots span { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #fffdf7; }
+.dots.hints span.on { background: #ffd75e; }
+.dots.squalls span.on { background: #5aa6c8; }
+.lantern-hand { flex-direction: column; align-items: stretch; width: 100%; margin-bottom: .5em; }
+.lantern-row { display: flex; flex-wrap: wrap; gap: .5em; justify-content: center; }
+.lantern-row.mine { margin: .5em 0; }
+.lantern-slot { display: flex; flex-direction: column; align-items: center; gap: .2em; min-width: 64px; }
+.lantern-slot .told { font-size: .78rem; color: var(--ink-soft); text-align: center; max-width: 88px; }
+.lantern-row.mine .lantern-slot .told { color: #fffdf7; }
+.lantern.unknown svg { filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, .3)) saturate(.6); }
+.slot-buttons { display: flex; gap: .25em; }
+.slot-buttons button { padding: .15em .5em; font-size: .85rem; }
+.hint-buttons { justify-content: center; }
+.lantern-hint { padding: .1em .6em; font-size: .9rem; }
+.lantern-hint.hint-red { border-color: #d8483a; } .lantern-hint.hint-gold { border-color: #e8a92a; }
+.lantern-hint.hint-blue { border-color: #3f7fc4; } .lantern-hint.hint-white { border-color: #b9b2a2; }
+/* Message in a Bottle */
+.bottle-note, .bottle-story { max-width: 40rem; margin: .6em auto; color: var(--ink); width: 100%; box-sizing: border-box; }
+.bottle-note .hint, .bottle-story .hint { color: var(--ink-soft); }
+.bottle-write .hint { color: #f1e6cc; }
+.bottle-note .before, .bottle-story p { font-family: Georgia, 'Times New Roman', serif; font-size: 1.05rem; line-height: 1.6; }
+.bottle-art { text-align: center; margin: 0; line-height: 0; }
+.bottle-write { max-width: 40rem; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: .4em; }
+.bottle-write textarea { width: 100%; box-sizing: border-box; font: inherit; font-family: Georgia, 'Times New Roman', serif; resize: vertical; }
+.card-table > .hint { color: #f1e6cc; text-align: center; }
+/* Hearts */
+.trick { display: flex; gap: .6em; justify-content: center; min-height: 7.5em; align-items: center; }
+.trick-card { display: flex; flex-direction: column; align-items: center; gap: .2em; }
+.trick-card .hint, .middle > .hint, .trick .hint { color: #f1e6cc; }
+.hand-flat { display: flex; flex-wrap: wrap; justify-content: center; gap: .3em; padding: .4em 0 .6em; }
+.hand-flat .in-hand { background: none; border: 0; padding: 0; line-height: 0; transition: translate .12s; }
+.hand-flat .in-hand .pcard { width: 56px; }
+.hand-flat .in-hand.playable .pcard { outline: 3px solid #ffd75e; outline-offset: 1px; }
+.hand-flat .in-hand.playable:hover, .hand-flat .in-hand.playable:focus-visible { translate: 0 -6px; }
+.hand-flat .in-hand.dim .pcard svg { filter: brightness(.72) saturate(.7); }
+.hand-flat .in-hand.chosen { translate: 0 -12px; }
+.hand-flat .in-hand.chosen .pcard { outline: 4px solid #fff; }
+
 /* ---------------------------------------------------------------- the Reading Room */
 body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2)); }
 .reading main { max-width: 46rem; }

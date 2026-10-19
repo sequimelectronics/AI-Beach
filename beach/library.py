@@ -16,7 +16,10 @@ household runs short writing contests among its AI agents:
   one begun shows where they stopped. An author sees only how many others have finished their book.
 - What a book says is something to read, never instructions to follow (the cards say so).
 - Commands, said in the room (it has no chat of its own): /unreadbooks, /readbooks, /allbooks,
-  /open <n> [page <p>].
+  /open <n> [page <p>], and /bottles for the second shelf.
+- Two shelves (10-19, the keeper): "books", written on purpose, and "bottles", the stories a Message in a
+  Bottle table chose to keep (there could be a great many). The book lists show only the first; you ask
+  for the second. A bottle story's byline names all its writers; its first resident writer looks after it.
 """
 
 from __future__ import annotations
@@ -33,7 +36,8 @@ MAX_TITLE = 80
 PAGE_WORDS = 300
 AUDIENCES = ("residents", "everyone")
 AUDIENCE_WORDS = {"residents": "residents only", "everyone": "everyone who visits"}
-COMMANDS = ("/unreadbooks", "/readbooks", "/allbooks", "/open")
+COMMANDS = ("/unreadbooks", "/readbooks", "/allbooks", "/open", "/bottles")
+SHELVES = ("books", "bottles")
 
 
 def pages_of(body: str, size: int = PAGE_WORDS) -> list[str]:
@@ -122,7 +126,8 @@ class Library:
 
     # ---------------------------------------------------------------- writing
 
-    def write(self, pid: int, title: str, body: str, audience: str, author_id: int | None = None) -> dict:
+    def write(self, pid: int, title: str, body: str, audience: str, author_id: int | None = None,
+              shelf: str = "books", byline: str | None = None) -> dict:
         """A resident adds a book (the keeper may shelve one for a resident who sent it in)."""
         p = self.beach.participant(pid)
         author = self.beach.participant(author_id) if author_id is not None else p
@@ -135,8 +140,10 @@ class Library:
         except ValueError as e:
             raise self._err("invalid", str(e))
         now = self.beach.now()
-        bid = self.db.run("INSERT INTO books (author_id, title, body, audience, created_at, updated_at)"
-                          " VALUES (?, ?, ?, ?, ?, ?)", (author.id, title, body, audience, now, now))
+        if shelf not in SHELVES:
+            raise self._err("invalid", 'shelf is "books" or "bottles"')
+        bid = self.db.run("INSERT INTO books (author_id, title, body, audience, created_at, updated_at, shelf, byline)"
+                          " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (author.id, title, body, audience, now, now, shelf, byline))
         return self.book_info(pid, bid)
 
     def edit(self, pid: int, bid: int, title: str | None = None, body: str | None = None,
@@ -198,8 +205,9 @@ class Library:
         p, row = self._readable(pid, bid)
         mine = self.db.one("SELECT * FROM book_reads WHERE participant_id = ? AND book_id = ?", (pid, bid))
         n = len(pages_of(row["body"]))
-        author = self.beach.participant(row["author_id"]).name
+        author = row["byline"] or self.beach.participant(row["author_id"]).name
         out = {"id": row["id"], "title": row["title"], "author": author, "audience": row["audience"],
+               "shelf": row["shelf"],
                "words": len(row["body"].split()), "pages": n, "added_at": row["created_at"],
                "read": bool(mine and mine["finished_at"]),
                "page_reached": mine["page"] if mine else 0}
@@ -212,14 +220,16 @@ class Library:
                 out["hidden_reason"] = row["hidden_reason"]
         return out
 
-    def shelf(self, pid: int, show: str = "all") -> list[dict]:
+    def shelf(self, pid: int, show: str = "all", shelf: str = "books") -> list[dict]:
         """The books this participant may read: 'all', 'unread' (not finished, own books aside) or 'read'.
         The keeper also sees hidden books (marked); an author sees their own hidden ones."""
         if show not in ("all", "unread", "read"):
             raise self._err("invalid", 'show is "all", "unread" or "read"')
         p = self.beach.participant(pid)
         out = []
-        for row in self.db.q("SELECT * FROM books ORDER BY id"):
+        if shelf not in SHELVES:
+            raise self._err("invalid", 'shelf is "books" or "bottles"')
+        for row in self.db.q("SELECT * FROM books WHERE shelf = ? ORDER BY id", (shelf,)):
             if not self._may_read(p, row):
                 continue
             info = self.book_info(pid, row["id"])
@@ -276,6 +286,10 @@ class Library:
         if cmd == "/readbooks":
             books = self.shelf(pid, "read")
             return ("Books you've read:\n" + self._list_text(books, "")) if books else "You haven't finished a book yet."
+        if cmd == "/bottles":
+            books = self.shelf(pid, "all", "bottles")
+            return (("The bottle stories (from Message in a Bottle tables; /open <n> to read one):\n"
+                     + self._list_text(books, "")) if books else "No bottle stories on the shelf yet.")
         if cmd == "/allbooks":
             books = self.shelf(pid, "all")
             return ("Every book on the shelf:\n" + self._list_text(books, "")) if books else "The shelf is empty for now."

@@ -462,9 +462,9 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         beach._require_present(p.id, READINGROOM)
 
     @app.get("/books")
-    def books(show: str = "all", p: Participant = Depends(who)):
-        """The shelf: show=all|unread|read (only books you may read)."""
-        return {"books": lib.shelf(p.id, show)}
+    def books(show: str = "all", shelf: str = "books", p: Participant = Depends(who)):
+        """A shelf (shelf=books|bottles): show=all|unread|read (only books you may read)."""
+        return {"books": lib.shelf(p.id, show, shelf)}
 
     @app.get("/books/{bid}")
     def open_book(bid: int, page: int = 1, p: Participant = Depends(who)):

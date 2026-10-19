@@ -143,7 +143,9 @@
   let lastKey = ''
   let chatAfter = 0
   let chosenRank = null    // Go Fish: the rank picked from your hand, before choosing whom to ask
-  const isCards = () => view && view.position.kind === 'cards'
+  // Card games and the newer tables (games.js) share the card-table layout; checkers has its board.
+  const isNewer = () => view && window.BeachGames && BeachGames.KINDS.includes(view.position.kind)
+  const isCards = () => view && (view.position.kind === 'cards' || isNewer())
 
   function candidates () { return view && view.your_turn ? view.legal.filter(m => pathOf(m).slice(0, picked.length).join() === picked.join()) : [] }
 
@@ -233,6 +235,7 @@
     if (view.status === 'waiting') return el('p', { class: 'turn-banner wait', text: 'Waiting for someone to sit down.' })
     if (view.status !== 'playing') return el('p', { class: 'turn-banner over', text: 'Game over: ' + (view.result_text || view.status) + '.' })
     if (view.your_turn) {
+      if (isNewer()) return el('p', { class: 'turn-banner mine', text: 'Your turn.' + BeachGames.tip(view) })
       if (isCards()) {
         const p = view.position
         let tip = view.game === 'crazy8'
@@ -350,11 +353,13 @@
       const r = await api('POST', '/tables/' + view.id + '/move', { move: text })
       chosenRank = null
       if (r.private && r.private.drew) toast('You drew the ' + BeachCards.cardLabel(r.private.drew) + '.')
+      if (r.private && r.private.passed) toast('You passed ' + r.private.passed.map(BeachCards.cardLabel).join(', ') + ' to ' + r.private.to + '.')
     } catch (e) { toast(e.message) }
     await refresh(true)
   }
 
   function renderCards () {
+    if (isNewer()) { BeachGames.render({ view, root: ui.board, move: cardMove }); return }
     BeachCards.render({
       view,
       root: ui.board,

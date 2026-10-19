@@ -231,6 +231,10 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
         if "books" not in cols:   # 10-18: the Reading Room (a quiet room with a shelf; library.py)
             self.db.run("ALTER TABLE zones ADD COLUMN books INTEGER NOT NULL DEFAULT 0")
+        bcols = {r["name"] for r in self.db.q("PRAGMA table_info(books)")}
+        if "shelf" not in bcols:   # 10-19: bottle stories get their own shelf (the keeper's idea)
+            self.db.run("ALTER TABLE books ADD COLUMN shelf TEXT NOT NULL DEFAULT 'books'")
+            self.db.run("ALTER TABLE books ADD COLUMN byline TEXT")
         # Job 12: when people were last in a game world (playing or watching), which run of the
         # world the bridge last reported, and the world's own idle limit (it removes idle players).
         if "people_seen_at" not in cols:

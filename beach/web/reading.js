@@ -44,21 +44,26 @@
   // ---- the shelf
 
   async function renderShelf () {
-    let books
-    try { books = (await api('GET', '/books?show=all')).books } catch (e) { main.replaceChildren(...header(), el('p', { class: 'error', text: e.message })); return }
+    let books, bottles
+    try {
+      books = (await api('GET', '/books?show=all')).books
+      bottles = (await api('GET', '/books?show=all&shelf=bottles')).books
+    } catch (e) { main.replaceChildren(...header(), el('p', { class: 'error', text: e.message })); return }
     const counts = {
       unread: books.filter(b => !b.read && !b.yours).length,
       read: books.filter(b => b.read).length,
-      all: books.length
+      all: books.length,
+      bottles: bottles.length
     }
-    const shown = books.filter(b => tab === 'all' ? true : tab === 'read' ? b.read : (!b.read && !b.yours))
-    const tabs = el('div', { class: 'row tabs', role: 'tablist' }, [['unread', 'Unread'], ['read', 'Read'], ['all', 'All books']].map(([k, label]) =>
+    // Bottle stories (from Message in a Bottle tables) keep to their own shelf, so they never crowd the books.
+    const shown = tab === 'bottles' ? bottles : books.filter(b => tab === 'all' ? true : tab === 'read' ? b.read : (!b.read && !b.yours))
+    const tabs = el('div', { class: 'row tabs', role: 'tablist' }, [['unread', 'Unread'], ['read', 'Read'], ['all', 'All books'], ['bottles', 'Bottle stories']].map(([k, label]) =>
       el('button', {
         type: 'button', role: 'tab', class: k === tab ? 'primary' : '', 'aria-selected': String(k === tab),
         text: label + ' (' + counts[k] + ')',
         onclick: () => { tab = k; try { localStorage.setItem('beach.reading.tab', k) } catch (e) {} renderShelf() }
       })))
-    const empty = { unread: 'You\'ve read every book on the shelf.', read: 'You haven\'t finished a book yet.', all: 'The shelf is empty for now.' }[tab]
+    const empty = { unread: 'You\'ve read every book on the shelf.', read: 'You haven\'t finished a book yet.', all: 'The shelf is empty for now.', bottles: 'No bottle stories yet: they come from Message in a Bottle tables on the Boardwalk, when everyone who wrote one agrees.' }[tab]
     const list = shown.length
       ? el('ul', { class: 'shelf' }, shown.map(bookRow))
       : el('p', { class: 'hint', text: empty })

@@ -444,17 +444,38 @@ class Boardwalk:
                 if s in seats:
                     self.beach.badges.award(seats[s], "card-win")
         self._line(row, verdict[0].upper() + verdict[1:])
+        if status == "finished" and outcome.get("shelve"):
+            self._shelve(row, seats, outcome["shelve"])
         if status == "finished" and self.beach.setting("announce_results") and len(names) >= 2:
             from .core import SANDCHAT
             zone = self.beach.zone(row["zone_id"])["name"]
             self.beach._post(SANDCHAT, None, "notice",
                              f"{_and(names)} finished a game of {g.title} on {zone}: {verdict}.")
 
+    def _shelve(self, row, seats: dict, story: dict) -> None:
+        """A Message in a Bottle table agreed to keep its story: onto the Reading Room's bottle-stories shelf,
+        under all its writers' names, looked after by its first writer who's a resident."""
+        writers = [seats[s] for s in story.get("writers", []) if s in seats]
+        keeper = next((q for q in writers if self.beach.participant(q).access != "visitor"), None)
+        if keeper is None:
+            self._line(row, "The story stays here: only residents can put a book on the shelf")
+            return
+        byline = _and([self._name(q) for q in writers])
+        try:
+            b = self.beach.library.write(keeper, story["title"], story["text"], story["audience"],
+                                         shelf="bottles", byline=byline)
+        except Exception as e:   # (a story too long for the shelf, say): the game's result stands
+            self._line(row, f"The story couldn't go on the shelf: {getattr(e, 'args', [''])[0]}")
+            return
+        self._line(row, f"The story is on the Reading Room's bottle-stories shelf as book {b['id']}")
+
     def result_text(self, g, seats: dict, outcome: dict, status: str = "finished") -> str:
         if status == "abandoned":
             return "the game was set aside unfinished"
         if status == "closed":
             return outcome.get("reason") or "called off before the first move"
+        if outcome.get("text"):        # a game that tells its own ending (the table plays together)
+            return outcome["text"]
         w = outcome.get("winner")
         reason = outcome.get("reason", "")
         both = outcome.get("winners") or []

@@ -300,7 +300,9 @@ CREATE TABLE IF NOT EXISTS books (
     updated_at REAL NOT NULL,
     hidden_at REAL,                       -- the keeper took it off the shelf (the author keeps it)
     hidden_by INTEGER,
-    hidden_reason TEXT
+    hidden_reason TEXT,
+    shelf TEXT NOT NULL DEFAULT 'books',  -- 'books' (written on purpose) or 'bottles' (Message in a Bottle)
+    byline TEXT                           -- for a book by several writers (a bottle story)
 );
 -- Each reader's own log: the furthest page opened, and when they reached the last one.
 CREATE TABLE IF NOT EXISTS book_reads (
