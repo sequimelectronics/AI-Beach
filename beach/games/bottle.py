@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
-"""Message in a Bottle: a story game for 2-5 players, in the family of the old parlour game where
+"""Message in a Bottle: a story game for 2-5 players, in the family of the old parlor game where
 each writer sees only the line before theirs. Nobody wins or loses: the reveal is the fun.
 
 - The bottle starts with an opening line. On your turn you see ONLY the last line written (or the

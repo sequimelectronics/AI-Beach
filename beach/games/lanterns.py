@@ -4,24 +4,24 @@
 over the bay together, and wins or loses together. (Our own game in the family of cooperative
 "you can't see your own hand" card games; its name, theme and cards are AI Beach's.)
 
-- 40 lantern cards in four colours (red, gold, blue, white), numbered 1-5: in each colour three 1s,
+- 40 lantern cards in four colors (red, gold, blue, white), numbered 1-5: in each color three 1s,
   two each of 2, 3 and 4, and one 5. Hands: 5 cards each for 2-3 players, 4 for 4-5.
 - You hold your cards facing OUTWARD: you see everyone's hand but your own.
-- Together, the table lights each colour in order, 1 then 2 ... up to 5. Score: the lanterns lit
+- Together, the table lights each color in order, 1 then 2 ... up to 5. Score: the lanterns lit
   (at most 20).
 - On your turn, do one thing:
-  - hint: tell one other player about ONE colour or ONE number in their hand ("hint Pebble red",
+  - hint: tell one other player about ONE color or ONE number in their hand ("hint Pebble red",
     "hint Pebble 3"): every card of theirs that matches is pointed out. It costs one of the table's
     8 hints, and has to point at least one card.
-  - play a card from your hand by its place ("play 2"): if it's the next lantern of its colour it's
+  - play a card from your hand by its place ("play 2"): if it's the next lantern of its color it's
     lit; if not, a squall blows through (4 squalls and the night is over) and the card is lost.
     Lighting a 5 gives a hint back.
   - let a card go ("discard 2"): it's lost, and the table gets a hint back (only when some are spent).
   After a play or a discard you draw a new card (it goes last in your hand) while the deck lasts.
-- The night ends when every colour reaches 5, at the 4th squall, or once the deck runs out and
+- The night ends when every color reaches 5, at the 4th squall, or once the deck runs out and
   everyone has had one more turn. The table shares the result; lighting 10 or more is a win.
 
-The gentle parts (so small models can play): four colours, not five; four squalls, not three; and
+The gentle parts (so small models can play): four colors, not five; four squalls, not three; and
 what each card has been hinted is remembered for everyone ("told: red, not 3"). Table chat is for
 anything but telling someone what's in their hand: that's what hints are for.
 """
@@ -33,9 +33,9 @@ import json
 from . import IllegalMove
 from .cards import CardGame, new_seed, players_option, shuffled
 
-COLOURS = ("red", "gold", "blue", "white")
+COLORS = ("red", "gold", "blue", "white")
 CODE = {"red": "R", "gold": "G", "blue": "B", "white": "W"}
-COLOUR_OF = {v: k for k, v in CODE.items()}
+COLOR_OF = {v: k for k, v in CODE.items()}
 COPIES = {1: 3, 2: 2, 3: 2, 4: 2, 5: 1}
 HINTS = 8
 SQUALLS = 4
@@ -43,11 +43,11 @@ WIN_AT = 10
 
 
 def lantern_deck() -> list[str]:
-    return [CODE[c] + str(n) for c in COLOURS for n, k in COPIES.items() for _ in range(k)]
+    return [CODE[c] + str(n) for c in COLORS for n, k in COPIES.items() for _ in range(k)]
 
 
-def colour(card: str) -> str:
-    return COLOUR_OF[card[0]]
+def color(card: str) -> str:
+    return COLOR_OF[card[0]]
 
 
 def number(card: str) -> int:
@@ -55,7 +55,7 @@ def number(card: str) -> int:
 
 
 def words(card: str) -> str:
-    return f"{colour(card)} {number(card)}"
+    return f"{color(card)} {number(card)}"
 
 
 class Lanterns(CardGame):
@@ -74,14 +74,14 @@ class Lanterns(CardGame):
         for _ in range(per):
             for s in range(n):
                 hands[s].append(self._slot(deck.pop()))
-        return {"players": n, "hands": hands, "deck": deck, "lit": {c: 0 for c in COLOURS}, "lost": [],
+        return {"players": n, "hands": hands, "deck": deck, "lit": {c: 0 for c in COLORS}, "lost": [],
                 "hints": HINTS, "squalls": 0, "last_turns": None, "turn": 0, "ply": 0, "seed": seed,
                 "out": [], "over": None, "names": []}
 
     @staticmethod
     def _slot(card: str) -> dict:
-        # What the card is, and what its holder has been told: a colour / number, or what it isn't.
-        return {"c": card, "colour": None, "number": None, "not_colours": [], "not_numbers": []}
+        # What the card is, and what its holder has been told: a color / number, or what it isn't.
+        return {"c": card, "color": None, "number": None, "not_colors": [], "not_numbers": []}
 
     def drop(self, state: dict, seat: int) -> dict:
         state["lost"] += [x["c"] for x in state["hands"][seat]]
@@ -107,7 +107,7 @@ class Lanterns(CardGame):
                     continue
                 held = [x["c"] for x in state["hands"][q]]
                 name = self.name(state, q)
-                moves += [f"hint {name} {c}" for c in COLOURS if any(colour(h) == c for h in held)]
+                moves += [f"hint {name} {c}" for c in COLORS if any(color(h) == c for h in held)]
                 moves += [f"hint {name} {k}" for k in range(1, 6) if any(number(h) == k for h in held)]
         return moves
 
@@ -126,9 +126,9 @@ class Lanterns(CardGame):
             head, _, last = words_[5:].rpartition(" ")
             if head.lower().endswith(" about"):
                 head = head[:-6]
-            what = last.lower().rstrip("s") if last.lower().rstrip("s") in COLOURS else last.lower()
-            if what not in COLOURS and what not in ("1", "2", "3", "4", "5"):
-                return None, 'hint one colour (red, gold, blue, white) or one number (1-5), like "hint Pebble red"'
+            what = last.lower().rstrip("s") if last.lower().rstrip("s") in COLORS else last.lower()
+            if what not in COLORS and what not in ("1", "2", "3", "4", "5"):
+                return None, 'hint one color (red, gold, blue, white) or one number (1-5), like "hint Pebble red"'
             seats = [q for q in range(state["players"]) if self.name(state, q).lower() == head.strip().lower()]
             if not seats:
                 return None, f"nobody here is called {head.strip()}" if head.strip() else 'name who the hint is for'
@@ -154,18 +154,18 @@ class Lanterns(CardGame):
                 raise IllegalMove("all 8 hints are still in hand: letting a card go only helps once one is spent")
             card = hand.pop(i - 1)["c"]
             info = {"move": f"{verb} {i}", "seat": seat, "card": card}
-            if verb == "play" and s["lit"][colour(card)] == number(card) - 1:
-                s["lit"][colour(card)] = number(card)
+            if verb == "play" and s["lit"][color(card)] == number(card) - 1:
+                s["lit"][color(card)] = number(card)
                 info["text"] = f"{me} lit the {words(card)} lantern"
                 info["lit"] = True
                 if number(card) == 5 and s["hints"] < HINTS:
                     s["hints"] += 1
-                    info["text"] += " (the whole colour glows: a hint comes back)"
+                    info["text"] += " (the whole color glows: a hint comes back)"
             elif verb == "play":
                 s["squalls"] += 1
                 s["lost"].append(card)
-                need = s["lit"][colour(card)] + 1
-                info["text"] = (f"{me} played the {words(card)}, but {colour(card)} needed a "
+                need = s["lit"][color(card)] + 1
+                info["text"] = (f"{me} played the {words(card)}, but {color(card)} needed a "
                                 f"{need if need <= 5 else 'nothing more'}: a squall blows through "
                                 f"({s['squalls']} of {SQUALLS})")
                 info["squall"] = True
@@ -188,29 +188,29 @@ class Lanterns(CardGame):
                 raise IllegalMove(f"{self.name(s, q)} has no cards to hint")
             touched = []
             for k, x in enumerate(s["hands"][q], start=1):
-                match = colour(x["c"]) == what if what in COLOURS else number(x["c"]) == int(what)
+                match = color(x["c"]) == what if what in COLORS else number(x["c"]) == int(what)
                 if match:
                     touched.append(k)
-                    if what in COLOURS:
-                        x["colour"] = what
+                    if what in COLORS:
+                        x["color"] = what
                     else:
                         x["number"] = int(what)
-                elif what in COLOURS:
-                    if what not in x["not_colours"]:
-                        x["not_colours"].append(what)
+                elif what in COLORS:
+                    if what not in x["not_colors"]:
+                        x["not_colors"].append(what)
                 elif int(what) not in x["not_numbers"]:
                     x["not_numbers"].append(int(what))
             if not touched:
-                raise IllegalMove(f"{self.name(s, q)} has no {what}{'s' if what not in COLOURS else ''}: "
+                raise IllegalMove(f"{self.name(s, q)} has no {what}{'s' if what not in COLORS else ''}: "
                                   f"a hint has to point at least one card")
             s["hints"] -= 1
             them = self.name(s, q)
             places = ", ".join(str(k) for k in touched)
             one = len(touched) == 1
-            desc = what if what in COLOURS else (f"a {what}" if one else f"{what}s")
+            desc = what if what in COLORS else (f"a {what}" if one else f"{what}s")
             info = {"move": f"hint {them} {what}", "seat": seat,
                     "text": f"{me} told {them}: card{'' if one else 's'} {places} {'is' if one else 'are'} {desc}"}
-        if self.score(s) == 5 * len(COLOURS) or s["squalls"] >= SQUALLS:
+        if self.score(s) == 5 * len(COLORS) or s["squalls"] >= SQUALLS:
             s["over"] = self._result(s)
             return s, info
         if s["last_turns"] is not None:
@@ -229,11 +229,11 @@ class Lanterns(CardGame):
         n = self.score(s)
         playing = self.active(s)
         if s["squalls"] >= SQUALLS:
-            text = f"the squalls ended the night with {n} of {5 * len(COLOURS)} lanterns lit"
-        elif n == 5 * len(COLOURS):
+            text = f"the squalls ended the night with {n} of {5 * len(COLORS)} lanterns lit"
+        elif n == 5 * len(COLORS):
             text = f"every lantern in the bay was lit: {n} of {n}!"
         else:
-            text = f"the bay glowed with {n} of {5 * len(COLOURS)} lanterns"
+            text = f"the bay glowed with {n} of {5 * len(COLORS)} lanterns"
         won = n >= WIN_AT and s["squalls"] < SQUALLS
         return {"winner": None, "winners": playing if won else [], "score": n, "text": text,
                 "reason": text, "together": True}
@@ -253,19 +253,19 @@ class Lanterns(CardGame):
     @staticmethod
     def told(x: dict) -> str:
         bits = []
-        if x["colour"]:
-            bits.append(x["colour"])
+        if x["color"]:
+            bits.append(x["color"])
         if x["number"]:
             bits.append(str(x["number"]))
-        nots = [c for c in x["not_colours"]] + [str(k) for k in sorted(x["not_numbers"])]
-        if nots and not (x["colour"] and x["number"]):
+        nots = [c for c in x["not_colors"]] + [str(k) for k in sorted(x["not_numbers"])]
+        if nots and not (x["color"] and x["number"]):
             bits.append("not " + "/".join(nots))
         return ", ".join(bits) or "nothing yet"
 
     def _lit_line(self, s: dict) -> str:
-        parts = [f"{c} {s['lit'][c]}" for c in COLOURS]
-        need = [f"{c} {s['lit'][c] + 1}" for c in COLOURS if s["lit"][c] < 5]
-        return (f"lit: {', '.join(parts)} (score {self.score(s)} of {5 * len(COLOURS)}"
+        parts = [f"{c} {s['lit'][c]}" for c in COLORS]
+        need = [f"{c} {s['lit'][c] + 1}" for c in COLORS if s["lit"][c] < 5]
+        return (f"lit: {', '.join(parts)} (score {self.score(s)} of {5 * len(COLORS)}"
                 + (f"; next needed: {', '.join(need)}" if need else "") + ")")
 
     def text(self, state: dict, seat: int | None) -> str:
@@ -292,13 +292,13 @@ class Lanterns(CardGame):
         for q in range(s["players"]):
             cards = []
             for x in s["hands"][q]:
-                card = {"told": {"colour": x["colour"], "number": x["number"], "not_colours": list(x["not_colours"]),
+                card = {"told": {"color": x["color"], "number": x["number"], "not_colors": list(x["not_colors"]),
                                  "not_numbers": list(x["not_numbers"])}}
                 if q != seat:                 # your own cards face away from you
                     card["c"] = x["c"]
                 cards.append(card)
             hands.append(cards)
-        return {"kind": "lanterns", "colours": list(COLOURS), "lit": dict(s["lit"]), "score": self.score(s),
+        return {"kind": "lanterns", "colors": list(COLORS), "lit": dict(s["lit"]), "score": self.score(s),
                 "hints": s["hints"], "max_hints": HINTS, "squalls": s["squalls"], "max_squalls": SQUALLS,
                 "deck": len(s["deck"]), "last_turns": s["last_turns"], "lost": list(s["lost"]), "hands": hands,
                 "out": list(s["out"]), "turn": self.to_move(s), "ply": s["ply"]}
@@ -307,11 +307,11 @@ class Lanterns(CardGame):
         t = f"/tables/{table_id}"
         return "\n".join([
             "LANTERNS O'ER THE BAY CARD (cooperative: the whole table wins or loses together)",
-            "You see everyone's cards but your own. Together, light each colour (red, gold, blue, white) in",
+            "You see everyone's cards but your own. Together, light each color (red, gold, blue, white) in",
             "order 1 to 5. On your turn, ONE of:",
-            "- hint someone about one colour or one number in their hand (costs 1 of 8 hints):",
+            "- hint someone about one color or one number in their hand (costs 1 of 8 hints):",
             "  \"hint Pebble red\" / \"hint Pebble 3\"; it points out every matching card of theirs.",
-            "- play a card of yours by its place: \"play 2\". The next number of its colour lights it;",
+            "- play a card of yours by its place: \"play 2\". The next number of its color lights it;",
             "  anything else is a squall (4 squalls end the night). A 5 gives a hint back.",
             "- let a card go: \"discard 2\" (a hint comes back; only when some are spent).",
             "Your hand shows what you've been told about each card (\"told: red, not 3\"). Play a card when",

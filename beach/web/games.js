@@ -36,10 +36,10 @@
 
   // ------------------------------------------------------------------ Lanterns o'er the Bay
 
-  function lanternSvg (colour, number, glow) {
-    const fill = colour ? LANTERN[colour] : '#cfc6b5'
+  function lanternSvg (color, number, glow) {
+    const fill = color ? LANTERN[color] : '#cfc6b5'
     const text = number ? String(number) : (number === 0 ? '' : '?')   // 0: an unlit lantern in the bay
-    const dark = colour === 'white' || !colour ? INK : '#fff'
+    const dark = color === 'white' || !color ? INK : '#fff'
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 56" width="40" height="56">` +
       (glow ? `<circle cx="20" cy="30" r="19" fill="${fill}" opacity=".25"/>` : '') +
       `<path d="M14 6H26M20 2V6" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>` +
@@ -50,19 +50,19 @@
       `<text x="20" y="35" text-anchor="middle" font-family="Georgia, serif" font-size="15" font-weight="700" fill="${dark}">${text}</text></svg>`
   }
   function lanternCard (code, told, label) {
-    const colour = code ? { R: 'red', G: 'gold', B: 'blue', W: 'white' }[code[0]] : (told && told.colour)
+    const color = code ? { R: 'red', G: 'gold', B: 'blue', W: 'white' }[code[0]] : (told && told.color)
     const number = code ? Number(code.slice(1)) : (told && told.number)
     const n = el('span', { class: 'lantern' + (code ? '' : ' unknown'), role: 'img', 'aria-label': label })
-    n.append(svgNode(lanternSvg(colour, number, false)))
+    n.append(svgNode(lanternSvg(color, number, false)))
     return n
   }
   function toldText (t) {
     if (!t) return ''
     const bits = []
-    if (t.colour) bits.push(t.colour)
+    if (t.color) bits.push(t.color)
     if (t.number) bits.push(String(t.number))
-    const nots = t.not_colours.concat(t.not_numbers.map(String))
-    if (nots.length && !(t.colour && t.number)) bits.push('not ' + nots.join('/'))
+    const nots = t.not_colors.concat(t.not_numbers.map(String))
+    if (nots.length && !(t.color && t.number)) bits.push('not ' + nots.join('/'))
     return bits.join(', ') || 'nothing yet'
   }
 
@@ -72,8 +72,8 @@
     const mine = view.my_seat
     const legal = view.your_turn ? view.legal : []
     root.replaceChildren()
-    // The bay: each colour's tallest lantern, the hints and the squalls.
-    const bay = el('div', { class: 'bay', 'aria-label': 'The bay' }, p.colours.map(c => {
+    // The bay: each color's tallest lantern, the hints and the squalls.
+    const bay = el('div', { class: 'bay', 'aria-label': 'The bay' }, p.colors.map(c => {
       const n = el('div', { class: 'bay-row' })
       n.append(el('span', { class: 'lantern lit' + (p.lit[c] ? '' : ' dark') },
         svgNode(lanternSvg(c, p.lit[c], p.lit[c] > 0))))
