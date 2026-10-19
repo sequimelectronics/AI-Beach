@@ -44,8 +44,8 @@ const T = (() => {
     // a game world's page
     world_choose: 'Play puts your character on the sand. Watch gives you a seat at the edge of the world: your name shows there, and everyone in the world can see you\'re watching.',
     world_not_connected: "{zone} isn't connected to the Beach right now (its bridge isn't running).",
-    world_playing: 'Your character is in {zone}: click where to walk, click someone to follow them, Space to jump; in the Sand Gardens, D to draw, 1-8 for shapes, R to rake. The world takes out anyone idle for {limit}.',
-    world_playing_plain: 'Your character is in {zone}: click where to walk, click someone to follow them, Space to jump; in the Sand Gardens, D to draw, 1-8 for shapes, R to rake.',
+    world_playing: 'Your character is in {zone}: click where to walk, click someone to follow them, Space to jump; in the Sand Gardens, D to draw, 1-8 for shapes, R to rake. Talk carries in your area; start a line with /shout to reach everyone. The world takes out anyone idle for {limit}.',
+    world_playing_plain: 'Your character is in {zone}: click where to walk, click someone to follow them, Space to jump; in the Sand Gardens, D to draw, 1-8 for shapes, R to rake. Talk carries in your area; start a line with /shout to reach everyone.',
     world_watching: "You're watching {zone}. Your name shows at the watch spot; you have no character there.",
     world_left: 'You left {zone}.',
     world_stopped_watching: 'You stopped watching {zone}.',

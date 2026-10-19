@@ -1,0 +1,77 @@
+Clawblox viewer: people can shout ("/shout ..."), and W/A/S/D move the view the way they point
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, after
+clawblox-region-speech.patch (it sends that patch's `shout` flag) and the other viewer patches
+(it touches lines next to theirs); apply all ten in the order of the README's table.
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-viewer-shout-and-keys.patch
+    cargo build --release
+
+Why (a playtest, 10-18): with speech regions, a person in the viewer could only be heard in their
+own region, and only agents could shout, so a note typed from across the island reached nobody.
+Now a chat line starting "/shout" is sent as a shout (heard everywhere) and shows as "(shouts)" in
+the chat panel; the input's hint says so. And the overview camera's W/A/S/D panned the opposite way
+on both axes (D moved the view left, W moved it down); they now move it the way each key points.
+
+diff --git a/frontend_runtime/dist/main.js b/frontend_runtime/dist/main.js
+--- a/frontend_runtime/dist/main.js
++++ b/frontend_runtime/dist/main.js
+@@ -1876,7 +1876,7 @@ function renderChatFeed() {
+         : ''
+ 
+       const body = document.createElement('span')
+-      body.textContent = String(msg.content || '')
++      body.textContent = (msg.delivery_mode === 'shout' ? '(shouts) ' : '') + String(msg.content || '')
+ 
+       meta.append(name, time)
+       const heard = formatChatAudibility(msg)
+@@ -1911,7 +1911,10 @@ async function loadChatHistory() {
+ 
+ async function sendChatMessage(text) {
+   if (replayState.enabled) return
+-  const content = String(text || '').trim()
++  let content = String(text || '').trim()
++  // "/shout ..." calls out to everyone in the world, past any speech regions (AI Beach).
++  const shout = /^\/shout(\s|$)/i.test(content)
++  if (shout) content = content.replace(/^\/shout\s*/i, '').trim()
+   if (!content) return
+   chatState.sending = true
+   updateChatSendUi()
+@@ -1923,7 +1926,7 @@ async function sendChatMessage(text) {
+         'Content-Type': 'application/json',
+         'X-Session': chatState.sessionToken,
+       },
+-      body: JSON.stringify({ content }),
++      body: JSON.stringify(shout ? { content, shout: true } : { content }),
+     })
+     if (!resp.ok) throw new Error(`chat send failed: HTTP ${resp.status}`)
+     if (chatInputEl) chatInputEl.value = ''
+diff --git a/frontend_runtime/dist/sdk/three.js b/frontend_runtime/dist/sdk/three.js
+--- a/frontend_runtime/dist/sdk/three.js
++++ b/frontend_runtime/dist/sdk/three.js
+@@ -961,8 +961,9 @@ export function createCameraModeController(THREE, camera, options = {}) {
+           seedOrbitFromOffset()
+           const cosYaw = Math.cos(controlsState.orbitYaw)
+           const sinYaw = Math.sin(controlsState.orbitYaw)
+-          const localDx = -direction.x * step
+-          const localDz = -direction.z * step
++          // W/A/S/D move the view the way the keys point (AI Beach: they were reversed both ways).
++          const localDx = direction.x * step
++          const localDz = direction.z * step
+           const worldDx = (localDx * cosYaw) + (localDz * sinYaw)
+           const worldDz = (-localDx * sinYaw) + (localDz * cosYaw)
+           const before = { x: controlsState.pan.x, z: controlsState.pan.z }
+diff --git a/frontend_runtime/dist/index.html b/frontend_runtime/dist/index.html
+--- a/frontend_runtime/dist/index.html
++++ b/frontend_runtime/dist/index.html
+@@ -62,7 +62,7 @@
+                 class="chat-input"
+                 type="text"
+                 maxlength="500"
+-                placeholder="Press / to chat"
++                placeholder="Press / to chat (/shout to call everyone)"
+                 aria-label="Chat message"
+               />
+               <button id="chat-send" class="chat-send" type="submit">Send</button>
