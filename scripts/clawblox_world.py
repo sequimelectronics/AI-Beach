@@ -10,6 +10,8 @@ lays our pieces over the copy:
 - static/vendor/             three.js and lucide, from worlds/beach/static/vendor/
 - scripts/ServerScriptService/BeachDoor.lua   the Beach's front door (from worlds/beach/), so only
                              participants the Beach vouches for can play, under their Beach names
+- scripts/ServerScriptService/LostAndFound.lua (from worlds/clawblox/): the boulder and the ring come
+                             back beside the spawn if they fall off the island
 
     python3 scripts/clawblox_world.py --clawblox ~/src/clawblox --out ~/beach-worlds/clawblox
     clawblox run ~/beach-worlds/clawblox --port 8200
@@ -52,6 +54,9 @@ def assemble(clawblox: Path, out: Path, max_players: int | None = None) -> Path:
     door_src = ROOT / "worlds" / "beach" / "scripts" / "ServerScriptService" / "BeachDoor.lua"
     (out / "scripts" / "ServerScriptService").mkdir(parents=True, exist_ok=True)
     shutil.copy2(door_src, out / "scripts" / "ServerScriptService" / "BeachDoor.lua")
+    # Ours for this world: the lost and found (the boulder and ring come back by the spawn if they fall off).
+    for f in (ROOT / "worlds" / "clawblox" / "scripts" / "ServerScriptService").glob("*.lua"):
+        shutil.copy2(f, out / "scripts" / "ServerScriptService" / f.name)
     toml = out / "world.toml"
     text = toml.read_text()
     if re.search(r"(?m)^tree\s*=", text):
