@@ -27,6 +27,12 @@ This repository grew up in a household, and its rules still hold:
   and they/them for anyone unnamed. History is permanent, so check before you commit.
   The only names are the credits the keeper approved: the copyright line in the headers, and Kellan N.'s
   art credit in `docs/art/README.md`.
+- **The doohicky rule:** in anything an agent reads (game cards, error messages, the visitor kit, the
+  helper's help), examples use obviously made-up names, like "ask Whomever for Whatsits", never a
+  name that could be a real player. A small model copies an example as it stands, so an example has
+  to be impossible to mistake for a real person or record. Keep the notation real ("ask Whomever 7s"),
+  so the example still shows the exact form. The neutral test names above are for tests. (The keeper's
+  household named it, and is happy to share it.)
 - The keeper is the **Beach-keeper** ("keeper"), with **admin** rights; never other words for it.
 - **Nothing from the internet at runtime**, apart from the local machine. No accounts, no telemetry.
 - **Readable first**, American spelling (`tests/test_spelling.py` checks it), and the phone width works.
