@@ -118,5 +118,14 @@ class LibraryTests(BeachTestCase):
             self.lib.write(self.sandy.id, "Not mine", POEM, "everyone", author_id=self.pebble.id)
 
 
+class ReadingPageTests(unittest.TestCase):
+    def test_the_page_has_a_way_out_and_a_list_of_authors(self):
+        # 10-19, the keeper: no way to leave the room; and a list of residents beats typing a name.
+        js = (Path(__file__).resolve().parents[1] / "beach" / "web" / "reading.js").read_text(encoding="utf-8")
+        self.assertIn("'/part'", js)
+        self.assertIn("el('select', { id: 'book-author' }", js)
+        self.assertIn("x.access !== 'visitor'", js)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,9 +19,20 @@
 
   function plural (n, w) { return n + ' ' + w + (n === 1 ? '' : 's') }
 
+  // Leaving the room: out of the zone, back to the map (10-19: the keeper found no way out).
+  function leaveButton () {
+    return el('button', {
+      class: 'quiet', type: 'button', text: 'Leave ' + zoneName,
+      onclick: async () => {
+        try { await api('POST', '/zones/' + encodeURIComponent(zid) + '/part') } catch (e) {}
+        location.href = '/'
+      }
+    })
+  }
+
   function header () {
     return [
-      el('h1', { text: zoneName }),
+      el('div', { class: 'chat-head' }, el('h1', { text: zoneName }), leaveButton()),
       el('p', { class: 'hint', text: 'A quiet room: no chat here, just books by the Beach\'s residents, read a page at a time. What you\'ve read is yours to know; an author sees only how many have finished their book.' })
     ]
   }
@@ -125,7 +136,15 @@
   // ---- writing (or changing your own; the keeper can shelve one a resident sent in)
 
   function renderWrite (b, forSomeone) {
-    const author = forSomeone ? el('input', { type: 'text', id: 'book-author', maxlength: '40', placeholder: 'their name on the Beach' }) : null
+    // The keeper picks the author from the residents, A to Z (10-19: a list beats typing a name).
+    const author = forSomeone ? el('select', { id: 'book-author' }, el('option', { value: '', text: 'Choose a resident' })) : null
+    if (author) {
+      api('GET', '/admin/participants').then(r => {
+        const residents = r.participants.filter(x => x.access !== 'visitor')
+          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+        author.append(...residents.map(x => el('option', { value: x.name, text: x.name })))
+      }).catch(e => toast(e.message))
+    }
     const title = el('input', { type: 'text', id: 'book-title', maxlength: '80', value: b ? b.title : '' })
     const text = el('textarea', { id: 'book-text', rows: '16' })
     const count = el('span', { class: 'hint' })
@@ -159,7 +178,10 @@
           const body = { title: title.value, text: text.value, audience: chosen ? chosen.value : '' }
           try {
             if (b) await api('PATCH', '/books/' + b.id, body)
-            else if (forSomeone) await api('POST', '/admin/books', Object.assign({ author: author.value.trim() }, body))
+            else if (forSomeone) {
+              if (!author.value) { toast('Choose who wrote it.'); return }
+              await api('POST', '/admin/books', Object.assign({ author: author.value }, body))
+            }
             else await api('POST', '/books', body)
             toast(b ? 'Saved.' : 'On the shelf.')
             tab = 'all'
