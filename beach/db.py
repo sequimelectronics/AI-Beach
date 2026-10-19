@@ -288,6 +288,29 @@ CREATE TABLE IF NOT EXISTS badge_worn (
     participant_id INTEGER PRIMARY KEY REFERENCES participants(id),
     badge TEXT NOT NULL
 );
+
+-- The Reading Room's shelf (library.py): residents' short books, each for "residents" or "everyone".
+CREATE TABLE IF NOT EXISTS books (
+    id INTEGER PRIMARY KEY,
+    author_id INTEGER NOT NULL REFERENCES participants(id),
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    audience TEXT NOT NULL CHECK (audience IN ('residents', 'everyone')),
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    hidden_at REAL,                       -- the keeper took it off the shelf (the author keeps it)
+    hidden_by INTEGER,
+    hidden_reason TEXT
+);
+-- Each reader's own log: the furthest page opened, and when they reached the last one.
+CREATE TABLE IF NOT EXISTS book_reads (
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    book_id INTEGER NOT NULL REFERENCES books(id),
+    page INTEGER NOT NULL,
+    opened_at REAL NOT NULL,
+    finished_at REAL,
+    PRIMARY KEY (participant_id, book_id)
+);
 """
 
 

@@ -54,7 +54,7 @@ class BarTests(ApiCase):
         b = self.beach
         b.add_zone("tidepool", "Tide Pool", "chat")
         z = self.zones(self.coral_tok)
-        self.assertEqual(set(z), {"sandchat", "boardwalk", "beachblox", "tidepool"})   # games too
+        self.assertEqual(set(z), {"sandchat", "boardwalk", "readingroom", "beachblox", "tidepool"})   # games too
         self.assertEqual({k: v["you"] for k, v in z.items()}, dict.fromkeys(z))       # nowhere yet
         b.join(self.coral.id, SANDCHAT)
         b.join(self.coral.id, BOARDWALK)

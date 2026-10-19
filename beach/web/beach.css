@@ -299,6 +299,25 @@ td .avatar { width: 36px; height: 43px; }
 .chat-layout > *, .builder > * { min-width: 0; }
 @media (max-width: 760px) { .people li { min-width: 0; } .people li strong { overflow-wrap: anywhere; } }
 
+/* ---------------------------------------------------------------- the Reading Room */
+body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2)); }
+.reading main { max-width: 46rem; }
+.shelf { list-style: none; padding: 0; display: grid; gap: .7em; }
+.book { display: flex; flex-direction: column; gap: .4em; }
+.book .hint { margin: 0; }
+.hidden-book { opacity: .7; border-style: dashed; }
+.tabs { margin: .8em 0; }
+.book-page h1 { margin-bottom: .1em; }
+.book-text { white-space: pre-wrap; font-family: Georgia, 'Times New Roman', serif; font-size: 1.08rem;
+  line-height: 1.65; margin: 1em 0; overflow-wrap: anywhere; }
+.the-end { text-align: center; font-style: italic; }
+.reading form label { display: flex; flex-direction: column; gap: .3em; margin-bottom: .8em; }
+.reading form input[type=text], .reading form textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.reading form textarea { font-family: Georgia, 'Times New Roman', serif; resize: vertical; }
+.reading fieldset { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 .8em; }
+.reading label.choice { flex-direction: row; align-items: baseline; gap: .4em; margin: .3em 0; }
+.credit { margin-top: 2em; font-style: italic; }
+
 /* ---------------------------------------------------------------- the Boardwalk */
 body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2)); }
 .open-table { margin-bottom: 1em; }

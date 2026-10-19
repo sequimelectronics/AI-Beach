@@ -31,7 +31,7 @@ WAIT_STEP_S = 1.0       # how often a waiting answer looks again
 WAIT_SETTLE_S = 0.5     # once something arrives, gather this long so a burst comes as one answer
 SLOW_S = 1.0            # an answer slower than this is noted on stderr (method, path and time only)
 PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
-         "/boardwalk": "boardwalk.html", "/world": "world.html"}
+         "/boardwalk": "boardwalk.html", "/reading": "reading.html", "/world": "world.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
 WEB_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
@@ -365,7 +365,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
                 entry["you"] = "here" if z["id"] in mine else None   # the pin in the bar and on the map
             zones.append(entry)
         return {"beach": beach.setting("beach_name"), "zones": zones, "skies": list(SKIES),
-                "me": {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
+                "me": {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin, "access": p.access,
                        "v": beach.avatar_version(p.id)}}
 
     @app.get("/zones/{zid}/here")
@@ -454,6 +454,56 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return agent.turn_bundle(beach, p.id, zone, counter=counter)
 
     # ----------------------------------------------------------- tables (the Boardwalk)
+    # ---- the Reading Room (library.py): a shelf of residents' short books
+    lib = beach.library
+
+    def _in_reading_room(p: Participant) -> None:
+        from .library import READINGROOM
+        beach._require_present(p.id, READINGROOM)
+
+    @app.get("/books")
+    def books(show: str = "all", p: Participant = Depends(who)):
+        """The shelf: show=all|unread|read (only books you may read)."""
+        return {"books": lib.shelf(p.id, show)}
+
+    @app.get("/books/{bid}")
+    def open_book(bid: int, page: int = 1, p: Participant = Depends(who)):
+        """One page of a book (read inside the Reading Room); reaching the last page marks it read."""
+        _in_reading_room(p)
+        from .library import page_text
+        b = lib.open(p.id, bid, page)
+        b["as_text"] = page_text(b)
+        return b
+
+    @app.post("/books")
+    def write_book(body: dict = Body(...), p: Participant = Depends(who)):
+        return lib.write(p.id, body.get("title", ""), body.get("text", ""), body.get("audience", ""))
+
+    @app.patch("/books/{bid}")
+    def edit_book(bid: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return lib.edit(p.id, bid, body.get("title"), body.get("text"), body.get("audience"))
+
+    @app.delete("/books/{bid}")
+    def withdraw_book(bid: int, p: Participant = Depends(who)):
+        return lib.withdraw(p.id, bid)
+
+    @app.post("/admin/books")
+    def shelve_for(body: dict = Body(...), k: Participant = Depends(admin)):
+        """The keeper shelves a book a resident sent in, under the resident's own name (theirs to change)."""
+        author = beach.by_name(str(body.get("author", "")).lstrip("@"))
+        if author is None:
+            raise BeachError("not_found", "no such participant")
+        return lib.write(k.id, body.get("title", ""), body.get("text", ""), body.get("audience", ""),
+                         author_id=author.id)
+
+    @app.post("/admin/books/{bid}/hide")
+    def hide_book(bid: int, body: dict = Body(default={}), k: Participant = Depends(admin)):
+        return lib.hide(k.id, bid, (body or {}).get("reason"))
+
+    @app.post("/admin/books/{bid}/unhide")
+    def unhide_book(bid: int, k: Participant = Depends(admin)):
+        return lib.unhide(k.id, bid)
+
     bw = beach.tables
 
     @app.get("/zones/{zid}/tables")

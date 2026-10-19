@@ -23,6 +23,8 @@
     night: 'rgba(15, 25, 70, .42)'
   }
   const ICON = {
+    // The Reading Room: three books on a shelf, one leaning.
+    books: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 20.5H22" stroke="#7a4b2a" stroke-width="2" stroke-linecap="round"/><rect x="4" y="6" width="4" height="13.5" rx=".6" fill="#4f7fa8" stroke="#2f2323"/><rect x="8.5" y="4" width="4.2" height="15.5" rx=".6" fill="#e0674f" stroke="#2f2323"/><rect x="14.6" y="7" width="4" height="13" rx=".6" fill="#f2c14e" stroke="#2f2323" transform="rotate(14 16.6 13.5)"/></svg>',
     tables: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="2" fill="#f5e2b3" stroke="#2f2323" stroke-width="1.5"/><path d="M7 2.5h5v5H7zM17 2.5h4.5v5H17M2.5 7.5H7v5H2.5zM12 7.5h5v5h-5zM7 12.5h5v5H7zM17 12.5h4.5v5H17zM2.5 17.5H7v4H2.5zM12 17.5h5v4h-5z" fill="#7a4b2a"/><circle cx="9.5" cy="15" r="2.2" fill="#c2462e" stroke="#2f2323"/></svg>',
     chat: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 11 Q12 1 22 11 Z" fill="#e0674f" stroke="#2f2323" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 11 V22" stroke="#2f2323" stroke-width="1.8"/></svg>',
     game: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="#fff" stroke="#2f2323" stroke-width="1.5"/><path d="M12 2.5 A9.5 9.5 0 0 1 21.5 12 L12 12Z" fill="#e0674f"/><path d="M2.5 12 A9.5 9.5 0 0 0 12 21.5 L12 12Z" fill="#2a9d8f"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#2f2323" stroke-width="1.5"/></svg>'
@@ -100,7 +102,7 @@
       'aria-disabled': z.open ? null : 'true',
       onclick: () => go(z)
     },
-    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : z.kind] || ICON.chat), z.name),
+    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : (z.books ? 'books' : z.kind)] || ICON.chat), z.name),
     el('span', { class: 'count', text: countText(z) }),
     z.you ? el('span', { class: 'you-line' }, Beach.pin(z.you), T.t('you_' + z.you)) : null)
     sign.querySelector('svg').setAttribute('class', 'kind-icon')

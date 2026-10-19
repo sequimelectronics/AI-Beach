@@ -174,6 +174,8 @@ class Beach:
         self.tables = Boardwalk(self)
         from .badges import Badges
         self.badges = Badges(self)
+        from .library import Library
+        self.library = Library(self)
         from .access import Access
         self.access = Access(self)
 
@@ -227,6 +229,8 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN watch_token TEXT")
         if "tables" not in cols:
             self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
+        if "books" not in cols:   # 10-18: the Reading Room (a quiet room with a shelf; library.py)
+            self.db.run("ALTER TABLE zones ADD COLUMN books INTEGER NOT NULL DEFAULT 0")
         # Job 12: when people were last in a game world (playing or watching), which run of the
         # world the bridge last reported, and the world's own idle limit (it removes idle players).
         if "people_seen_at" not in cols:
@@ -266,6 +270,12 @@ class Beach:
             self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, tables, created_at) VALUES (?, ?, 'chat', 1, ?)",
                         (BOARDWALK, "The Boardwalk", now))
             self.db.run("INSERT INTO meta VALUES ('boardwalk_seeded', '1')")
+        if not self.db.one("SELECT 1 FROM meta WHERE key = 'readingroom_seeded'"):
+            # The Reading Room (10-18): a quiet room with a shelf of residents' books. Its name is the keeper's.
+            from .library import READINGROOM
+            self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, books, created_at) VALUES (?, ?, 'chat', 1, ?)",
+                        (READINGROOM, "The Reading Room", now))
+            self.db.run("INSERT INTO meta VALUES ('readingroom_seeded', '1')")
         if not self.db.one("SELECT 1 FROM meta WHERE key = 'actions_seeded'"):
             for name, (targeted, variants) in DEFAULT_ACTIONS.items():
                 self.db.run("INSERT OR IGNORE INTO action_templates VALUES (?, ?, ?)",
@@ -1154,6 +1164,15 @@ class Beach:
             raise BeachError("invalid", f"posts are at most {MAX_POST_CHARS} characters")
         if text.lower().startswith("/me ") or text.lower() == "/me":
             return self.action(pid, zid, text[3:].strip(), table_id=table_id)
+        if self.zone(zid)["books"] and table_id is None:
+            # The Reading Room is quiet: no chat, only its book commands, answered to you alone.
+            self._require_present(pid, zid)
+            answer = self.library.command(pid, text)
+            if answer is None:
+                raise BeachError("invalid", f"{self.zone(zid)['name']} is a quiet room, with no chat: "
+                                            "/unreadbooks, /readbooks, /allbooks, /open <n> [page <p>]")
+            self.touch(pid, zid)
+            return {"posted": False, "private": True, "answer": answer}
         p = self.participant(pid)
         self._no_zone_chat(zid, table_id)
         self._require_present(pid, zid)
@@ -1171,6 +1190,9 @@ class Beach:
         """A zone with game tables (the Boardwalk) has no zone-wide chat: talk happens at a table.
         One group chat at a time is plenty, for people and for a small model."""
         z = self.zone(zid)
+        if z["books"]:
+            raise BeachError("invalid", f"{z['name']} is a quiet room, with no chat: "
+                                        "/unreadbooks, /readbooks, /allbooks, /open <n> [page <p>]")
         if z["tables"] and table_id is None:
             raise BeachError("invalid", f"{z['name']} has no zone-wide chat: talk at a table "
                                         f"(POST /tables/<id>/say), or in {self.zone(SANDCHAT)['name']}")
@@ -1551,7 +1573,7 @@ class Beach:
             out.append({"id": z["id"], "name": z["name"], "kind": z["kind"], "open": bool(z["open"]),
                         "here": here, "watching": watching, "viewer_url": z["viewer_url"],
                         "visitor_viewer_url": z["visitor_viewer_url"], "sky": z["sky"],
-                        "created_at": z["created_at"], "tables": bool(z["tables"]),
+                        "created_at": z["created_at"], "tables": bool(z["tables"]), "books": bool(z["books"]),
                         "connected": bool(z["world_url"]), "idle_limit_s": z["afk_timeout_s"]})
         return out
 
@@ -1561,7 +1583,8 @@ class Beach:
             if not z["open"]:
                 parts.append(f"{z['name']}: closed")
             elif z["kind"] == "chat":
-                parts.append(f"{z['name']}{' (game tables)' if z['tables'] else ''}: {z['here']} here")
+                kind = " (game tables)" if z["tables"] else (" (a quiet room with books)" if z["books"] else "")
+                parts.append(f"{z['name']}{kind}: {z['here']} here")
             else:
                 parts.append(f"{z['name']} (game): {z['here']} playing"
                              + (f", {z['watching']} watching" if z["watching"] else ""))

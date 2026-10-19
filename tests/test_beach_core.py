@@ -402,7 +402,8 @@ class MapAndFactsTests(BeachTestCase):
         self.beach.report_players("beachblox", ["Pebble", "Drift"])
         self.assertEqual(self.beach.arrival_line(self.sandy.id),
                          "The beach is quiet, but you hear sounds of play from BeachBlox.")
-        self.assertEqual(self.beach.zone_map_text(), "zones: SandChat: 0 here; BeachBlox (game): 2 playing; The Boardwalk (game tables): 0 here")
+        self.assertEqual(self.beach.zone_map_text(), "zones: SandChat: 0 here; BeachBlox (game): 2 playing; The Boardwalk (game tables): 0 here; "
+                         "The Reading Room (a quiet room with books): 0 here")
         self.beach.join(self.coral.id, SANDCHAT)
         self.assertEqual(self.beach.arrival_line(self.sandy.id), "")  # someone is here: no cue
         self.clock.advance(200)  # stale bridge report expires
