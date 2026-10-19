@@ -110,6 +110,24 @@ local CONFIG = {
     -- The pier (south-east): a plank deck from the east coast out over the shallows, its top `top_y`
     -- above the sand (a step you can walk up), with a wider end for fishing.
     pier = { deck = { x = { 43, 53 }, z = { -27, -23 } }, finish = { x = { 52, 57 }, z = { -30, -20 } }, top_y = 0.3 },
+    -- Fishing off the pier's end (the keeper's catches, 10-18): cast, wait for a bite, see what comes up.
+    -- weight: how often each turns up (the golden carp and the bottle are rare).
+    fishing = {
+        bite_s = { 4, 9 },
+        catches = {
+            { id = "minnow", weight = 18, text = "A minnow, you throw it back!" },
+            { id = "trout", weight = 11, text = "A large trout with a mysterious human face print pattern on its side." },
+            { id = "boot", weight = 13, text = "An old boot, what's that doing there?!" },
+            { id = "seabass", weight = 10, text = "A seabass with a very deep mysterious voice." },
+            { id = "crab", weight = 11, text = "A crab, who pinches your line, gives you a stern look, and scuttles off." },
+            { id = "pufferfish", weight = 9, text = "A pufferfish that puffs up in surprise, then slowly deflates, embarrassed." },
+            { id = "octopus", weight = 8, text = "An octopus that ties your line in a neat bow and hands it back." },
+            { id = "seaglass", weight = 8, text = "A piece of sea glass, smooth and green, worn soft by the sea." },
+            { id = "duck", weight = 7, text = "A rubber duck wearing tiny sunglasses. Nobody knows whose it is." },
+            { id = "carp", weight = 3, text = "A golden carp who makes fabulous promises of wealth and fame, but you let it go without making a bargain." },
+            { id = "bottle", weight = 3, text = "A bottle that contains the message, 'This is just for you, because you are cared for.'" },
+        },
+    },
     -- The signpost in the middle of the Plaza: a board pointing to each area.
     signpost = { x = 0, z = 0, height = 4.2 },
     -- The Sand Gardens (keeper's idea, 10-18): two boxes of smooth sand on the east side. Draw {"box": n}
@@ -489,6 +507,7 @@ mapInfo:SetAttribute("Layout", HttpService:JSONEncode({
     lighthouse = { x = LH.x, z = LH.z, tower_r = LH.tower_r, top_y = LH.top_y, ramp_r = LH.ramp_r, rise = LH.rise,
                    step_deg = LH.step_deg, first_deg = LH.first_deg, pads = LH.pads },
     pier = CONFIG.pier,
+    fishing = { spot = CONFIG.pier.finish },
     signpost = { x = CONFIG.signpost.x, z = CONFIG.signpost.z },
     gardens = { boxes = CONFIG.gardens.boxes, shapes = CONFIG.gardens.shapes, size = CONFIG.gardens.size },
     center = { CONFIG.center.X, CONFIG.center.Z },
@@ -831,6 +850,54 @@ local function doMold(player, data)
 end
 
 -- Sand art (below) is defined after this handler; declared here so the handler can reach it.
+--------------------------------------------------------------------------------
+-- FISHING (off the pier's end)
+--------------------------------------------------------------------------------
+-- Fish {} on the pier's end casts a line; after a few seconds something bites and the whole
+-- island hears what came up. Walking, jumping or Stop reels the line in first.
+local FISH = CONFIG.fishing
+local fishJob = {}
+local function onPierEnd(player)
+    local hrp = hrpOf(player)
+    if not hrp then return false end
+    local f, p = CONFIG.pier.finish, hrp.Position
+    return p.X >= f.x[1] - 0.5 and p.X <= f.x[2] + 0.5 and p.Z >= f.z[1] - 0.5 and p.Z <= f.z[2] + 0.5
+        and p.Y > CONFIG.pier.top_y
+end
+local function pickCatch()
+    local total = 0
+    for _, c in ipairs(FISH.catches) do total = total + c.weight end
+    local r = math.random() * total
+    for _, c in ipairs(FISH.catches) do
+        r = r - c.weight
+        if r <= 0 then return c end
+    end
+    return FISH.catches[1]
+end
+local function reelIn(player)
+    fishJob[player] = (fishJob[player] or 0) + 1
+    if player:GetAttribute("Fishing") then player:SetAttribute("Fishing", false) end
+end
+local function doFish(player)
+    if not onPierEnd(player) then return result(player, "FishFailed:NotOnThePierEnd") end
+    if player:GetAttribute("Fishing") then return result(player, "FishFailed:AlreadyFishing") end
+    fishJob[player] = (fishJob[player] or 0) + 1
+    local job = fishJob[player]
+    player:SetAttribute("Fishing", true)
+    result(player, "Casting")
+    task.spawn(function()
+        task.wait(FISH.bite_s[1] + math.random() * (FISH.bite_s[2] - FISH.bite_s[1]))
+        if fishJob[player] ~= job or not inGame(player) then return end
+        local c = pickCatch()
+        player:SetAttribute("LastCatch", c.text)
+        player:SetAttribute("Catches", (player:GetAttribute("Catches") or 0) + 1)
+        result(player, "Caught:" .. c.id)
+        player:SetAttribute("Fishing", false)   -- last, so whoever waits on it sees the catch
+        announce(player.Name .. " reeled something in! " .. c.text)
+        beachEvent("fish", player)
+    end)
+end
+
 local artJob, boxOf, doDraw, doRake
 
 if AgentInputService then
@@ -844,6 +911,7 @@ if AgentInputService then
         local hum = c and c:FindFirstChild("Humanoid")
         if not hum then return end
         if kind == "MoveTo" or kind == "Stop" or kind == "Jump" then
+            reelIn(player)                               -- a move reels your fishing line in
             artJob[player] = (artJob[player] or 0) + 1   -- stops a shape being walked for you
             local bx = boxOf(player)
             if bx and bx.busy then bx.busy, bx.pen, bx.dirty = false, true, true; player:SetAttribute("ArtBusy", false) end
@@ -870,6 +938,8 @@ if AgentInputService then
             doDraw(player, data)
         elseif kind == "Rake" then
             doRake(player)
+        elseif kind == "Fish" then
+            doFish(player)
         else
             result(player, "InvalidAction")
         end

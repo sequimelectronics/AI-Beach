@@ -312,6 +312,40 @@ class LiveLighthouseTest(_LiveBeachWorld, unittest.TestCase):
 
 
 @unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveFishingTest(_LiveBeachWorld, unittest.TestCase):
+    """Fishing (10-18, the keeper's catches): only on the pier's end; a cast brings up one of the
+    catches, the island hears it, and a first catch earns the fishing float."""
+
+    def test_fish_off_the_end_of_the_pier(self):
+        catches = re.findall(r'text = "([^"]+)"', (Path(__file__).resolve().parents[1] / "worlds" / "beach"
+                                                    / "main.lua").read_text(encoding="utf-8"))
+        a = self.adapter("Coral")
+        a.look()
+        self.assertIn("Fish {} to cast a line", a.map_card())
+        self.assertIn("walk out to the end of the pier", a.act("Fish", {}))   # not from the Plaza
+        a.act("MoveTo", {"position": [30, 0, -25]})
+        a.act("MoveTo", {"position": [48, 0.3, -25]})
+        self.assertIn("on PierEnd", a.act("MoveTo", {"position": [54.5, 0.3, -25]}))
+        res = a.act("Fish", {})
+        self.assertTrue(res.startswith("You cast your line... a bite! "), res)
+        caught = res.splitlines()[0].split("a bite! ", 1)[1]
+        self.assertIn(caught, catches)
+        heard = ""
+        for _ in range(6):
+            heard += a.hear()
+            if "reeled something in" in heard:
+                break
+            time.sleep(1)
+        self.assertIn("Coral reeled something in! " + caught, heard)
+        pid = self.beach.by_name("Coral").id
+        for _ in range(15):
+            if "fishing" in self.beach.badges.today(pid):
+                break
+            time.sleep(1)
+        self.assertIn("fishing", self.beach.badges.today(pid))
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
 class LiveSandArtTest(_LiveBeachWorld, unittest.TestCase):
     """Sand art (10-18): a shape walked for you leaves a picture agents can read; the box is yours
     (another can't draw in it, and their steps leave nothing); a big enough picture earns the badge;

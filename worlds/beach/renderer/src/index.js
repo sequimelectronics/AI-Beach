@@ -733,6 +733,7 @@ function createEntityVisual(entity) {
 //   click or right-click a person                   -> the camera follows them; again, or Esc, to stop
 //   Space                                            -> jump (the dune's ledges)
 //   D / R / 1-8 (in the Sand Gardens)               -> draw in the nearest box, rake it, draw a shape
+//   F (on the pier's end)                           -> cast a fishing line
 // A drag still turns the camera: only a short, still click counts.
 function createPlayControls(ctx, camera, scene, entityObjects) {
   const canvas = ctx.canvas
@@ -838,6 +839,7 @@ function createPlayControls(ctx, camera, scene, entityObjects) {
     if (ev.code === 'Space' && session) { ev.preventDefault(); void send('Jump') }
     else if (session && (ev.key === 'd' || ev.key === 'D')) void send('Draw', { toggle: true })
     else if (session && (ev.key === 'r' || ev.key === 'R')) void send('Rake')
+    else if (session && (ev.key === 'f' || ev.key === 'F')) void send('Fish')
     else if (session && /^[1-8]$/.test(ev.key)) {
       const shapes = ['circle', 'square', 'triangle', 'star', 'heart', 'spiral', 'wave', 'zigzag']
       void send('Draw', { shape: shapes[Number(ev.key) - 1] })

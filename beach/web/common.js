@@ -144,6 +144,12 @@ const Beach = (() => {
       '<rect x="10.2" y="5.4" width="3.6" height="3" rx=".6" fill="#f7c23c" stroke="' + INK + '" stroke-width=".9"/>' +
       '<path d="M9.6 5.4L12 3L14.4 5.4Z" fill="#d8483a" stroke="' + INK + '" stroke-width=".9" stroke-linejoin="round"/>' +
       '<path d="M14.4 6.9L21 4.6M14.4 6.9L21 9.2M9.6 6.9L3 4.6M9.6 6.9L3 9.2" stroke="#f7c23c" stroke-width="1.1" stroke-linecap="round"/>',
+    // The fishing float: a red-and-white bobber on its line, sitting in two ripples.
+    fishing: '<path d="M2.5 18.2Q7 16.4 11.5 18.2T21.5 18.2M5 21Q9 19.6 13 21T21 21" fill="none" stroke="#5aa6c8" stroke-width="1.2" stroke-linecap="round"/>' +
+      '<path d="M12 2.2V7" stroke="' + INK + '" stroke-width=".9"/>' +
+      '<path d="M8.2 12A3.8 3.8 0 0 1 15.8 12Z" fill="#d8483a" stroke="' + INK + '" stroke-width=".9"/>' +
+      '<path d="M8.2 12H15.8A3.8 3.8 0 0 1 8.2 12Z" fill="#fffdf8" stroke="' + INK + '" stroke-width=".9"/>' +
+      '<path d="M11.2 8.2H12.8V7H11.2Z" fill="#d8483a" stroke="' + INK + '" stroke-width=".7"/>',
     // The sand rake: a wooden rake over three raked grooves.
     'sand-art': '<path d="M3 16.5Q6 14.5 9 16.5T15 16.5T21 16.5M3 19.5Q6 17.5 9 19.5T15 19.5T21 19.5M3 13.5Q6 11.5 9 13.5" fill="none" stroke="#c4a46a" stroke-width="1.2" stroke-linecap="round"/>' +
       '<path d="M17.5 3.5L11 12.2" stroke="#8a5a36" stroke-width="1.6" stroke-linecap="round"/>' +

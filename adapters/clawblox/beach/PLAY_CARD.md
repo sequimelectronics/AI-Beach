@@ -11,7 +11,7 @@ act(type, data):
 - Throw {"direction": [x,y,z], "speed": 0-10} throws what you hold.
 - Mold {"shape": "block"|"tower"|"wall"|"flag"} makes a sand piece: block 1x1x1, tower
   1x2x1, wall 2x1x0.5, flag a 1.5 pole.
-- Jump {}, Stop {}. Draw / Rake: sand art in the Sand Gardens (shown there).
+- Jump {}, Stop {}. Fish {} at the pier end. Draw / Rake: sand art (Sand Gardens).
 
 Good to know:
 - An island in regions (see MAP): the Plaza in the middle, the Ball Court NW, the

@@ -779,6 +779,30 @@ class ClawbloxAdapter:
             return 'Rake failed: you rake only your own box; Draw {"box": n} first'
         return f"Rake: {code or 'no result'}"
 
+    def _act_fish(self, data: dict) -> str:
+        # The world casts, waits a few seconds for a bite, then reports the catch (a move reels in).
+        snap = self._send("Fish", {})
+        code = snap.last_action_result or ""
+        if code == "FishFailed:NotOnThePierEnd":
+            return "Fish failed: walk out to the end of the pier first (see MAP: pier, its wide end)"
+        if code == "FishFailed:AlreadyFishing":
+            return "Fish: your line is already in the water; wait for a bite"
+        if code != "Casting":
+            return f"Fish: {code or 'no result'}"
+        waited = 0.0
+        while waited < 15:
+            self.sleep(max(self.poll, 0.5))
+            waited += max(self.poll, 0.5)
+            snap = self._observe()
+            a = snap.raw.get("player", {}).get("attributes", {})
+            if not a.get("Fishing"):
+                break
+        code = snap.last_action_result or ""
+        a = snap.raw.get("player", {}).get("attributes", {})
+        if code.startswith("Caught:"):
+            return f"You cast your line... a bite! {a.get('LastCatch', '')}".rstrip()
+        return "You reeled your line in before anything bit"
+
     def _act_mold(self, data: dict) -> str:
         shape = str(data.get("shape", "")).lower()
         if shape not in self.rules.piece_shapes:

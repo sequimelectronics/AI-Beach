@@ -436,7 +436,8 @@ def beach_map_card_text(snap: Snapshot, layout: dict, rules: Rules) -> str:
     if pier:
         d, e = pier["deck"], pier["finish"]
         lines.append(f"pier: a plank deck over the sea x {d['x'][0]:g}..{d['x'][1]:g}, z {d['z'][0]:g}..{d['z'][1]:g}, "
-                     f"widening at its end x {e['x'][0]:g}..{e['x'][1]:g}, z {e['z'][0]:g}..{e['z'][1]:g}; top y={pier['top_y']:g} (a step up)")
+                     f"widening at its end x {e['x'][0]:g}..{e['x'][1]:g}, z {e['z'][0]:g}..{e['z'][1]:g}; top y={pier['top_y']:g} (a step up)"
+                     + ("; stand on its end and Fish {} to cast a line" if layout.get("fishing") else ""))
     gd = layout.get("gardens")
     if gd and gd.get("boxes"):
         lines.append("sand gardens: " + "; ".join(
