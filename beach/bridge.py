@@ -345,9 +345,12 @@ def run_loop(b: "Bridge", every: float = 10.0, once: bool = False, keep_going=la
     report presence every `every` seconds."""
     last_report = 0.0
     while keep_going():
+        before = b.last_door
         b.sync_door()
         b.sync_events()
-        if time.monotonic() - last_report >= max(2.0, every):
+        # Someone was just let in (or out): report now, so the Beach hands back their look at once and
+        # their character wears it within a second or two, not after the next report (10-19, the keeper).
+        if b.last_door != before or time.monotonic() - last_report >= max(2.0, every):
             b.step()
             last_report = time.monotonic()
         if once:

@@ -329,13 +329,32 @@ async function refreshTints() {
   }
 }
 
+// Names drawn without a look yet (someone who just arrived): while there are any, look again every 1.5 s
+// rather than every 10 s, for up to a minute each (a guest never gets one). 10-19, the keeper: a new
+// arrival took up to 15 s to become themselves.
+const waitingLook = new Map()
+let lastTints = 0
+
 function startTints() {
   if (tintTimer) return
   refreshTints()
-  tintTimer = setInterval(refreshTints, 10000)
+  lastTints = Date.now()
+  tintTimer = setInterval(() => {
+    const now = Date.now()
+    let soon = false
+    for (const [name, since] of waitingLook) {
+      if (tints[name]) waitingLook.delete(name)
+      else if (now - since <= 60000) soon = true   // past a minute: remembered, so it isn't re-added
+    }
+    if (soon || now - lastTints >= 10000) {
+      lastTints = now
+      refreshTints()
+    }
+  }, 1500)
 }
 
 function lookFor(name) {
+  if (!tints[name] && !waitingLook.has(name)) waitingLook.set(name, Date.now())
   return tints[name] || guestLook('#' + nameColor(name).getHexString(), guestFace)
 }
 

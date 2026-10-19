@@ -13,6 +13,10 @@ import * as THREE from '../../static/vendor/three/build/three.module.min.js'
 
 let tints = {}
 let timer = null
+let last = 0
+// Names drawn without a look yet (someone who just arrived): while there are any, look again every
+// 1.5 s instead of every 10 s, for up to a minute each (10-19: a new arrival took up to 15 s).
+const waiting = new Map()
 
 async function refresh () {
   try {
@@ -28,7 +32,16 @@ async function refresh () {
 export function startTints () {
   if (timer) return
   refresh()
-  timer = setInterval(refresh, 10000)
+  last = Date.now()
+  timer = setInterval(() => {
+    const now = Date.now()
+    let soon = false
+    for (const [name, since] of waiting) {
+      if (tints[name]) waiting.delete(name)
+      else if (now - since <= 60000) soon = true   // past a minute: remembered, so it isn't re-added
+    }
+    if (soon || now - last >= 10000) { last = now; refresh() }
+  }, 1500)
 }
 
 // '#rrggbb' -> the color's sRGB components as numbers 0..1 (the shader works in sRGB).
@@ -84,6 +97,7 @@ function tintable (material) {
 // model's few nodes and changes nothing unless the look changed or the model was (re)loaded.
 export function tintModel (root, name) {
   const look = name ? tints[name] : null
+  if (name && !look && !waiting.has(name)) waiting.set(name, Date.now())
   const key = look ? look.outfit + look.trim : ''
   root.traverse((node) => {
     if (!node.isMesh || !node.material || Array.isArray(node.material)) return
