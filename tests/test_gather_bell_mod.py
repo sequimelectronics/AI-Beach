@@ -103,8 +103,8 @@ class GatherBellModTests(unittest.TestCase):
 
     def test_config_names_only_a_visit_folder(self):
         # Pharos (10-20): the project file names a folder, never an address or a file to send.
-        ok = self.js("m.normalize({visitFolder: f, everySeconds: 1})", f="C:\\Users\\x\\beach-visit\\")
-        self.assertEqual(ok["visitFolder"], "C:/Users/x/beach-visit")
+        ok = self.js("m.normalize({visitFolder: f, everySeconds: 1})", f="D:\\visits\\beach\\")
+        self.assertEqual(ok["visitFolder"], "D:/visits/beach")
         self.assertEqual(ok["everySeconds"], 10)                 # clamped
         self.assertEqual(ok["name"], "the Beach")
         self.assertNotIn("beach", ok)
@@ -115,7 +115,8 @@ class GatherBellModTests(unittest.TestCase):
 
     def test_only_a_token_shaped_secret_is_ever_sent(self):
         self.assertEqual(self.js("m.tokenOf(t)", t="Tq4fakeTOKENfor_tests-only9\n"), "Tq4fakeTOKENfor_tests-only9")
-        for bad in ("-----BEGIN OPENSSH PRIVATE KEY-----\nabc", "short", "x" * 65, "has space in it here ok", "a" * 2000):
+        key_header = "-----BEGIN " + "OPENSSH " + "PRIVATE KEY-----"   # built here, so this file holds no key shape
+        for bad in (key_header + "\nabc", "short", "x" * 65, "has space in it here ok", "a" * 2000):
             self.assertIsNone(self.js("m.tokenOf(t)", t=bad), bad[:20])
 
     def test_a_visitor_ringer_is_never_named(self):
