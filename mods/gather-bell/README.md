@@ -40,6 +40,17 @@ never as the person typing.
 The Beach side has its own switch: the keeper can make a participant not invitable, and then no
 bell invites them at all.
 
+## The opt-in record (for a relay)
+
+A session that's closed can't hear anything. So each listening session also keeps one small file,
+`<your home folder>/.claude/gather-bell/sessions/<session id>.json`:
+`{"session", "name", "on", "lastSeen", "beach"}`, refreshed every 5 minutes (no model turns). A relay
+(on our Beach, the coordinator session) reads that folder when the bell rings: **on and fresh** means
+the session heard the bell itself; **on and stale** means it's asleep or closed, so the relay sends the
+invitation as a session message instead. The folder is fixed by the mod, never chosen by a project file,
+and the record holds no token or address. Set `"label"` in gather-bell.json to how the relay should
+name this session.
+
 `/gather-bell` shows the status; `/gather-bell off` mutes the wake for this session and
 `/gather-bell on` turns it back on.
 

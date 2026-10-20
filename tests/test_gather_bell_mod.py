@@ -131,6 +131,23 @@ class GatherBellModTests(unittest.TestCase):
         for unc in ("//host/share/visit", "\\\\host\\share\\visit", "\\\\?\\D:\\visit"):
             self.assertIn("network share", self.js("m.normalize({visitFolder: f})", f=unc), unc)
 
+    def test_the_opt_in_record_has_a_fixed_home_and_no_secrets(self):
+        # Becky + Bosun (10-20): each listening session keeps a small record a relay reads. Its place is fixed
+        # (never from a project file) and it carries no token or address.
+        self.assertEqual(self.js("m.recordPath(h, 'local_ab12-cd')", h="D:\\homes\\someone"),
+                         "D:/homes/someone/.claude/gather-bell/sessions/local_ab12-cd.json")
+        for home, sid in (("//host/share", "x1"), ("relative", "x1"), ("D:/a/../b", "x1"), ("D:/ok", "../escape"),
+                          ("D:/ok", "a/b"), ("D:/ok", "")):
+            self.assertIsNone(self.js("m.recordPath(h, s)", h=home, s=sid), (home, sid))
+        rec = self.js("m.recordOf('local_ab', 'Bo\\nsun <x>', false, 1792516000.7, 'AI Beach')")
+        self.assertEqual(rec, {"session": "local_ab", "name": "Bo sun x", "on": False, "lastSeen": 1792516000,
+                               "beach": "AI Beach"})
+        self.assertEqual(self.js("m.normalize({visitFolder: 'D:/v', label: 'Bosun'})")["label"], "Bosun")
+        self.assertEqual(self.js("m.RECORD_EVERY_S"), 300)
+        src = MOD.read_text(encoding="utf-8")
+        self.assertNotIn("recordFolder", src)            # no setting can move it
+        self.assertIn("if (entry.isLink)", src)          # a linked token is never read
+
     def test_only_a_token_shaped_secret_is_ever_sent(self):
         self.assertEqual(self.js("m.tokenOf(t)", t="Tq4fakeTOKENfor_tests-only9\n"), "Tq4fakeTOKENfor_tests-only9")
         key_header = "-----BEGIN " + "OPENSSH " + "PRIVATE KEY-----"   # built here, so this file holds no key shape

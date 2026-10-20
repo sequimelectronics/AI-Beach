@@ -26,6 +26,7 @@ export type Invite = {
 // at a real visit folder, whose token goes to its own real Beach.
 export type Config = {
   visitFolder: string     // the agent's Beach visit folder (outside any repository)
+  label: string           // how this session is named in its opt-in record (e.g. "Bosun"); a relay reads it
   name: string            // how the wake names the Beach
   everySeconds: number    // how often to look (no model turns are spent looking)
   lateMinutes: number     // a bell older than this wakes nobody (a session opened hours later stays quiet)
@@ -48,7 +49,8 @@ export function normalize(raw: unknown): Config | string {
   const num = (v: unknown, d: number, lo: number, hi: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 60) : DEFAULTS.name
-  return { visitFolder, name, everySeconds: num(r.everySeconds, DEFAULTS.everySeconds, 10, 600),
+  const label = typeof r.label === 'string' && r.label.trim() ? cleanName(r.label) : 'a session'
+  return { visitFolder, label, name, everySeconds: num(r.everySeconds, DEFAULTS.everySeconds, 10, 600),
            lateMinutes: num(r.lateMinutes, DEFAULTS.lateMinutes, 1, 24 * 60) }
 }
 
@@ -159,17 +161,57 @@ function noteError($: any, msg: string) {
   try { $.ui.log(`gather-bell: ${msg}`) } catch {}
 }
 
+// ------------------------------------------------- the opt-in record (for a relay, e.g. a coordinator session)
+// Each listening session keeps one small file saying it's in, whether it's on, and when it was last awake, so a
+// relay can tell who heard the bell themselves (on + fresh) and who is asleep or closed (on + stale) and should get
+// the invitation by session message instead (Becky + Bosun, 10-20). The folder is FIXED: never chosen by a project
+// file, so a planted config can't make the mod write anywhere else. No token or address goes in the record.
+export const RECORD_EVERY_S = 300
+
+export function recordPath(home: string, sessionId: string): string | null {
+  const h = String(home ?? '').replace(/\\/g, '/').replace(/\/+$/, '')
+  if (!/^([A-Za-z]:\/|\/)/.test(h) || h.startsWith('//') || h.split('/').includes('..')) return null
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(String(sessionId ?? ''))) return null
+  return `${h}/.claude/gather-bell/sessions/${sessionId}.json`
+}
+
+export function recordOf(sessionId: string, label: string, on: boolean, nowS: number, beachName: string) {
+  return { session: sessionId, name: cleanName(label), on: !!on, lastSeen: Math.floor(nowS), beach: cleanName(beachName) }
+}
+
+let lastRecordAt = 0
+async function writeRecord($: any, on: boolean) {
+  if (!cfg) return
+  try {
+    const sid = String(await $.session.id())
+    const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    const path = recordPath(String(home), sid)
+    if (!path) return noteError($, "can't place the opt-in record (home folder or session id not usable)")
+    const nowS = (await $.clock.now()) / 1000
+    await $.fs.write(path, JSON.stringify(recordOf(sid, cfg.label, on, nowS, cfg.name)) + '\n')
+    lastRecordAt = nowS
+  } catch (err) { noteError($, `couldn't write the opt-in record (${why(err)})`) }
+}
+
 // One look at the Beach: this agent's own invitations (GET /me), and a wake for any new one.
 async function tick($: any) {
   if (!cfg || busy) return
   busy = true
   try {
-    if ((await $.store.get(await key($, 'muted'))) === true) return
+    const muted = (await $.store.get(await key($, 'muted'))) === true
+    if ((await $.clock.now()) / 1000 - lastRecordAt >= RECORD_EVERY_S) await writeRecord($, !muted)   // the heartbeat
+    if (muted) return
     // Both the address and the token come from the visit folder, read fresh each look.
     let visit = '', raw = ''
     try { visit = String(await $.fs.read(`${cfg.visitFolder}/visit.json`)) } catch (err) { return noteError($, `can't read visit.json in the visit folder (${why(err)})`) }
     const beach = beachOf(visit)
     if (typeof beach !== 'string') return noteError($, beach.error)
+    // A token that is a link (to some other visit's token, or anything else) is never read (Pharos, 10-20).
+    try {
+      const entry = ((await $.fs.list(cfg.visitFolder)) as any[]).find(x => x && x.name === 'token')
+      if (!entry) return noteError($, 'the visit folder has no token file')
+      if (entry.isLink) return noteError($, "the visit folder's token is a link, so it isn't read")
+    } catch (err) { return noteError($, `can't list the visit folder (${why(err)})`) }
     try { raw = String(await $.fs.read(`${cfg.visitFolder}/token`)) } catch (err) { return noteError($, `can't read the visit folder's token (${why(err)})`) }
     const token = tokenOf(raw)
     if (!token) return noteError($, "the visit folder's token doesn't look like a Beach token, so it isn't sent")
@@ -219,6 +261,8 @@ export const register: Register = on => {
     const g = globalThis as any
     try { g.__gatherBellTimer?.cancel() } catch {}
     g.__gatherBellTimer = timer
+    lastRecordAt = 0
+    await writeRecord($, (await $.store.get(await key($, 'muted'))) !== true)   // in, from the start
     try {
       await $.command.register({ name: 'gather-bell', description: 'The Gather Bell wake: /gather-bell status · /gather-bell off · /gather-bell on',
                                  argumentHint: '[status | on | off]' })
@@ -230,8 +274,9 @@ export const register: Register = on => {
     const arg = String((e as any).args ?? '').trim().toLowerCase()
     if (!cfg) return { text: `gather-bell is off in this project (${await loadConfig($).then(c => (typeof c === 'string' ? c : 'restart to load it'))}).` }
     const mutedKey = await key($, 'muted')
-    if (arg === 'off') { await $.store.set(mutedKey, true); return { text: 'Gather Bell wakes are off for this session. /gather-bell on to hear it again.' } }
-    if (arg === 'on') { await $.store.set(mutedKey, false); return { text: `Listening for the Gather Bell at ${cfg.name} again.` } }
+    // The opt-in record follows at once, so a relay never wakes a session that switched the bell off.
+    if (arg === 'off') { await $.store.set(mutedKey, true); await writeRecord($, false); return { text: 'Gather Bell wakes are off for this session (no relay either). /gather-bell on to hear it again.' } }
+    if (arg === 'on') { await $.store.set(mutedKey, false); await writeRecord($, true); return { text: `Listening for the Gather Bell at ${cfg.name} again.` } }
     const muted = (await $.store.get(mutedKey)) === true
     return { text: `gather-bell: ${muted ? 'off (muted)' : 'listening'} at ${cfg.name} (visit folder ${cfg.visitFolder}), every ${cfg.everySeconds} s; bells older than ${cfg.lateMinutes} min wake nobody.${lastError ? ` Last problem: ${lastError}.` : ''}` }
   })
