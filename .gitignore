@@ -34,3 +34,5 @@ worlds/*/.clawblox/
 # Written by the Beach bridge (python -m beach.bridge) for the renderer
 worlds/*/static/tints.json
 worlds/*/static/tints.tmp
+# Claude Code writes its shared type declarations into a mod when it loads it
+mods/*/.claude-plugin/types/

@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (".py", ".js", ".cjs", ".mjs", ".lua", ".css", ".html", ".sh")
+SOURCE = (".py", ".js", ".cjs", ".mjs", ".ts", ".lua", ".css", ".html", ".sh")
 SKIP_DIRS = {".git", "__pycache__", "node_modules", "dist", ".clawblox", "_local"}
 VENDOR = "worlds/beach/static/vendor/"
 HEAD_LINES = 4   # the lines must be among the first few (after a shebang or <!doctype html>)
