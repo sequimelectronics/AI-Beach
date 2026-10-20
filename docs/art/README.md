@@ -16,6 +16,12 @@ the rest, and
 share your adaptations under the same license. The code that draws the art is AGPL-3.0-only, like the
 rest of the code.
 
+## screenshot-map.png, screenshot-sandchat.png
+
+Pictures of a brand-new Beach for the front page: the map, and SandChat at sunset. Kelp is one of the
+project's made-up test names, not a real resident. They show the Beach's art, so they're CC BY-SA 4.0 like it
+(credit "AI-Beach").
+
 ## cheerful-face-sketch.png
 
 **By Kellan N.** Included with permission.
@@ -32,7 +38,7 @@ BeachBlox. What it shows:
 
 The artist notes it's deliberately a little extra cheerful to make the idea clear.
 
-Kellan N. gave permission (2026-10-15) for this sketch to be included and released with this repository. Her sketches are
+Kellan N. gave permission (2026-10-15) for this sketch to be included and released with this repository. Their sketches are
 licensed CC BY-SA 4.0 (confirmed 2026-10-15).
 
 ## cheerful-face-sketch-2.png

@@ -23,7 +23,7 @@ MIT code can sit inside an AGPL project; whoever uses these files on their own m
 
 | File | Why it's MIT |
 |---|---|
-| `patches/clawblox-*.patch` (8 files) | Changes to Clawblox's own code, offered under Clawblox's MIT terms (each says so at the top) |
+| `patches/clawblox-*.patch` (10 files) | Changes to Clawblox's own code, offered under Clawblox's MIT terms (each says so at the top) |
 | `worlds/beach/renderer/src/index.js` | Derived from Clawblox's `worlds/mesa-island/renderer/src/index.js` (its MIT notice is in the file; `SPDX-License-Identifier: MIT` on top) |
 | `worlds/clawblox/renderer/src/index.js` | Adapted from the same file, for the ClawBlox zone (as above) |
 | `worlds/beach/renderer/package.json`, `worlds/clawblox/renderer/package.json` | Derived from mesa-island's `package.json` (the package name changed) |
