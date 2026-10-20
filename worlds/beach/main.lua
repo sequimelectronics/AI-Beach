@@ -864,6 +864,7 @@ local function onPierEnd(player)
     return p.X >= f.x[1] - 0.5 and p.X <= f.x[2] + 0.5 and p.Z >= f.z[1] - 0.5 and p.Z <= f.z[2] + 0.5
         and p.Y > CONFIG.pier.top_y
 end
+
 local function pickCatch()
     local total = 0
     for _, c in ipairs(FISH.catches) do total = total + c.weight end
@@ -877,6 +878,60 @@ end
 local function reelIn(player)
     fishJob[player] = (fishJob[player] or 0) + 1
     if player:GetAttribute("Fishing") then player:SetAttribute("Fishing", false) end
+end
+
+-- (The keeper's surprise, 10-20: deliberately left out of the cards and docs.) Leave the pier's end
+-- into the sea and a current takes you up the east coast and washes you ashore below the lighthouse.
+local CURRENT = { speed = 7, grace_s = 1.5,
+    route = { { 56, -10 }, { 56, 28 }, { 52, 34 } }, shore = { 49, 36 } }
+local pierEndAt, drifting = {}, {}
+local function offThePier(x, z)
+    local P = CONFIG.pier
+    for _, r in ipairs({ P.deck, P.finish }) do
+        if x >= r.x[1] - 0.5 and x <= r.x[2] + 0.5 and z >= r.z[1] - 0.5 and z <= r.z[2] + 0.5 then return false end
+    end
+    return not on_land(x, z)
+end
+local function currentTick(dt, now)
+    for _, player in ipairs(Players:GetPlayers()) do
+        local hrp = hrpOf(player)
+        local d = drifting[player]
+        if not hrp then
+            drifting[player], pierEndAt[player] = nil, nil
+        elseif d then
+            d.s = d.s + CURRENT.speed * dt
+            local left, a = d.s, d.pts[1]
+            for i = 2, #d.pts do
+                local b = d.pts[i]
+                local seg = (b - a).Magnitude
+                if left <= seg then a = a + (b - a).Unit * left; left = -1; break end
+                left, a = left - seg, b
+            end
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            if left >= 0 then   -- ashore
+                drifting[player] = nil
+                hrp.Position = Vector3.new(CURRENT.shore[1], 3, CURRENT.shore[2])
+                local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+                if hum then hum:CancelMoveTo() end
+                announce(player.Name .. " washed up at the foot of the lighthouse.")
+            else
+                hrp.Position = a
+            end
+        elseif onPierEnd(player) then
+            pierEndAt[player] = now
+        elseif pierEndAt[player] and now - pierEndAt[player] < CURRENT.grace_s
+                and hrp.Position.Y < CONFIG.pier.top_y + 2.5 and offThePier(hrp.Position.X, hrp.Position.Z) then
+            pierEndAt[player] = nil
+            local y = hrp.Position.Y
+            local pts = { hrp.Position }
+            for _, w in ipairs(CURRENT.route) do pts[#pts + 1] = Vector3.new(w[1], y, w[2]) end
+            drifting[player] = { s = 0, pts = pts }
+            local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+            if hum then hum:CancelMoveTo() end
+            reelIn(player)
+            announce("A current swept " .. player.Name .. " out to sea!")
+        end
+    end
 end
 local function doFish(player)
     if not onPierEnd(player) then return result(player, "FishFailed:NotOnThePierEnd") end
@@ -1438,6 +1493,7 @@ local lifeguardTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     local now = os.clock()
     drawTick(now)
+    currentTick(dt, now)
     lifeguardTimer = lifeguardTimer + dt
     if lifeguardTimer >= 1 then
         lifeguardTimer = 0

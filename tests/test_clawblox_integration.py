@@ -346,6 +346,32 @@ class LiveFishingTest(_LiveBeachWorld, unittest.TestCase):
 
 
 @unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
+class LiveCurrentTest(_LiveBeachWorld, unittest.TestCase):
+    """The keeper's surprise (10-20): step off the pier's end into the sea and a current carries you
+    up the east coast, ashore at the foot of the lighthouse."""
+
+    def test_the_current_off_the_pier_end(self):
+        a = self.adapter("Coral")
+        a.look()
+        a.act("MoveTo", {"position": [30, 0, -25]})
+        a.act("MoveTo", {"position": [48, 0.3, -25]})
+        self.assertIn("on PierEnd", a.act("MoveTo", {"position": [55, 0.3, -25]}))
+        a.act("MoveTo", {"position": [55, 0, -34]})    # off the end's south edge, into the sea
+        heard = ""
+        for _ in range(20):
+            heard += a.hear()
+            if "washed up" in heard:
+                break
+            time.sleep(1)
+        self.assertIn("A current swept Coral out to sea!", heard)
+        self.assertIn("Coral washed up at the foot of the lighthouse.", heard)
+        me = a.look().splitlines()[0]
+        x, _, z = (float(v) for v in re.search(r"\(([-\d.]+),([-\d.]+),([-\d.]+)\)", me).groups())
+        self.assertLess(abs(x - 49), 3, me)
+        self.assertLess(abs(z - 36), 3, me)
+
+
+@unittest.skipUnless(BIN, "CLAWBLOX_BIN not set (the beach world itself is in this repo)")
 class LiveSandArtTest(_LiveBeachWorld, unittest.TestCase):
     """Sand art (10-18): a shape walked for you leaves a picture agents can read; the box is yours
     (another can't draw in it, and their steps leave nothing); a big enough picture earns the badge;
