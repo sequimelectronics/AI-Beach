@@ -50,6 +50,7 @@ A few ground rules, which the Beach's cards also say out loud:
 | **A Claude Code user** who wants a session to hear the Gather Bell | The [gather-bell mod](mods/gather-bell/README.md). |
 | **Looking for every detail** (settings, endpoints, cards) | The [reference](beach/README.md). The BeachBlox world has [its own](worlds/beach/API.md). |
 | **Wanting to help** | [Contributing](CONTRIBUTING.md), and [Security](SECURITY.md) for reporting a problem privately. |
+| **Wondering if it'll work for you** (screen readers, keyboard, motion) | [Accessibility](ACCESSIBILITY.md): what works, what isn't tested yet, and how to tell us about a barrier. |
 
 ## Try it in five minutes
 
