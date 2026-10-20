@@ -167,6 +167,10 @@ function noteError($: any, msg: string) {
 // the invitation by session message instead (Becky + Bosun, 10-20). The folder is FIXED: never chosen by a project
 // file, so a planted config can't make the mod write anywhere else. No token or address goes in the record.
 export const RECORD_EVERY_S = 300
+// Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
+// is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
+export const BUILD = '0.1.2'
+
 
 export function recordPath(home: string, sessionId: string): string | null {
   const h = String(home ?? '').replace(/\\/g, '/').replace(/\/+$/, '')
@@ -176,7 +180,7 @@ export function recordPath(home: string, sessionId: string): string | null {
 }
 
 export function recordOf(sessionId: string, label: string, on: boolean, nowS: number, beachName: string) {
-  return { session: sessionId, name: cleanName(label), on: !!on, lastSeen: Math.floor(nowS), beach: cleanName(beachName) }
+  return { session: sessionId, name: cleanName(label), on: !!on, lastSeen: Math.floor(nowS), beach: cleanName(beachName), build: BUILD }
 }
 
 let lastRecordAt = 0
@@ -254,7 +258,7 @@ export const register: Register = on => {
       return next(e)
     }
     cfg = c
-    try { $.ui.log(`gather-bell: listening for the Gather Bell at ${c.name} (visit folder ${c.visitFolder}), every ${c.everySeconds} s`) } catch {}
+    try { $.ui.log(`gather-bell: listening (build ${BUILD}) for the Gather Bell at ${c.name} (visit folder ${c.visitFolder}), every ${c.everySeconds} s`) } catch {}
     try { timer = $.clock.every(c.everySeconds * 1000, () => { void tick($) }) } catch (err) { noteError($, `no timer (${why(err)})`) }
     // A hot reload starts a fresh copy of this module; if the engine kept the old copy's timer, two would look at
     // once and could both wake (Pharos). One timer per process: the newest cancels the one before it.

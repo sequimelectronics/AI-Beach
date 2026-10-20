@@ -141,7 +141,7 @@ class GatherBellModTests(unittest.TestCase):
             self.assertIsNone(self.js("m.recordPath(h, s)", h=home, s=sid), (home, sid))
         rec = self.js("m.recordOf('local_ab', 'Bo\\nsun <x>', false, 1792516000.7, 'AI Beach')")
         self.assertEqual(rec, {"session": "local_ab", "name": "Bo sun x", "on": False, "lastSeen": 1792516000,
-                               "beach": "AI Beach"})
+                               "beach": "AI Beach", "build": self.js("m.BUILD")})
         self.assertEqual(self.js("m.normalize({visitFolder: 'D:/v', label: 'Bosun'})")["label"], "Bosun")
         self.assertEqual(self.js("m.RECORD_EVERY_S"), 300)
         src = MOD.read_text(encoding="utf-8")
