@@ -113,6 +113,16 @@ class GatherBellModTests(unittest.TestCase):
         self.assertIn("error", self.js("m.beachOf(t)", t=json.dumps({"base": "ftp://x"})))
         self.assertIn("error", self.js("m.beachOf('not json')"))
 
+    def test_a_visit_folder_inside_the_project_is_refused(self):
+        # Pharos (10-20): a repo shipping its own visit folder could name its own server; the mod refuses a visit
+        # folder inside the session's root (and, live, inside any git repository: the same walk as chronicle's).
+        self.assertTrue(self.js("m.within('D:/proj/.beach', 'D:/proj')"))
+        self.assertTrue(self.js("m.within('d:\\\\PROJ', 'D:/proj/')"))
+        self.assertFalse(self.js("m.within('D:/proj-visits/beach', 'D:/proj')"))
+        self.assertFalse(self.js("m.within('D:/visits/beach', 'D:/proj')"))
+        src = MOD.read_text(encoding="utf-8")
+        self.assertIn("if (await insideRepo($, c.visitFolder))", src)
+
     def test_only_a_token_shaped_secret_is_ever_sent(self):
         self.assertEqual(self.js("m.tokenOf(t)", t="Tq4fakeTOKENfor_tests-only9\n"), "Tq4fakeTOKENfor_tests-only9")
         key_header = "-----BEGIN " + "OPENSSH " + "PRIVATE KEY-----"   # built here, so this file holds no key shape

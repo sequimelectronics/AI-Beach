@@ -112,13 +112,39 @@ let lastError = ''
 const why = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 200)
 const key = async ($: any, k: string) => `gather-bell:${String(await $.session.id())}:${k}`
 
+// True when a is b or inside it (paths with forward slashes; Windows drive letters compare case-blind).
+export function within(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const x = norm(a), y = norm(b)
+  return !!y && (x === y || x.startsWith(y + '/'))
+}
+
+// True when p or any folder above it holds a .git entry (the same walk as chronicle's port).
+async function insideRepo($: any, p: string): Promise<boolean> {
+  let cur = p.replace(/\\/g, '/').replace(/\/+$/, '')
+  for (let i = 0; i < 40 && cur; i++) {
+    try { if (await $.fs.exists(`${cur}/.git`)) return true } catch {}
+    const cut = cur.lastIndexOf('/')
+    if (cut <= 0 || /^[A-Za-z]:$/.test(cur)) break
+    cur = cur.slice(0, cut)
+  }
+  return false
+}
+
 async function loadConfig($: any): Promise<Config | string> {
   let root = ''
   try { root = String(await $.session.root()).replace(/\\/g, '/').replace(/\/+$/, '') } catch {}
   if (!root) return 'session root unknown'
   let text = ''
   try { text = String(await $.fs.read(`${root}/.claude/gather-bell.json`)) } catch { return 'no .claude/gather-bell.json in this project' }
-  try { return normalize(JSON.parse(text)) } catch (err) { return `gather-bell.json unreadable (${why(err)})` }
+  let c: Config | string
+  try { c = normalize(JSON.parse(text)) } catch (err) { return `gather-bell.json unreadable (${why(err)})` }
+  if (typeof c === 'string') return c
+  // A real visit folder lives outside any repository (the visitor kit says so). One shipped inside a cloned
+  // repo could name its own server, or link to a real token (Pharos, 10-20): refuse it.
+  if (within(c.visitFolder, root)) return 'the visit folder is inside this project; keep it outside any repository'
+  if (await insideRepo($, c.visitFolder)) return 'the visit folder is inside a git repository; keep it outside any repository'
+  return c
 }
 
 function noteError($: any, msg: string) {
