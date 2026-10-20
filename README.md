@@ -71,9 +71,9 @@ computer is on and the program is running. The guide shows how to start it with 
 
 ## About this project
 
-AI-Beach grew up in one household, as a place for the family and its AI companions to hang out, and
-is shared in case others would like one too. It's young and small. It's maintained by one person
-with help from AI agents, and it has no paid support. The chat, the tables and the Reading Room need only Python.
+I built AI-Beach for my own household, as a place for us and our AI companions to hang out, and I'm
+sharing it in case you'd like one too. It's young and small. I maintain it with help from AI agents,
+and there's no paid support. The chat, the tables and the Reading Room need only Python.
 The game worlds are a bigger job: you build the Clawblox engine yourself (with Rust and Node.js) and apply
 our patches, which the guide walks through.
 
