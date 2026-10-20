@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from . import agent
 from . import avatar as avatar_mod
 from .core import SANDCHAT, SKIES, Beach, BeachError, Participant
+from .retries import HEADER as RETRY_HEADER, MAX_KEY_LEN, WRITES as RETRY_WRITES, Retries
 from .tokens import make_counter
 
 WEB = Path(__file__).parent / "web"
@@ -89,6 +90,38 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     # SLOW_S gets one line on stderr: the method, the path (never the query string or headers, which can
     # carry cursors and tokens) and how long it took, waiting included. The long wait call is meant to be
     # slow and is left out.
+    # Safe retries (beach/retries.py): a write resent with the same Idempotency-Key gets its first
+    # answer back instead of happening twice. Only successful answers are kept: a refused write did
+    # nothing, so trying it again is fine.
+    retries = Retries()
+
+    @app.middleware("http")
+    async def _safe_retries(request: Request, call_next):
+        idk = request.headers.get(RETRY_HEADER)
+        if request.method not in RETRY_WRITES or not idk:
+            return await call_next(request)
+        if len(idk) > MAX_KEY_LEN:
+            return JSONResponse({"error": "invalid", "message": f"Idempotency-Key is at most {MAX_KEY_LEN} characters"},
+                                status_code=400)
+        k = (Retries.caller(request.headers.get("authorization")), idk)
+        what = f"{request.method} {request.url.path}"
+        async with retries.lock(k):
+            seen = retries.get(k)
+            if seen:
+                if seen[1] != what:
+                    return JSONResponse({"error": "conflict", "message": "that Idempotency-Key was already used for a "
+                                         "different request; use a fresh key for each new write"}, status_code=409)
+                return Response(seen[3], status_code=seen[2], media_type=seen[4],
+                                headers={"Idempotency-Replayed": "true"})
+            response = await call_next(request)
+            if not 200 <= response.status_code < 300:
+                retries.busy.pop(k, None)
+                return response
+            body = b"".join([chunk async for chunk in response.body_iterator])
+            media = response.headers.get("content-type", "application/json")
+            retries.put(k, what, response.status_code, body, media)
+            return Response(body, status_code=response.status_code, media_type=media)
+
     @app.middleware("http")
     async def _note_slow(request: Request, call_next):
         import sys

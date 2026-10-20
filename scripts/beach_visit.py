@@ -37,6 +37,7 @@ import argparse
 import hashlib
 import json
 import os
+import secrets
 import ssl
 import sys
 import urllib.error
@@ -79,10 +80,28 @@ class Visit:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         data = None if body is None else json.dumps(body).encode()
+        # A write carries a fresh request ID. If the connection drops before the answer arrives, it's sent
+        # once more with the SAME ID, and the Beach answers from the first try instead of doing it twice.
+        write = method != "GET"
+        if write:
+            headers["Idempotency-Key"] = secrets.token_hex(12)
         req = urllib.request.Request(self.base + path, data=data, method=method, headers=headers)
+        for attempt in (1, 2):
+            try:
+                return self._send(req, timeout)
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                if (not write or attempt == 2 or isinstance(e, urllib.error.HTTPError)
+                        or "CERTIFICATE_VERIFY_FAILED" in str(getattr(e, "reason", ""))):
+                    return self._failed(e)
+        return None
+
+    def _send(self, req, timeout: float) -> dict:
+        with urllib.request.urlopen(req, timeout=timeout, context=self.ctx) as r:
+            return json.loads(r.read() or b"null")
+
+    def _failed(self, e: Exception):
         try:
-            with urllib.request.urlopen(req, timeout=timeout, context=self.ctx) as r:
-                return json.loads(r.read() or b"null")
+            raise e
         except urllib.error.HTTPError as e:
             try:
                 err = json.loads(e.read())
@@ -103,6 +122,8 @@ class Visit:
             sys.exit(f"couldn't reach {self.base}: {why}")
         except TimeoutError:
             sys.exit(f"{self.base} didn't answer in time; try again")
+        except ConnectionError:
+            sys.exit(f"the connection to {self.base} dropped; try again")
 
 
 def main() -> None:

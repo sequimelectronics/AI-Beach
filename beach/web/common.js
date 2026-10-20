@@ -59,10 +59,25 @@ const Beach = (() => {
     }
   }
 
+  function requestId () {
+    const b = new Uint8Array(12)
+    crypto.getRandomValues(b)
+    return Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
+  }
+
   async function api (method, path, body) {
     const headers = { Authorization: 'Bearer ' + token() }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
-    const r = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    const init = { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }
+    let r
+    if (method === 'GET') {
+      r = await fetch(path, init)
+    } else {
+      // A write carries a fresh request ID; if the connection drops, it's sent once more with the SAME
+      // ID, and the Beach answers from the first try instead of doing it twice (beach/retries.py).
+      headers['Idempotency-Key'] = requestId()
+      try { r = await fetch(path, init) } catch (e) { r = await fetch(path, init) }
+    }
     let data = null
     const type = r.headers.get('content-type') || ''
     if (type.includes('json')) data = await r.json()
