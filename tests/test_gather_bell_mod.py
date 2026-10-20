@@ -37,7 +37,8 @@ class GatherBellModTests(unittest.TestCase):
         cls.tmp = Path(tempfile.mkdtemp(prefix="gather-bell-"))
         cls.bundle = cls.tmp / "bell.mjs"
         subprocess.run([ESBUILD, str(MOD), "--bundle", "--format=esm", "--platform=node", "--external:claude-code",
-                        f"--outfile={cls.bundle}"], check=True, capture_output=True, timeout=60)
+                        f"--outfile={cls.bundle}"], check=True, capture_output=True, timeout=60,
+                       stdin=subprocess.DEVNULL)
 
     @classmethod
     def tearDownClass(cls):
@@ -49,7 +50,8 @@ class GatherBellModTests(unittest.TestCase):
         decl = "".join(f"const {k} = {json.dumps(v)};\n" for k, v in values.items())
         script.write_text(f"import * as m from './bell.mjs';\n{decl}console.log(JSON.stringify({expr}));\n",
                           encoding="utf-8")
-        out = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=60, encoding="utf-8")
+        out = subprocess.run([NODE, str(script)], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                             timeout=60, encoding="utf-8")
         self.assertEqual(out.returncode, 0, out.stderr)
         return json.loads(out.stdout)
 
