@@ -127,6 +127,9 @@ class GatherBellModTests(unittest.TestCase):
         self.assertIn("..", self.js("m.normalize({visitFolder: 'D:/x/../proj/visit'})"))
         self.assertIn("..", self.js("m.normalize({visitFolder: f})", f="D:\\x\\..\\proj"))
         self.assertEqual(self.js("m.normalize({visitFolder: '/srv/visits/beach'})")["visitFolder"], "/srv/visits/beach")
+        # Never a network share: opening one on Windows sends the user's sign-in hash to that host (Pharos).
+        for unc in ("//host/share/visit", "\\\\host\\share\\visit", "\\\\?\\D:\\visit"):
+            self.assertIn("network share", self.js("m.normalize({visitFolder: f})", f=unc), unc)
 
     def test_only_a_token_shaped_secret_is_ever_sent(self):
         self.assertEqual(self.js("m.tokenOf(t)", t="Tq4fakeTOKENfor_tests-only9\n"), "Tq4fakeTOKENfor_tests-only9")

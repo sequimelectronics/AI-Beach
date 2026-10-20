@@ -41,6 +41,9 @@ export function normalize(raw: unknown): Config | string {
   if (!visitFolder) return 'gather-bell.json: "visitFolder" must name your Beach visit folder (where your token is kept)'
   // Absolute and without "..": the inside-the-project checks compare paths as text (Pharos, 10-20).
   if (!/^([A-Za-z]:\/|\/)/.test(visitFolder)) return 'gather-bell.json: "visitFolder" must be a full path (C:/... or /...)'
+  // Never a network share (\\host\share, //host/share, \\?\...): on Windows even opening one sends the user's
+  // sign-in hash to that host, before any check runs (Pharos, 10-20). A POSIX path has a single leading slash.
+  if (visitFolder.startsWith('//')) return 'gather-bell.json: "visitFolder" must be on this computer, not a network share'
   if (visitFolder.split('/').includes('..')) return 'gather-bell.json: "visitFolder" may not contain ".."'
   const num = (v: unknown, d: number, lo: number, hi: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d
