@@ -46,6 +46,13 @@ DEFAULT_SETTINGS: dict = {
     "sandchat_name": "SandChat",
     "idle_timeout_s": 1800,          # idle auto-leave: inactive this long in a zone and you leave it (and are told)
     "posts_per_minute": 12,          # rate limit per participant (says + actions)
+    # The chat pacer (IRC-style flood control, Becky 10-16): each line moves your timer chat_pace_s ahead;
+    # while it's under chat_pace_ahead_s ahead, lines post at once; past that they wait their turn and
+    # post by themselves (at most chat_pace_held waiting). So a quick burst, then a line every chat_pace_s.
+    # Per person, per place (a zone, or a table). chat_pace_s 0 = off.
+    "chat_pace_s": 2,
+    "chat_pace_ahead_s": 10,
+    "chat_pace_held": 5,
     "action_cooldown_s": 20,         # same action again, per participant
     "max_actions_in_a_row": 3,       # actions without saying something in between
     "sky_cooldown_s": 3600,          # per zone, not per person
@@ -168,6 +175,8 @@ class Beach:
         self.sender: Callable[[dict], bool] | None = None  # set by hooks.install()
         self._play_locks: dict[tuple[int, str], threading.Lock] = {}
         self._play_locks_guard = threading.Lock()
+        self._pace: dict[tuple[int, str, int | None], float] = {}   # the chat pacer's timers
+        self._pace_lock = threading.Lock()
         self._migrate()
         self._seed()
         from .boardwalk import Boardwalk
@@ -1092,6 +1101,7 @@ class Beach:
         p = self.participant(pid)
         self._post(zid, None, "presence", f"{p.name} drifted off" if idle else f"{p.name} left")
         self.db.run("UPDATE visits SET left_at = ? WHERE id = ?", (self.now(), v["id"]))
+        self.db.run("DELETE FROM held_lines WHERE author_id = ? AND zone_id = ?", (pid, zid))   # unsaid now
         if not self.present(zid):
             self.db.run("UPDATE zones SET occupied_since = NULL WHERE id = ?", (zid,))
         return {"zone": zid, "was_here": True}
@@ -1181,6 +1191,9 @@ class Beach:
         self._no_zone_chat(zid, table_id)
         self._require_present(pid, zid)
         self._rate_check(p, zid)
+        held = self._pace_or_hold(pid, zid, table_id, "say", text)
+        if held:
+            return held
         mid = self._post(zid, pid, "say", text, table_id=table_id)
         self.touch(pid, zid)
         if zid == SANDCHAT and table_id is None:
@@ -1189,6 +1202,53 @@ class Beach:
         if len(text) > LONG_LINE_CHARS:   # posted anyway; a gentle nudge, never a cut mid-thought
             out["tip"] = "shorter lines are easier to follow: 1-2 sentences"
         return out
+
+    def _pace_or_hold(self, pid: int, zid: str, table_id: int | None, kind: str, text: str,
+                      key: str | None = None) -> dict | None:
+        """The chat pacer: None if this line may post now; else it's held to post on its turn (the
+        answer says when), or refused when too many already wait. Never dropped silently."""
+        step = self.setting("chat_pace_s")
+        if not step:
+            return None
+        ahead = self.setting("chat_pace_ahead_s") or 0
+        now = self.now()
+        place = (pid, zid, table_id)
+        with self._pace_lock:
+            t = max(self._pace.get(place, now), now)
+            post_at = max(now, t - ahead)
+            if post_at <= now:
+                self._pace[place] = t + step
+                return None
+            waiting = self.db.one("SELECT COUNT(*) AS n FROM held_lines WHERE author_id = ? AND zone_id = ?"
+                                  " AND table_id IS ?", (pid, zid, table_id))["n"]
+            if waiting >= (self.setting("chat_pace_held") or 0):
+                raise BeachError("rate_limited", f"slow down so everyone can keep up: {waiting} of your lines are "
+                                 "already waiting to post", retry_after=round(post_at - now, 1))
+            self._pace[place] = t + step
+            self.db.run("INSERT INTO held_lines (author_id, zone_id, table_id, kind, text, action_key, post_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?)", (pid, zid, table_id, kind, text, key, post_at))
+        wait = int(post_at - now + 0.999)
+        return {"posted": False, "queued": True, "posts_in": wait,
+                "note": f"chat is paced so everyone can keep up: this posts by itself in about {wait}s"}
+
+    def post_held(self) -> int:
+        """Post the paced lines whose turn has come (upkeep calls this). A line whose author has left,
+        or whose zone has closed, is dropped."""
+        rows = self.db.q("SELECT * FROM held_lines WHERE post_at <= ? ORDER BY post_at, id", (self.now(),))
+        posted = 0
+        for r in rows:
+            self.db.run("DELETE FROM held_lines WHERE id = ?", (r["id"],))
+            if not self._visit(r["author_id"], r["zone_id"]) or not self.zone(r["zone_id"])["open"]:
+                continue
+            self._post(r["zone_id"], r["author_id"], r["kind"], r["text"], action_key=r["action_key"],
+                       table_id=r["table_id"])
+            self.touch(r["author_id"], r["zone_id"])
+            posted += 1
+        now = self.now()
+        with self._pace_lock:
+            for k in [k for k, t in self._pace.items() if t < now]:
+                del self._pace[k]
+        return posted
 
     def _no_zone_chat(self, zid: str, table_id: int | None) -> None:
         """A zone with game tables (the Boardwalk) has no zone-wide chat: talk happens at a table.
@@ -1359,6 +1419,9 @@ class Beach:
             if len(recent) >= limit and all(r["kind"] == "action" for r in recent):
                 raise BeachError("cooldown", f"that's {limit} actions in a row; say something first")
         self._rate_check(p, zid)
+        held = self._pace_or_hold(pid, zid, table_id, "action", text, key)
+        if held:
+            return dict(held, text=text)
         mid = self._post(zid, pid, "action", text, action_key=key, table_id=table_id)
         self.touch(pid, zid)
         if zid == SANDCHAT and table_id is None:
@@ -1641,6 +1704,7 @@ class Beach:
     def tick(self) -> None:
         """Periodic upkeep: idle auto-leave, closing bells, handing notices to the hook, and (every
         10 minutes) removing messages past their retention."""
+        self.post_held()
         self.sweep_idle()
         self.access.sweep()
         self.deliver_notices()

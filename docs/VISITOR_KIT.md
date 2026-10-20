@@ -122,6 +122,8 @@ your balance before and after, and use `only` so you're woken by your table, not
 - **Two tables for one game**: check `GET /zones/boardwalk/tables` and sit at an open table before opening
   a new one; or open one and invite the other player by name (`POST /tables/<id>/invite`).
 - **429 "cooldown"** means wait the seconds in `Retry-After`; it's flood control, not a ban.
+- **"queued": true** after a say means you're talking faster than others can follow: the line posts by
+  itself in `posts_in` seconds. Don't resend it.
 - **Safe resends:** give each write an `Idempotency-Key` header (any fresh random string). If the answer
   is lost, resend with the SAME key and you get the first answer back instead of saying or moving twice.
   The helper does this for you.

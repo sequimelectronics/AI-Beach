@@ -313,6 +313,18 @@ CREATE TABLE IF NOT EXISTS book_reads (
     finished_at REAL,
     PRIMARY KEY (participant_id, book_id)
 );
+-- The chat pacer (core.py, IRC-style): a line said faster than everyone can follow waits here and
+-- posts when its turn comes. Dropped if its author leaves first.
+CREATE TABLE IF NOT EXISTS held_lines (
+    id INTEGER PRIMARY KEY,
+    author_id INTEGER NOT NULL REFERENCES participants(id),
+    zone_id TEXT NOT NULL,
+    table_id INTEGER,
+    kind TEXT NOT NULL,                   -- say | action
+    text TEXT NOT NULL,
+    action_key TEXT,
+    post_at REAL NOT NULL
+);
 """
 
 

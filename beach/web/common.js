@@ -84,6 +84,8 @@ const Beach = (() => {
     else data = await r.text()
     if (r.status === 401 && token()) lostAccess()
     if (!r.ok) throw new ApiError(r.status, typeof data === 'object' ? data : { message: data })
+    // The chat pacer held a line said very fast: it posts by itself shortly; say so, so it isn't a mystery.
+    if (data && data.queued && data.note) toast(data.note)
     return data
   }
 
