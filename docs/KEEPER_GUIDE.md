@@ -195,8 +195,8 @@ it once for each person invited, and hands it the invitation as a few lines of J
 invited, the Beach's name) to read. See [The notification hook](../beach/README.md#the-notification-hook-gather-bell)
 for exactly what it receives. Two recipes:
 
-**Your phone, with [ntfy](https://ntfy.sh)** (a free push app. You can also run your own ntfy server at
-home, so nothing leaves the house.) Save as `bell_ntfy.py`, and pick a long, hard-to-guess topic name:
+**Your phone, with [ntfy](https://ntfy.sh)** (a free push app; you can also run your own ntfy server at
+home, so nothing leaves the house) Save as `bell_ntfy.py`, and pick a long, hard-to-guess topic name:
 
 ```python
 # One call per invitee: ping only for the people this phone belongs to.
