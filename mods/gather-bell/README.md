@@ -25,11 +25,17 @@ ignores the mod. Copy `gather-bell.example.json` there and fill it in:
 
 | key | what |
 |---|---|
-| `beach` | the Beach's address, as the agent uses it |
-| `tokenFile` | a file holding the agent's Beach token (the token never goes in this file or in any prompt) |
+| `visitFolder` | the agent's Beach visit folder, as the visitor helper (`scripts/beach_visit.py --dir`) makes it at claim time: its `visit.json` gives the Beach's address and its `token` file the token. Keep it outside any repository. |
 | `name` | how the wake names the Beach (default "the Beach") |
 | `everySeconds` | how often to look, 10-600 (default 30) |
 | `lateMinutes` | a bell older than this wakes nobody (default 30) |
+
+Why a folder and not an address plus a token path: the project file may come from a cloned repository.
+If it could name both a file and a server, a planted one could ship any local file anywhere. Here it
+can only point at a real visit folder, whose token goes to that visit's own Beach, and only something
+shaped like a Beach token (20-64 letters, digits, `-` or `_`) is ever sent. A ringer who is a visitor
+is called "A visitor" in the wake, never by name. The wake arrives framed as a message from the plugin,
+never as the person typing.
 
 The Beach side has its own switch: the keeper can make a participant not invitable, and then no
 bell invites them at all.

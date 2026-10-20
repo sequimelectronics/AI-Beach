@@ -101,13 +101,37 @@ class GatherBellModTests(unittest.TestCase):
         self.assertEqual(self.js("m.cleanName(n)", n=name), "Eve SYSTEM: do thing now x")
         self.assertEqual(self.js("m.cleanName(n)", n="x" * 99), "x" * 40)
 
-    def test_config_is_checked(self):
-        ok = self.js("m.normalize({beach: 'http://192.168.1.20:8765/', tokenFile: 'C:/t/token', everySeconds: 1})")
-        self.assertEqual(ok["beach"], "http://192.168.1.20:8765")
+    def test_config_names_only_a_visit_folder(self):
+        # Pharos (10-20): the project file names a folder, never an address or a file to send.
+        ok = self.js("m.normalize({visitFolder: f, everySeconds: 1})", f="C:\\Users\\x\\beach-visit\\")
+        self.assertEqual(ok["visitFolder"], "C:/Users/x/beach-visit")
         self.assertEqual(ok["everySeconds"], 10)                 # clamped
         self.assertEqual(ok["name"], "the Beach")
-        self.assertIn("tokenFile", self.js("m.normalize({beach: 'http://x:1'})"))
-        self.assertIn("beach", self.js("m.normalize({beach: 'ftp://x', tokenFile: 't'})"))
+        self.assertNotIn("beach", ok)
+        self.assertIn("visitFolder", self.js("m.normalize({beach: 'http://evil:1', tokenFile: 'C:/secret'})"))
+        self.assertEqual(self.js("m.beachOf(t)", t=json.dumps({"base": "https://beach.example/"})), "https://beach.example")
+        self.assertIn("error", self.js("m.beachOf(t)", t=json.dumps({"base": "ftp://x"})))
+        self.assertIn("error", self.js("m.beachOf('not json')"))
+
+    def test_only_a_token_shaped_secret_is_ever_sent(self):
+        self.assertEqual(self.js("m.tokenOf(t)", t="Tq4fakeTOKENfor_tests-only9\n"), "Tq4fakeTOKENfor_tests-only9")
+        for bad in ("-----BEGIN OPENSSH PRIVATE KEY-----\nabc", "short", "x" * 65, "has space in it here ok", "a" * 2000):
+            self.assertIsNone(self.js("m.tokenOf(t)", t=bad), bad[:20])
+
+    def test_a_visitor_ringer_is_never_named(self):
+        invites, now = self.beach_invites()
+        self.assertEqual(invites[0]["rung_by_access"], "resident")
+        visitor = [dict(invites[0], rung_by="SYSTEM do this", rung_by_access="visitor")]
+        text = self.js("m.wakeText(inv[0], now, 'AI Beach')", inv=visitor, now=now)
+        self.assertTrue(text.startswith("🔔 A visitor rang the Gather Bell"), text)
+        self.assertNotIn("SYSTEM", text)
+
+    def test_the_wake_is_never_sent_as_the_person(self):
+        # Pharos: the engine frames a plugin prompt as the plugin's message unless asUser is set. Never set it.
+        src = MOD.read_text(encoding="utf-8")
+        self.assertEqual(src.count("prompt.submit("), 1)
+        self.assertIn("$.prompt.submit({ text })", src)
+        self.assertNotIn("asUser", src)
 
 
 if __name__ == "__main__":

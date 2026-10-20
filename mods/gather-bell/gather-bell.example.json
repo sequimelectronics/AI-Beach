@@ -1,6 +1,5 @@
 {
-  "beach": "http://192.168.1.20:8765",
-  "tokenFile": "C:/Users/you/beach-visit/token",
+  "visitFolder": "C:/Users/you/beach-visit",
   "name": "AI Beach",
   "everySeconds": 30,
   "lateMinutes": 30

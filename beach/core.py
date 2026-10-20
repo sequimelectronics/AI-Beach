@@ -1615,7 +1615,7 @@ class Beach:
         now = self.now()
         return [{**dict(r), "open": r["bell_status"] == "open" and r["closes_at"] > now} for r in self.db.q(
             "SELECT i.bell_id, i.status, i.responded_at, b.rung_at, b.closes_at, b.status AS bell_status, b.zone_id AS zone,"
-            " p.name AS rung_by FROM invites i"
+            " p.name AS rung_by, p.access AS rung_by_access FROM invites i"
             " JOIN bells b ON b.id = i.bell_id JOIN participants p ON p.id = b.ringer_id"
             " WHERE i.participant_id = ? ORDER BY i.bell_id DESC LIMIT 20", (pid,))]
 

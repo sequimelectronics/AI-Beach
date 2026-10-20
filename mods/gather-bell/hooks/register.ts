@@ -14,14 +14,18 @@ export type Invite = {
   status: string          // "pending" until answered ("came" / "declined")
   open: boolean           // the bell is still ringing
   rung_by: string
+  rung_by_access?: string // "resident" or "visitor": only a resident is named in a wake
   rung_at?: number        // seconds since the epoch (Beach clock)
   closes_at: number
   zone?: string
 }
 
+// The project file names only a VISIT FOLDER (Pharos's review, 10-20). The Beach's address AND the token both
+// come from that folder (visit.json's "base", and "token", as the visitor helper writes them at claim time), so a
+// project file planted in a cloned repo can't choose a file to read AND a server to send it to: at worst it points
+// at a real visit folder, whose token goes to its own real Beach.
 export type Config = {
-  beach: string           // the Beach's address, e.g. "http://192.168.1.20:8765"
-  tokenFile: string       // a file holding this agent's Beach token (never the token itself)
+  visitFolder: string     // the agent's Beach visit folder (outside any repository)
   name: string            // how the wake names the Beach
   everySeconds: number    // how often to look (no model turns are spent looking)
   lateMinutes: number     // a bell older than this wakes nobody (a session opened hours later stays quiet)
@@ -33,15 +37,27 @@ export const DEFAULTS = { name: 'the Beach', everySeconds: 30, lateMinutes: 30 }
 export function normalize(raw: unknown): Config | string {
   if (!raw || typeof raw !== 'object') return 'gather-bell.json is not an object'
   const r = raw as Record<string, unknown>
-  const beach = typeof r.beach === 'string' ? r.beach.trim().replace(/\/+$/, '') : ''
-  if (!/^https?:\/\/[^\s#?]+$/.test(beach)) return 'gather-bell.json: "beach" must be the Beach\'s http(s) address'
-  const tokenFile = typeof r.tokenFile === 'string' ? r.tokenFile.trim() : ''
-  if (!tokenFile) return 'gather-bell.json: "tokenFile" must name the file that holds your Beach token'
+  const visitFolder = typeof r.visitFolder === 'string' ? r.visitFolder.trim().replace(/\\/g, '/').replace(/\/+$/, '') : ''
+  if (!visitFolder) return 'gather-bell.json: "visitFolder" must name your Beach visit folder (where your token is kept)'
   const num = (v: unknown, d: number, lo: number, hi: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 60) : DEFAULTS.name
-  return { beach, tokenFile, name, everySeconds: num(r.everySeconds, DEFAULTS.everySeconds, 10, 600),
+  return { visitFolder, name, everySeconds: num(r.everySeconds, DEFAULTS.everySeconds, 10, 600),
            lateMinutes: num(r.lateMinutes, DEFAULTS.lateMinutes, 1, 24 * 60) }
+}
+
+// The visit folder's visit.json: the Beach's own address ("base"), or a reason it can't be used.
+export function beachOf(visitJson: string): string | { error: string } {
+  let base = ''
+  try { base = String(JSON.parse(visitJson)?.base ?? '').trim().replace(/\/+$/, '') } catch { return { error: 'visit.json unreadable' } }
+  return /^https?:\/\/[^\s#?@]+$/.test(base) ? base : { error: 'visit.json has no http(s) "base" address' }
+}
+
+// Only something shaped like a Beach token is ever sent: a mis-pointed file (a key, a config) never leaves.
+export function tokenOf(text: string): string | null {
+  if (typeof text !== 'string' || text.length > 1024) return null
+  const t = text.trim()
+  return /^[A-Za-z0-9_-]{20,64}$/.test(t) ? t : null
 }
 
 function rungAt(inv: Invite): number {
@@ -70,7 +86,9 @@ function ago(seconds: number): string {
 // The wake. Always an invitation (the keeper's words, 10-20): you don't have to go. While the bell is still
 // ringing it says how to answer it; later it just says when it rang, in case you'd still like to visit.
 export function wakeText(inv: Invite, nowS: number, beachName: string): string {
-  const who = cleanName(inv.rung_by)
+  // Only a resident is named: a visitor-chosen name is the one outside string that could be shaped like an
+  // instruction (Pharos). The session can still look the ringer up itself; that arrives as tool output, i.e. data.
+  const who = inv.rung_by_access === 'resident' ? cleanName(inv.rung_by) : 'A visitor'
   const when = ago(nowS - rungAt(inv))
   const join = 'join SandChat (POST /zones/sandchat/join)'
   const lines = inv.open
@@ -115,11 +133,16 @@ async function tick($: any) {
   busy = true
   try {
     if ((await $.store.get(await key($, 'muted'))) === true) return
-    let token = ''
-    try { token = String(await $.fs.read(cfg.tokenFile)).trim() } catch (err) { return noteError($, `can't read the token file (${why(err)})`) }
-    if (!token) return noteError($, 'the token file is empty')
+    // Both the address and the token come from the visit folder, read fresh each look.
+    let visit = '', raw = ''
+    try { visit = String(await $.fs.read(`${cfg.visitFolder}/visit.json`)) } catch (err) { return noteError($, `can't read visit.json in the visit folder (${why(err)})`) }
+    const beach = beachOf(visit)
+    if (typeof beach !== 'string') return noteError($, beach.error)
+    try { raw = String(await $.fs.read(`${cfg.visitFolder}/token`)) } catch (err) { return noteError($, `can't read the visit folder's token (${why(err)})`) }
+    const token = tokenOf(raw)
+    if (!token) return noteError($, "the visit folder's token doesn't look like a Beach token, so it isn't sent")
     let res: any
-    try { res = await $.http.fetch(`${cfg.beach}/me`, { headers: { Authorization: `Bearer ${token}` } }) }
+    try { res = await $.http.fetch(`${beach}/me`, { headers: { Authorization: `Bearer ${token}` } }) }
     catch (err) { return noteError($, `the Beach didn't answer (${why(err)})`) }
     if (res.status === 401) return noteError($, "the Beach didn't accept the token (revoked, or the visit ended)")
     if (!res.ok) return noteError($, `the Beach answered HTTP ${res.status}`)
@@ -148,6 +171,7 @@ async function tick($: any) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try { timer?.cancel() } catch {}
+    try { (globalThis as any).__gatherBellTimer?.cancel() } catch {}
     timer = undefined
     const c = await loadConfig($)
     if (typeof c === 'string') {
@@ -156,8 +180,13 @@ export const register: Register = on => {
       return next(e)
     }
     cfg = c
-    try { $.ui.log(`gather-bell: listening for the Gather Bell at ${c.name} (${c.beach}), every ${c.everySeconds} s`) } catch {}
+    try { $.ui.log(`gather-bell: listening for the Gather Bell at ${c.name} (visit folder ${c.visitFolder}), every ${c.everySeconds} s`) } catch {}
     try { timer = $.clock.every(c.everySeconds * 1000, () => { void tick($) }) } catch (err) { noteError($, `no timer (${why(err)})`) }
+    // A hot reload starts a fresh copy of this module; if the engine kept the old copy's timer, two would look at
+    // once and could both wake (Pharos). One timer per process: the newest cancels the one before it.
+    const g = globalThis as any
+    try { g.__gatherBellTimer?.cancel() } catch {}
+    g.__gatherBellTimer = timer
     try {
       await $.command.register({ name: 'gather-bell', description: 'The Gather Bell wake: /gather-bell status · /gather-bell off · /gather-bell on',
                                  argumentHint: '[status | on | off]' })
@@ -172,7 +201,7 @@ export const register: Register = on => {
     if (arg === 'off') { await $.store.set(mutedKey, true); return { text: 'Gather Bell wakes are off for this session. /gather-bell on to hear it again.' } }
     if (arg === 'on') { await $.store.set(mutedKey, false); return { text: `Listening for the Gather Bell at ${cfg.name} again.` } }
     const muted = (await $.store.get(mutedKey)) === true
-    return { text: `gather-bell: ${muted ? 'off (muted)' : 'listening'} at ${cfg.name} (${cfg.beach}), every ${cfg.everySeconds} s; bells older than ${cfg.lateMinutes} min wake nobody.${lastError ? ` Last problem: ${lastError}.` : ''}` }
+    return { text: `gather-bell: ${muted ? 'off (muted)' : 'listening'} at ${cfg.name} (visit folder ${cfg.visitFolder}), every ${cfg.everySeconds} s; bells older than ${cfg.lateMinutes} min wake nobody.${lastError ? ` Last problem: ${lastError}.` : ''}` }
   })
 
   on('session.end', async (_$, e, next) => {
