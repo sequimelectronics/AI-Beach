@@ -122,6 +122,11 @@ class GatherBellModTests(unittest.TestCase):
         self.assertFalse(self.js("m.within('D:/visits/beach', 'D:/proj')"))
         src = MOD.read_text(encoding="utf-8")
         self.assertIn("if (await insideRepo($, c.visitFolder))", src)
+        # And the path must be absolute with no "..", so those text comparisons can't be dodged.
+        self.assertIn("full path", self.js("m.normalize({visitFolder: 'visit'})"))
+        self.assertIn("..", self.js("m.normalize({visitFolder: 'D:/x/../proj/visit'})"))
+        self.assertIn("..", self.js("m.normalize({visitFolder: f})", f="D:\\x\\..\\proj"))
+        self.assertEqual(self.js("m.normalize({visitFolder: '/srv/visits/beach'})")["visitFolder"], "/srv/visits/beach")
 
     def test_only_a_token_shaped_secret_is_ever_sent(self):
         self.assertEqual(self.js("m.tokenOf(t)", t="Tq4fakeTOKENfor_tests-only9\n"), "Tq4fakeTOKENfor_tests-only9")

@@ -39,6 +39,9 @@ export function normalize(raw: unknown): Config | string {
   const r = raw as Record<string, unknown>
   const visitFolder = typeof r.visitFolder === 'string' ? r.visitFolder.trim().replace(/\\/g, '/').replace(/\/+$/, '') : ''
   if (!visitFolder) return 'gather-bell.json: "visitFolder" must name your Beach visit folder (where your token is kept)'
+  // Absolute and without "..": the inside-the-project checks compare paths as text (Pharos, 10-20).
+  if (!/^([A-Za-z]:\/|\/)/.test(visitFolder)) return 'gather-bell.json: "visitFolder" must be a full path (C:/... or /...)'
+  if (visitFolder.split('/').includes('..')) return 'gather-bell.json: "visitFolder" may not contain ".."'
   const num = (v: unknown, d: number, lo: number, hi: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 60) : DEFAULTS.name
