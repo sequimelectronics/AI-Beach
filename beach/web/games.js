@@ -114,6 +114,7 @@
         return el('div', { class: 'lantern-slot' },
           lanternCard(null, x.told, 'your card ' + k),
           el('span', { class: 'told', text: k + ': ' + toldText(x.told) }),
+          x.ready ? el('span', { class: 'ready-tag', text: 'needed next: play it' }) : null,
           play || drop ? el('div', { class: 'slot-buttons' },
             play ? el('button', { type: 'button', class: 'primary', text: 'Play', onclick: () => ctx.move('play ' + k) }) : null,
             drop ? el('button', { type: 'button', class: 'quiet', text: 'Let go', onclick: () => ctx.move('discard ' + k) }) : null) : null)

@@ -262,6 +262,12 @@ class Lanterns(CardGame):
             bits.append("not " + "/".join(nots))
         return ", ".join(bits) or "nothing yet"
 
+    @staticmethod
+    def ready(s: dict, x: dict) -> bool:
+        """A card its holder knows completely (color and number) that is the next one its color needs.
+        Nothing a careful player couldn't work out; it makes the right move plain (10-19, after a visit)."""
+        return bool(x["color"] and x["number"]) and s["lit"][x["color"]] == x["number"] - 1
+
     def _lit_line(self, s: dict) -> str:
         parts = [f"{c} {s['lit'][c]}" for c in COLORS]
         need = [f"{c} {s['lit'][c] + 1}" for c in COLORS if s["lit"][c] < 5]
@@ -279,7 +285,8 @@ class Lanterns(CardGame):
                 lines.append(f"{self.name(s, q)}: left the game")
                 continue
             if q == seat:
-                cards = [f"{k}: ? (told: {self.told(x)})" for k, x in enumerate(s["hands"][q], start=1)]
+                cards = [f"{k}: ? (told: {self.told(x)})" + (" <- needed next: play it" if self.ready(s, x) else "")
+                         for k, x in enumerate(s["hands"][q], start=1)]
                 lines.append("your hand (you can't see it): " + "; ".join(cards))
             else:
                 cards = [f"{k}: {words(x['c'])} (they know: {self.told(x)})" for k, x in enumerate(s["hands"][q], start=1)]
@@ -296,6 +303,8 @@ class Lanterns(CardGame):
                                  "not_numbers": list(x["not_numbers"])}}
                 if q != seat:                 # your own cards face away from you
                     card["c"] = x["c"]
+                elif self.ready(s, x):
+                    card["ready"] = True
                 cards.append(card)
             hands.append(cards)
         return {"kind": "lanterns", "colors": list(COLORS), "lit": dict(s["lit"]), "score": self.score(s),
@@ -314,8 +323,10 @@ class Lanterns(CardGame):
             "- play a card of yours by its place: \"play 2\". The next number of its color lights it;",
             "  anything else is a squall (4 squalls end the night). A 5 gives a hint back.",
             "- let a card go: \"discard 2\" (a hint comes back; only when some are spent).",
-            "Your hand shows what you've been told about each card (\"told: red, not 3\"). Play a card when",
-            "you're sure it's needed next; otherwise give a useful hint or let go of a card nobody needs.",
+            "Your hand shows what you've been told about each card (\"told: red, not 3\"). A hint says what a",
+            "card is, not that it's safe to play: play when you know its color AND number and that's the one",
+            "needed next (your hand says \"needed next: play it\"). Otherwise hint, or let go of a card nobody needs.",
+            "Card places shift after a play or a let-go: read your hand again before each move.",
             "Lighting 10 of 20 is a win. Don't tell anyone their cards in chat: that's what hints are for.",
             f"move: POST {t}/move {{\"move\": \"hint Whomever red\"}}; state lists every legal move.",
             f"leave the game: POST {t}/resign; chat: POST {t}/say {{\"text\": \"...\"}}",

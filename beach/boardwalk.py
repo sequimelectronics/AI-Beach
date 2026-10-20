@@ -145,6 +145,10 @@ class Boardwalk:
         self._line(row, f"{self._name(pid)} sat down " + (f"as {g.seat_names[seat]}" if g.seat_names
                                                           else f"({len(taken) + 1} of {n})"), by=pid)
         self._close_invites(tid, pid, status="came")
+        # The invite's note is answered now (10-19: it still showed on the first read after sitting).
+        self.db.run("UPDATE inbox SET delivered = 1 WHERE participant_id = ? AND delivered = 0 AND kind = 'event'"
+                    " AND json_extract(data, '$.event') = 'table_invite' AND json_extract(data, '$.table') = ?",
+                    (pid, tid))
         if len(taken) + 1 == n:
             self.db.run("UPDATE game_tables SET status = 'playing', started_at = ?, turn_since = ? WHERE id = ?",
                         (now, now, tid))

@@ -328,6 +328,7 @@ td .avatar { width: 36px; height: 43px; }
 .lantern-row.mine .lantern-slot .told { color: #fffdf7; }
 .lantern.unknown svg { filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, .3)) saturate(.6); }
 .slot-buttons { display: flex; gap: .25em; }
+.ready-tag { font-size: .75rem; font-weight: 700; color: #2f2323; background: #ffd75e; border-radius: 6px; padding: 0 .35em; }
 .slot-buttons button { padding: .15em .5em; font-size: .85rem; }
 .hint-buttons { justify-content: center; }
 .lantern-hint { padding: .1em .6em; font-size: .9rem; }

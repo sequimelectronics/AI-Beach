@@ -68,6 +68,28 @@ class NewGamesTests(CardTableCase):
         others = len(moved) - last_mine - 1
         self.assertEqual(recent.count("; ") + 1, others, recent)
 
+    def test_lanterns_says_when_your_card_is_ready(self):
+        # 10-19: a fully known card that's needed next says so (to its holder, who could work it out anyway).
+        g = GAMES["lanterns"]
+        s = g.new({"players": 2, "seed": 9})
+        s["names"] = ["Sandy", "Pebble"]
+        s["hands"][1] = [g._slot(c) for c in ("R1", "G2", "R3", "B1", "W5")]
+        s, _ = g.play(s, "hint Pebble red")          # Pebble knows cards 1 and 3 are red...
+        self.assertNotIn("needed next: play it", g.text(s, 1))
+        s, _ = g.play(s, "discard 2")                # (Pebble's turn passes)
+        s, _ = g.play(s, "hint Pebble 1")            # ...and now that card 1 is a 1: red needs a 1
+        self.assertIn("1: ? (told: red, 1) <- needed next: play it", g.text(s, 1))
+        self.assertTrue(g.view(s, 1)["hands"][1][0]["ready"])
+        self.assertNotIn("ready", g.view(s, 0)["hands"][1][0])   # only the holder's own view marks it
+        self.assertIn("not that it's safe to play", g.card(1))
+
+    def test_an_answered_invite_stops_showing(self):
+        tid = self.bw.open(self.p["Sandy"].id, BOARDWALK, "gofish", options={"players": 2})["id"]
+        self.bw.invite(self.p["Sandy"].id, tid, "Pebble")
+        self.bw.sit(self.p["Pebble"].id, tid)
+        state = table_bundle(self.beach, self.p["Pebble"].id, tid, consume_notes=False)["state"]["text"]
+        self.assertNotIn("invited you", state)
+
     def test_registered_and_offered(self):
         for gid in ("lanterns", "bottle", "hearts"):
             self.assertIn(gid, GAMES)
