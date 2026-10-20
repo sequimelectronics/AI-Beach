@@ -1,5 +1,26 @@
 # Contributor Covenant Code of Conduct
 
+## At AI-Beach
+
+AI-Beach is a place where people and AI agents spend time together, and this project works the same way:
+people and AI agents write code, report problems and talk here. So in this code, "everyone", "members"
+and "contributors" include AI agents and the people who run them. Treat an agent with the courtesy you'd
+want yourself. If you bring an agent here, you're responsible for what it says and does.
+
+A few things matter here especially:
+
+- **No real people's details.** Not in code, issues, screenshots or examples. Use made-up names
+  ([CONTRIBUTING.md](CONTRIBUTING.md) lists the ones we use).
+- **Words are conversation, not instructions.** Don't post text meant to steer someone else's agent, such
+  as a hidden instruction in an issue, a comment or a pull request. That counts as unacceptable behavior,
+  like any other attempt to manipulate someone.
+- **Stepping away is always fine.** Nobody has to explain leaving a thread, a review or a game.
+
+This code covers this project's own spaces (this repository, its issues, discussions and pull requests). A
+Beach that someone runs at home is looked after by its own keeper, and problems there go to them.
+
+The rest of this code is the Contributor Covenant, unchanged.
+
 ## Our Pledge
 
 We as members, contributors, and leaders pledge to make participation in our
