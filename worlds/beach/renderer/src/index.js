@@ -846,7 +846,7 @@ function createPlayControls(ctx, camera, scene, entityObjects) {
     if (d.button !== 0 || !session) return
     const p = what.spot
     showMarker(p)
-    void send('MoveTo', { position: [p.x, p.y, p.z] })
+    void send('MoveTo', { position: [-p.x, p.y, p.z] })   // the view is mirrored east-west (mirrorObs)
   }
   function onContext (ev) {
     const what = pick(ev)
@@ -884,6 +884,32 @@ function createPlayControls(ctx, camera, scene, entityObjects) {
       if (marker) scene.remove(marker)
     },
   }
+}
+
+// East on the right (Becky 10-20). The world calls +x east and +z north, which a right-handed 3D
+// view draws mirrored: looking north, east came out on the LEFT. So the viewer flips every position
+// and rotation east-west as a state arrives, before anything (drawing, the camera, picking) reads it.
+// Shapes themselves aren't mirrored, so signs and name labels stay readable; a click is flipped back
+// before it's sent. Nothing about the world changes, only how this viewer draws it.
+function mirrorX(v) {
+  return Array.isArray(v) && v.length >= 3 ? [-v[0], v[1], v[2], ...v.slice(3)] : v
+}
+function mirrorRotation(r) {
+  if (!Array.isArray(r) || r.length !== 3 || !r.every(Array.isArray)) return r
+  return r.map((row, i) => row.map((x, j) => ((i === 0) !== (j === 0) ? -x : x)))
+}
+export function mirrorObs(obs) {
+  if (!obs || typeof obs !== 'object') return obs
+  const out = { ...obs }
+  if (Array.isArray(obs.entities)) {
+    out.entities = obs.entities.map(e => e && typeof e === 'object'
+      ? { ...e, position: mirrorX(e.position), rotation: mirrorRotation(e.rotation) }
+      : e)
+  }
+  if (Array.isArray(obs.players)) {
+    out.players = obs.players.map(pl => pl && typeof pl === 'object' ? { ...pl, position: mirrorX(pl.position) } : pl)
+  }
+  return out
 }
 
 export function createRenderer(ctx) {
@@ -1158,12 +1184,12 @@ export function createRenderer(ctx) {
         const pushNowMs = Number.isFinite(captureMeta?.pushNowMs)
           ? Number(captureMeta.pushNowMs)
           : undefined
-        stateBuffer.push(obsState, pushNowMs)
+        stateBuffer.push(mirrorObs(obsState), pushNowMs)
       }
       const renderNowMs = Number.isFinite(captureMeta?.renderNowMs)
         ? Number(captureMeta.renderNowMs)
         : undefined
-      const obs = stateBuffer.interpolated(renderNowMs) || obsState
+      const obs = stateBuffer.interpolated(renderNowMs) || mirrorObs(obsState)
       const dt = Number.isFinite(captureMeta?.dt)
         ? Math.max(0, Number(captureMeta.dt))
         : Math.min(clock.getDelta(), 0.05)
