@@ -281,7 +281,9 @@ export const register: Register = on => {
     return { text: `gather-bell: ${muted ? 'off (muted)' : 'listening'} at ${cfg.name} (visit folder ${cfg.visitFolder}), every ${cfg.everySeconds} s; bells older than ${cfg.lateMinutes} min wake nobody.${lastError ? ` Last problem: ${lastError}.` : ''}` }
   })
 
-  on('session.end', async (_$, e, next) => {
+  on('session.end', async ($, e, next) => {
+    // One last lastSeen (on/off unchanged), so "stale" later means asleep or closed, not cut off mid-run (Pharos).
+    try { if (cfg) await writeRecord($, (await $.store.get(await key($, 'muted'))) !== true) } catch {}
     try { timer?.cancel() } catch {}
     timer = undefined
     return next(e)
