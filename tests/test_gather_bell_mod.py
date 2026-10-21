@@ -250,6 +250,7 @@ class GatherBellModTests(unittest.TestCase):
         src = MOD.read_text(encoding="utf-8")
         self.assertIn("key($, `cursor@${conn.beach}`)", src)
         self.assertIn("key($, `lastInRoom@${conn.beach}`)", src)
+        self.assertIn("if (conn.beach !== cursorBeach) { readCursor = ''; pending = []; cursorBeach = conn.beach }", src)
 
     def test_the_ears_are_opt_in_with_a_ceiling(self):
         c = self.js("m.normalize({visitFolder: 'D:/v'})")

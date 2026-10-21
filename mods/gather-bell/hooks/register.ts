@@ -182,7 +182,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.2'
+export const BUILD = '0.2.3'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -379,6 +379,7 @@ async function bellCheck($: any, me: { invites?: Invite[] }, nowS: number) {
 // The ears' state between looks. The cursor that matters is the SAVED one ($.store, per session): it only moves
 // past news once that news has been woken for or set aside, so a reload never loses or repeats a line (Pharos).
 let readCursor = ''
+let cursorBeach = ''   // which Beach readCursor and pending belong to (visit.json is read fresh each look)
 let pending: FeedItem[] = []
 let pendingFirst = 0
 let pendingLast = 0
@@ -388,6 +389,9 @@ const mentionAt = new Map<string, number>()   // while resting: at most one name
 async function earsCheck($: any, conn: { beach: string; token: string }, me: any, nowS: number) {
   // Per Beach: a cursor means nothing on another Beach. Live, 10-20: after a pilot on a throwaway Beach, the
   // session's saved cursor pointed far back on the real one and the first wake replayed hours of old news.
+  // And in memory too: visit.json can point at another Beach without a reload (Pharos), so what was read from the
+  // old Beach is dropped, never carried over.
+  if (conn.beach !== cursorBeach) { readCursor = ''; pending = []; cursorBeach = conn.beach }
   const curKey = await key($, `cursor@${conn.beach}`)
   const lastRoomKey = await key($, `lastInRoom@${conn.beach}`)
   const zones: string[] = Array.isArray(me.zones) ? me.zones.map(String) : []
@@ -504,7 +508,7 @@ export const register: Register = on => {
     }
     cfg = c
     try { $.ui.log(`gather-bell: listening (build ${BUILD}) for the Gather Bell at ${c.name} (visit folder ${c.visitFolder}), every ${c.everySeconds} s${c.ears ? `; ears on (every ${EARS_STEP_S} s in a room)` : ''}`) } catch {}
-    readCursor = ''; pending = []; lastFeedAt = 0; lastBellAt = 0; lastLookAt = 0; earsLastState = ''; mentionAt.clear()
+    readCursor = ''; cursorBeach = ''; pending = []; lastFeedAt = 0; lastBellAt = 0; lastLookAt = 0; earsLastState = ''; mentionAt.clear()
     const step = c.ears ? EARS_STEP_S : c.everySeconds
     try { timer = $.clock.every(step * 1000, () => { void tick($) }) } catch (err) { noteError($, `no timer (${why(err)})`) }
     // A hot reload starts a fresh copy of this module; if the engine kept the old copy's timer, two would look at
