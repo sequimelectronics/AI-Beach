@@ -240,6 +240,17 @@ class GatherBellModTests(unittest.TestCase):
         self.assertTrue(self.js("m.dueToWake(false, 100, 107, 108)"))      # still talking, but 8 s since the first
         self.assertTrue(self.js("m.dueToWake(true, 100, 100, 100)"))       # a mention or your turn: at once
 
+    def test_old_news_never_wakes_and_a_cursor_belongs_to_one_beach(self):
+        # Live, 10-20: after a pilot on a throwaway Beach, the saved cursor pointed far back on the real one and
+        # the first wake replayed hours of notes and old tables. Now news older than lateMinutes is dropped, and
+        # the ears keep their cursor (and when you were last in a room) per Beach.
+        items = [{"source": "note", "text": "old", "at": 1000}, {"source": "note", "text": "new", "at": 4500},
+                 {"source": "note", "text": "no time"}]
+        self.assertEqual([i["text"] for i in self.js("m.freshItems(i, 5000, 30)", i=items)], ["new", "no time"])
+        src = MOD.read_text(encoding="utf-8")
+        self.assertIn("key($, `cursor@${conn.beach}`)", src)
+        self.assertIn("key($, `lastInRoom@${conn.beach}`)", src)
+
     def test_the_ears_are_opt_in_with_a_ceiling(self):
         c = self.js("m.normalize({visitFolder: 'D:/v'})")
         self.assertEqual((c["ears"], c["inlineVisitorLines"], c["restingHours"], c["maxWakesPerHour"],

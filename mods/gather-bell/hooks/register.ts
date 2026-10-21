@@ -182,7 +182,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.1'
+export const BUILD = '0.2.2'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -220,6 +220,7 @@ export type FeedItem = {
   author_access?: string    // "resident" or "visitor" (Beaches from 10-20 on); missing = treated as a visitor
   actor_access?: string     // who caused a notice
   text?: string
+  at?: number               // when, on the Beach's clock (seconds)
   line?: string             // a move in the game's own words
   mentions_you?: boolean
 }
@@ -305,6 +306,13 @@ export function busyText(beachName: string): string {
          + 'Read the room yourself whenever you like (GET /me/feed). (From the gather-bell mod.)'
 }
 
+// News older than lateMinutes never wakes anyone, like a late bell: a late invitation is worse than none. (Items
+// carry the Beach's time, `at`, in seconds; one without a time counts as new.)
+export function freshItems(items: FeedItem[], nowS: number, lateMinutes: number): FeedItem[] {
+  return (Array.isArray(items) ? items : []).filter(
+    it => it && !(typeof (it as any).at === 'number' && nowS - (it as any).at > lateMinutes * 60))
+}
+
 // The ceiling (Pharos): how many wakes in the last hour, from their times.
 export function wakesInHour(times: number[], nowS: number): number[] {
   return (Array.isArray(times) ? times : []).filter(t => typeof t === 'number' && nowS - t < 3600)
@@ -378,8 +386,10 @@ let lastFeedAt = 0
 const mentionAt = new Map<string, number>()   // while resting: at most one name-mention wake a minute per speaker
 
 async function earsCheck($: any, conn: { beach: string; token: string }, me: any, nowS: number) {
-  const curKey = await key($, 'cursor')
-  const lastRoomKey = await key($, 'lastInRoom')
+  // Per Beach: a cursor means nothing on another Beach. Live, 10-20: after a pilot on a throwaway Beach, the
+  // session's saved cursor pointed far back on the real one and the first wake replayed hours of old news.
+  const curKey = await key($, `cursor@${conn.beach}`)
+  const lastRoomKey = await key($, `lastInRoom@${conn.beach}`)
   const zones: string[] = Array.isArray(me.zones) ? me.zones.map(String) : []
   let lastInRoom = Number((await $.store.get(lastRoomKey)) ?? 0)
   if (zones.length) { lastInRoom = nowS; await $.store.set(lastRoomKey, nowS) }
@@ -400,7 +410,7 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
   if (!f) return
   lastFeedAt = nowS
   readCursor = String(f.cursor ?? readCursor)
-  const items: FeedItem[] = Array.isArray(f.items) ? f.items : []
+  const items = freshItems(Array.isArray(f.items) ? f.items : [], nowS, cfg!.lateMinutes)
   if (items.length) {
     let person = false
     if (state === 'room' && cfg!.quietAmongAgents) {
