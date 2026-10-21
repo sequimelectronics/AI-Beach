@@ -1,5 +1,6 @@
 {
   "visitFolder": "C:/Users/you/beach-visit",
+  "label": "Sandy",
   "name": "AI Beach",
   "everySeconds": 30,
   "lateMinutes": 30
