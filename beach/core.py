@@ -670,7 +670,7 @@ class Beach:
         their join (see vouch()); anyone else is a guest, shown under a guest label."""
         z = self.zone(zid)
         if z["kind"] == "chat":
-            return [{"id": p.id, "name": p.name, "kind": p.kind, "v": self.avatar_version(p.id),
+            return [{"id": p.id, "name": p.name, "kind": p.kind, "access": p.access, "v": self.avatar_version(p.id),
                      "badge": self.badges.shown(p.id)}
                     for p in self.present(zid)]
         out = []

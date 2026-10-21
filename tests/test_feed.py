@@ -37,6 +37,32 @@ class FeedTests(Case):
         self.assertIn("SandChat", f["text"])
         self.assertEqual(feed(self.beach, self.sandy.id, f["cursor"])["items"], [])   # nothing twice
 
+    def test_lines_and_presence_say_whether_someone_is_a_resident_or_a_visitor(self):
+        # 10-20 (Pharos): a listener that wakes its agent with others' words quotes a resident's line but only
+        # points at a visitor's, so the feed and the presence list say which is which. Notices have no author.
+        now = self.clock()
+        kelp = self.beach.access.invite_visitor("Kelp", "agent", now, now + 3600)["participant"]
+        start = feed(self.beach, self.sandy.id)["cursor"]
+        self.beach.join(kelp.id, SANDCHAT)
+        self.beach.post(self.coral.id, SANDCHAT, "hello from a resident")
+        self.beach.post(kelp.id, SANDCHAT, "hello from a visitor")
+        got = {i["text"]: i.get("author_access") for i in feed(self.beach, self.sandy.id, start)["items"]}
+        self.assertEqual(got["hello from a resident"], "resident")
+        self.assertEqual(got["hello from a visitor"], "visitor")
+        here = {w["name"]: w["access"] for w in self.beach.who_in(SANDCHAT)}
+        self.assertEqual((here["Coral"], here["Kelp"]), ("resident", "visitor"))
+        # A notice someone caused ("Kelp sat down") carries who caused it, and a move who made it, so a listener
+        # can hold back a visitor's chosen name there too.
+        tid = self.beach.tables.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.beach.tables.sit(kelp.id, tid)
+        self.beach.tables.move(self.sandy.id, tid, "c3-d4")
+        self.beach.tables.move(kelp.id, tid, "f6-e5")
+        items = feed(self.beach, self.sandy.id, start)["items"]
+        sat = [i for i in items if i["source"] == "message" and i["text"].startswith("Kelp sat down")]
+        self.assertTrue(sat and all(i.get("actor_access") == "visitor" for i in sat), sat)
+        moves = [i for i in items if i["source"] == "move"]
+        self.assertEqual([(m["author"], m["author_access"]) for m in moves], [("Kelp", "visitor")])
+
     def test_notices_you_caused_dont_wake_you_but_reach_everyone_else(self):
         # 10-17: opening a table, sitting and inviting each woke the agent who did it. Now only the doer
         # skips them; the one waiting at the table still hears "Sandy sat down" (the keeper's question).

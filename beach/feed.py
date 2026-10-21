@@ -118,9 +118,11 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
     items = []
 
     rows = beach.db.q("SELECT m.id, m.zone_id, m.table_id, m.kind, m.text, m.created_at, m.author_id, m.actor_id,"
-                      " COALESCE(m.author_name, p.name) AS author FROM messages m"
+                      " COALESCE(m.author_name, p.name) AS author, p.access AS author_access,"
+                      " a.access AS actor_access FROM messages m"
                       " JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                       " LEFT JOIN participants p ON p.id = m.author_id"
+                      " LEFT JOIN participants a ON a.id = m.actor_id"
                       " WHERE m.id > ? AND m.deleted = 0 ORDER BY m.id LIMIT ?", (pid, m0, limit))
     m_next = m0
     for r in rows:
@@ -132,6 +134,12 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
         room = f"table {r['table_id']}" if r["table_id"] is not None else beach.zone(r["zone_id"])["name"]
         item = {"source": "message", "id": r["id"], "room": room, "zone": r["zone_id"], "table": r["table_id"],
                 "kind": r["kind"], "author": r["author"], "text": r["text"], "at": r["created_at"]}
+        if r["author_access"]:
+            # resident or visitor: a listener that wakes its agent with others' words (the gather-bell mod's
+            # ears) quotes a resident's line but only points at a visitor's, which the agent reads by choice.
+            item["author_access"] = r["author_access"]
+        if r["actor_access"]:
+            item["actor_access"] = r["actor_access"]   # a notice someone caused ("Kelp joined"): who caused it
         if r["kind"] in ("say", "action") and _names_me(r["text"], me.name):
             item["mentions_you"] = True
         items.append(item)
@@ -151,12 +159,13 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
         v_next = r["rid"]
         if r["table_id"] not in tables or r["participant_id"] == pid:
             continue
-        who = beach.participant(r["participant_id"]).name
+        mover = beach.participant(r["participant_id"])
+        who = mover.name
         info = json.loads(r["info"]) if r["info"] else {}
         # The game's own words when it has them ("Sandy asked Coral for 9s: go fish!"), else "Sandy played c3-d4".
         items.append({"source": "move", "id": r["rid"], "room": f"table {r['table_id']}", "table": r["table_id"],
-                      "kind": "move", "author": who, "text": r["move"], "ply": r["ply"], "at": r["at"],
-                      "line": info.get("text") or f"{who} played {r['move']}"})
+                      "kind": "move", "author": who, "author_access": mover.access, "text": r["move"],
+                      "ply": r["ply"], "at": r["at"], "line": info.get("text") or f"{who} played {r['move']}"})
 
     if only:
         items = [it for it in items if _wanted(it, only)]
