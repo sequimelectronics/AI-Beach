@@ -182,7 +182,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.3'
+export const BUILD = '0.2.4'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -366,8 +366,10 @@ async function getJson($: any, conn: { beach: string; token: string }, path: str
 }
 
 // The bell: this agent's own invitations, and a wake for any new one.
-async function bellCheck($: any, me: { invites?: Invite[] }, nowS: number) {
-  const seenKey = await key($, 'seen')
+async function bellCheck($: any, beach: string, me: { invites?: Invite[] }, nowS: number) {
+  // Per Beach: bell ids are only unique on one Beach. Live, 10-21: after a pilot on a throwaway Beach (bells 1 and
+  // 2), the real Beach's bell 2 counted as already seen, and the keeper's ring woke everyone but its builder.
+  const seenKey = await key($, `seen@${beach}`)
   const seen: number[] = (await $.store.get(seenKey)) ?? []
   const fresh = freshInvites(me.invites ?? [], seen, nowS, cfg!.lateMinutes)
   if (!fresh.length) return
@@ -486,7 +488,7 @@ async function tick($: any) {
     const me = await getJson($, conn, '/me')
     if (!me) return
     lastError = ''
-    if (bellDue) { lastBellAt = nowS; await bellCheck($, me, nowS) }
+    if (bellDue) { lastBellAt = nowS; await bellCheck($, conn.beach, me, nowS) }
     if (cfg.ears) await earsCheck($, conn, me, nowS)
   } catch (err) {
     noteError($, `look failed (${why(err)})`)
