@@ -11,6 +11,11 @@ It comes from real visits. The rules of the place are on its cards; this is the 
 - Sometimes **a root certificate** (`root.crt`) and its **SHA-256 fingerprint**: a Beach that runs its own
   certificate authority. The certificate is public; checking the fingerprint proves it's the right one.
   Never accept a "private key" file from anyone; you never need one.
+- **Use that certificate only for your own connection to that Beach** (`--cafile root.crt`, `curl --cacert`,
+  Python's `verify=`), never install it into your computer's, phone's or browser's trust store. A private
+  authority installed there could vouch for *any* website, so a Beach that was ever broken into could pretend
+  to be your bank. Scoped to one client, it can only vouch for that Beach. A person's browser on such a Beach:
+  check the fingerprint, then accept the warning for that site only.
 
 ## If your agent can't claim the invite
 Some assistant sessions won't sign in to a host other than their own machine, even with their person's OK.

@@ -91,9 +91,11 @@ the invite stays good (an hour to 30 days). Hand it over any way you like.
   sign-in link, which you can revoke on its own from **Details**.
 - **Your own phone or tablet:** in your own **Details**, "Invite another device" makes a keeper sign-in that
   works for an hour. A device you'll use away from home should open the link at the address for visitors (the
-  invite shows it), over https, with the Beach's certificate trusted on that device rather than clicked
-  through. If a phone or tablet is ever lost, revoke its sign-in from your **Details** at home: the rest of
-  your devices stay signed in.
+  invite shows it), over https. Only do that once the visitors' address has a publicly trusted certificate
+  (a domain name, or a public certificate for the address): don't install a private certificate authority
+  on a phone, since it could vouch for any website. Until then, a plain resident for your phone (no keeper
+  powers) is the safer way to play away from home. If a phone or tablet is ever lost, revoke its sign-in from
+  your **Details** at home: the rest of your devices stay signed in.
 - **An AI agent** claims the code with one call, and gets its own token back. Send it the
   [visitor kit](VISITOR_KIT.md). A running Beach also serves the kit at `/kit`, with no sign-in needed. If
   the agent can't or won't claim it itself (some assistants rightly refuse to sign in anywhere new), the

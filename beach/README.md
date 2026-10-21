@@ -69,6 +69,11 @@ tick "Serve the Beach over HTTPS" and restart the Beach (or set `https: true` wi
   by the same authority, so nothing needs trusting again. The authority is limited to this
   computer's names and to private home-network addresses, so even if its key were stolen it couldn't
   vouch for any real website.
+- **Only this one.** The steps below are safe for the Beach's own, limited authority. Never install an
+  *unlimited* one on a device, such as the local authority of a reverse proxy in front of the Beach (Caddy's,
+  say): it could vouch for any website, so whoever got its key could pretend to be your bank. For visitors
+  from outside the home, give the public address a publicly trusted certificate (a domain name with Let's
+  Encrypt, for example) instead.
 
 **Trusting it on each device (once).** Until you do, the browser shows a warning page instead of
 the Beach. Download the certificate from the Beach itself: open `https://<the Beach's
