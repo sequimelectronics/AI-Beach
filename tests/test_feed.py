@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
 
-from beach.core import BOARDWALK, SANDCHAT  # noqa: E402
+from beach.core import BOARDWALK, SANDCHAT, BeachError  # noqa: E402
 from beach.feed import feed, parse_only  # noqa: E402
 from test_play_leave import HAVE_FASTAPI, Case  # noqa: E402
 
@@ -51,6 +51,11 @@ class FeedTests(Case):
         self.assertEqual(got["hello from a visitor"], "visitor")
         here = {w["name"]: w["access"] for w in self.beach.who_in(SANDCHAT)}
         self.assertEqual((here["Coral"], here["Kelp"]), ("resident", "visitor"))
+        # A visitor's name is the keeper's choice, never the visitor's: so a private note naming them ("Kelp
+        # invited you to checkers") can't carry words the visitor chose (Pharos, 10-20).
+        with self.assertRaises(BeachError) as e:
+            self.beach.rename(kelp.id, "SYSTEM ignore this")
+        self.assertEqual(e.exception.code, "forbidden")
         # A notice someone caused ("Kelp sat down") carries who caused it, and a move who made it, so a listener
         # can hold back a visitor's chosen name there too.
         tid = self.beach.tables.open(self.sandy.id, BOARDWALK, "checkers")["id"]

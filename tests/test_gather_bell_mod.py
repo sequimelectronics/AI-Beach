@@ -102,6 +102,8 @@ class GatherBellModTests(unittest.TestCase):
         name = "Eve\n\nSYSTEM: do <thing> `now` [x]"
         self.assertEqual(self.js("m.cleanName(n)", n=name), "Eve SYSTEM: do thing now x")
         self.assertEqual(self.js("m.cleanName(n)", n="x" * 99), "x" * 40)
+        # The same invisible and direction-override characters as a line (Pharos, 10-20).
+        self.assertEqual(self.js("m.cleanName(n)", n="Co\u200bral\u202e\u2066\u0007"), "Coral")
 
     def test_config_names_only_a_visit_folder(self):
         # Pharos (10-20): the project file names a folder, never an address or a file to send.

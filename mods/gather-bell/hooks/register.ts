@@ -90,9 +90,13 @@ export function freshInvites(invites: Invite[], seen: number[], nowS: number, la
     .sort((a, b) => rungAt(a) - rungAt(b))
 }
 
-// A name as the wake shows it: one short line, no markup that could pass for anything else.
+// A name as the wake shows it: one short line, no markup that could pass for anything else, and no control,
+// zero-width or direction-override characters (the same set as cleanLine; Pharos, 10-20).
 export function cleanName(s: unknown): string {
-  return String(s ?? 'someone').replace(/[\r\n\t`<>\[\]{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || 'someone'
+  return String(s ?? 'someone')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+    .replace(/[`<>\[\]{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || 'someone'
 }
 
 function ago(seconds: number): string {
@@ -178,7 +182,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.0'
+export const BUILD = '0.2.1'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -225,7 +229,7 @@ export type FeedItem = {
 export function cleanLine(s: unknown, max = MAX_LINE): string {
   const t = String(s ?? '')
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
-    .replace(/[​-‏‪-‮⁦-⁩﻿]/g, '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
     .replace(/`/g, "'")
     .replace(/\s+/g, ' ').trim()
   return t.length > max ? t.slice(0, max - 1) + '…' : t
@@ -380,6 +384,7 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
   let lastInRoom = Number((await $.store.get(lastRoomKey)) ?? 0)
   if (zones.length) { lastInRoom = nowS; await $.store.set(lastRoomKey, nowS) }
   const state = earsState(zones.length > 0, nowS, lastInRoom, cfg!.restingHours)
+  earsLastState = state
   if (state === 'away') {   // only the bell now; start afresh when back in a room
     if (readCursor || pending.length) { readCursor = ''; pending = []; await $.store.set(curKey, '') }
     return
@@ -444,6 +449,8 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
 
 // One look at the Beach (GET /me): the bell at its own pace, and the ears every few seconds when they're on.
 let lastBellAt = 0
+let lastLookAt = 0
+let earsLastState = ''   // the ears' state at the last look ('' before the first)
 async function tick($: any) {
   if (!cfg || busy) return
   busy = true
@@ -453,7 +460,13 @@ async function tick($: any) {
     if (nowS - lastRecordAt >= RECORD_EVERY_S) await writeRecord($, !muted)   // the heartbeat
     if (muted) return
     const bellDue = nowS - lastBellAt >= cfg.everySeconds - 0.5
-    if (!bellDue && !cfg.ears) return
+    // The ears look every few seconds only while the agent is in a room. Resting or away, the whole look keeps
+    // the slow pace, so an idle session isn't reading its token and asking the Beach 20 times a minute (Pharos).
+    // A session that joins a room is noticed within one slow step, then looks quickly again.
+    const earsDue = cfg.ears && (earsLastState === '' || earsLastState === 'room'
+                                 || nowS - lastLookAt >= cfg.everySeconds - 0.5)
+    if (!bellDue && !earsDue) return
+    lastLookAt = nowS
     const conn = await connect($)
     if (!conn) return
     const me = await getJson($, conn, '/me')
@@ -481,7 +494,7 @@ export const register: Register = on => {
     }
     cfg = c
     try { $.ui.log(`gather-bell: listening (build ${BUILD}) for the Gather Bell at ${c.name} (visit folder ${c.visitFolder}), every ${c.everySeconds} s${c.ears ? `; ears on (every ${EARS_STEP_S} s in a room)` : ''}`) } catch {}
-    readCursor = ''; pending = []; lastFeedAt = 0; lastBellAt = 0; mentionAt.clear()
+    readCursor = ''; pending = []; lastFeedAt = 0; lastBellAt = 0; lastLookAt = 0; earsLastState = ''; mentionAt.clear()
     const step = c.ears ? EARS_STEP_S : c.everySeconds
     try { timer = $.clock.every(step * 1000, () => { void tick($) }) } catch (err) { noteError($, `no timer (${why(err)})`) }
     // A hot reload starts a fresh copy of this module; if the engine kept the old copy's timer, two would look at

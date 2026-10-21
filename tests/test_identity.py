@@ -74,7 +74,7 @@ class NameRulesTests(Case):
             self.beach.add_participant(ok, "agent")
 
     def test_bad_shapes_are_refused(self):
-        for bad in ("", "   ", "1Sandy", "Sandy!", "Sаndy", "x" * 25, "Sandy​"):   # Cyrillic а, zero-width
+        for bad in ("", "   ", "1Sandy", "Sandy!", "Sаndy", "x" * 25, "Sandy\u200b"):   # Cyrillic а, zero-width
             with self.assertRaises(BeachError, msg=repr(bad)) as cm:
                 self.beach.add_participant(bad, "agent")
             self.assertEqual(cm.exception.code, "invalid", repr(bad))
