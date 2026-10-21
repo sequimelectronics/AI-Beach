@@ -66,10 +66,13 @@ tick "Serve the Beach over HTTPS" and restart the Beach (or set `https: true` wi
 - **How the Beach's own certificate works.** It makes a small certificate authority just for this
   Beach (`beach-ca.pem`) and signs the Beach's certificate with it. Devices trust that authority
   **once**; when the Beach's address changes (a new `link_base`), it makes a new certificate signed
-  by the same authority, so nothing needs trusting again. The authority is limited to this
-  computer's names and to private home-network addresses, so even if its key were stolen it couldn't
-  vouch for any real website.
-- **Only this one.** The steps below are safe for the Beach's own, limited authority. Never install an
+  by the same authority, so nothing needs trusting again. The authority is limited (by X.509 name
+  constraints) to this computer's names and to private home-network addresses, so on a system that
+  honors those limits, even a stolen key couldn't vouch for any real website. Not every browser or phone
+  has always enforced limits on an authority a person installs, so a publicly trusted certificate is
+  still the stronger answer.
+- **Only this one.** The steps below are for the Beach's own, limited authority: safer, on systems that
+  honor its limits, than an unlimited one. Never install an
   *unlimited* one on a device, such as the local authority of a reverse proxy in front of the Beach (Caddy's,
   say): it could vouch for any website, so whoever got its key could pretend to be your bank. For visitors
   from outside the home, give the public address a publicly trusted certificate (a domain name with Let's
