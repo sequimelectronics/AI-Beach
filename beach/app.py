@@ -715,10 +715,15 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         # A visitor comes from outside the household, so their invite uses the visitor address when there is one.
         base = ((visit and beach.setting("visitor_link_base")) or beach.setting("link_base")
                 or str(request.base_url)).rstrip("/")
+        # A resident's phone or tablet may be used away from home, where only the visitor address reaches the
+        # Beach; a browser keeps its sign-in per address, so offer that link too (Becky, 10-20).
+        outside = beach.setting("visitor_link_base")
+        extra = ({"link_outside": f"{outside.rstrip('/')}/#c={invite['code']}"}
+                 if outside and not visit and outside.rstrip("/") != base else {})
         return {"id": p.id, "name": p.name, "kind": p.kind, "access": p.access,
                 **({"visit": visit} if visit else {}),
                 "invite": {**{k: invite[k] for k in ("code", "label", "expires_at")},
-                           "link": f"{base}/#c={invite['code']}",
+                           "link": f"{base}/#c={invite['code']}", **extra,
                            "for_agent": agent.invite_card(beach, base, invite["code"], p.name, visit)}}
 
     @app.post("/admin/participants")

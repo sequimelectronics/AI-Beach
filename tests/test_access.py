@@ -9,6 +9,7 @@ where it matters that old tokens stop working, and a stand-in game world (test_p
 from __future__ import annotations
 
 import io
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -314,6 +315,41 @@ class SignOutTests(AccessCase):
         self.assertEqual(self.http.get("/me", headers=self.h(phone)).status_code, 200)           # the phone isn't
         js = (ROOT / "beach" / "web" / "common.js").read_text(encoding="utf-8")
         self.assertIn("await api('POST', '/me/sign-out')", js[js.index("async function signOut"):])
+
+
+class KeeperDeviceTests(AccessCase):
+    """Becky (10-20): keepers do a lot from their phones and tablets, so the keeper can invite another of their
+    own devices from the keeper page. A keeper link is the keeper's whole key: the invite lasts an hour at most,
+    and it's written to the audit log and told to the keeper, so one they didn't make stands out."""
+
+    def test_a_keeper_device_invite_lasts_an_hour_and_is_recorded(self):
+        keeper = next(p for p in self.beach.participants() if p["admin"])["id"]
+        r = self.http.post(f"/admin/participants/{keeper}/token", json={"label": "phone", "expires_in_s": 7 * 86400},
+                           headers=self.admin)
+        self.assertEqual(r.status_code, 200, r.text)
+        inv = r.json()["invite"]
+        self.assertLessEqual(inv["expires_at"] - self.clock(), 3600)        # an hour, whatever was asked
+        audit = self.http.get("/admin/audit", headers=self.admin).json()
+        rows = audit.get("audit", audit) if isinstance(audit, dict) else audit
+        self.assertTrue(any(a["what"] == "keeper_device_invite" and a["detail"] == "phone" for a in rows), rows)
+        events = self.http.get("/me/events", headers=self.admin).json()
+        self.assertIn("keeper sign-in invite", json.dumps(events))
+        got = self.claim(inv["code"], "phone").json()                       # the phone gets its own keeper link
+        self.assertEqual(self.http.get("/me", headers=self.h(got["token"])).json()["admin"], True)
+        r = self.http.post(f"/admin/participants/{keeper}/token", json={"label": "tablet"}, headers=self.admin)
+        self.clock.advance(3601)
+        self.assertNotEqual(self.claim(r.json()["invite"]["code"]).status_code, 200)   # an hour later: no good
+
+    def test_a_resident_invite_offers_the_outside_address_too(self):
+        # A browser keeps its sign-in per address, so a phone used away from home must claim at the address that
+        # reaches the Beach from outside: the visitor address.
+        self.beach.update_settings({"link_base": "http://192.168.1.20:8765", "visitor_link_base": "https://beach.example"})
+        r = self.http.post("/admin/participants", json={"name": "Drift", "kind": "person"}, headers=self.admin).json()
+        self.assertTrue(r["invite"]["link"].startswith("http://192.168.1.20:8765/#c="))
+        self.assertEqual(r["invite"]["link_outside"], "https://beach.example/#c=" + r["invite"]["code"])
+        self.beach.update_settings({"visitor_link_base": None})
+        r = self.http.post("/admin/participants", json={"name": "Shell", "kind": "person"}, headers=self.admin).json()
+        self.assertNotIn("link_outside", r["invite"])
 
 
 class RecoveryTests(AccessCase):

@@ -61,7 +61,9 @@
     const until = r.visit ? 'Works only during the visit, ' + when(r.visit.starts_at) + ' to ' + when(r.visit.ends_at) + '.'
       : 'Works once, until ' + when(inv.expires_at) + '.'
     const rows = r.kind === 'person'
-      ? [['Link for ' + r.name + "'s device", inv.link], ['Or the code', inv.code]]
+      ? [['Link for ' + r.name + "'s device", inv.link],
+         ...(inv.link_outside ? [['Or, for a device used outside the house', inv.link_outside]] : []),
+         ['Or the code', inv.code]]
       : [['For ' + r.name + ' (an agent): give it this', inv.for_agent], ['The code alone', inv.code]]
     return secretBox((r.visit ? 'Visitor invite for ' : 'Invite for ') + r.name, rows,
       until + ' Shown once. Hand it over any way you like; the first device to use it is the one that gets in.')
@@ -208,7 +210,9 @@
               }
             }) : el('span', { class: 'hint', text: 'revoked' })))) : [el('tr', {}, el('td', { colspan: '5', class: 'hint', text: 'No devices yet.' }))]))),
         d.invites.length ? el('p', { class: 'hint', text: 'Invites: ' + d.invites.map(i => i.label + ' (' + (i.state === 'waiting' ? 'not claimed, until ' + when(i.expires_at) : i.state) + ')').join('; ') }) : null,
-        d.admin || (d.visit && d.visit.ended_at && d.visit.end_reason !== 'resident') ? null : el('form', {
+        d.admin ? el('p', { class: 'hint', text: 'Your phone or tablet: this makes a keeper sign-in invite, which works for one hour. ' +
+          'Open it on that device at the address it will use (outside the house, the address for visitors). It shows in your Devices once claimed.' }) : null,
+        (d.visit && d.visit.ended_at && d.visit.end_reason !== 'resident') ? null : el('form', {
           class: 'inline-form',
           onsubmit: async (ev) => {
             ev.preventDefault()

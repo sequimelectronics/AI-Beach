@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # Codes are easy to read aloud and type: no 0/O, 1/I/L. Four groups of four: about 80 bits.
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 MAX_INVITE_S = 30 * 86400          # an unclaimed resident invite lasts at most 30 days
+KEEPER_DEVICE_INVITE_S = 3600      # an invite for another of the keeper's own devices: an hour at most
 MAX_VISIT_S = 14 * 86400           # a visit lasts at most two weeks
 
 
@@ -116,11 +117,23 @@ class Access:
             if not v or v["ended_at"]:
                 raise self._err("conflict", "that visit is over; make a new visitor invite")
             expires_at = v["ends_at"]
+        elif p.is_admin:
+            # The keeper's own phone or tablet (Becky, 10-20: keepers do a lot from them). A keeper link is the
+            # keeper's whole key, so the invite lives an hour at most, whatever is asked, and it's recorded: in the
+            # audit log, and as a note the keeper sees, so one they didn't make stands out.
+            expires_at = self.beach.now() + min(self._duration(expires_in_s, MAX_INVITE_S, "expires_in_s"),
+                                                KEEPER_DEVICE_INVITE_S)
         else:
             expires_at = self.beach.now() + self._duration(expires_in_s, MAX_INVITE_S, "expires_in_s")
         self.db.run("UPDATE access_invites SET revoked_at = ? WHERE participant_id = ? AND claimed_at IS NULL"
                     " AND revoked_at IS NULL", (self.beach.now(), pid))
-        return {"participant": p, "invite": self._new_invite(pid, label, expires_at)}
+        invite = self._new_invite(pid, label, expires_at)
+        if p.is_admin:
+            self.db.run("INSERT INTO audit (at, admin_id, what, detail) VALUES (?, ?, 'keeper_device_invite', ?)",
+                        (self.beach.now(), p.id, invite["label"]))
+            self.beach._note(p.id, f'A keeper sign-in invite was made for a new device ("{invite["label"]}"). It '
+                                   "works for an hour. If that wasn't you, revoke it on the keeper page (your Details).")
+        return {"participant": p, "invite": invite}
 
     def invites(self, pid: int) -> list[dict]:
         now = self.beach.now()
