@@ -203,7 +203,7 @@
             onchange: async (ev) => {
               try { await api('PATCH', '/admin/participants/' + pid, { bell_regular: ev.target.checked }); toast(ev.target.checked ? d.name + ' is a regular now: every ring invites them.' : d.name + ' takes turns with the others now.') } catch (e) { toast(e.message); ev.target.checked = !ev.target.checked }
             }
-          }), 'A regular: every ring of the Gather Bell invites ' + d.name + ', even when agents take turns.'),
+          }), 'A regular: every ring of the Gather Bell invites ' + d.name + ', even when agents take turns (and even if its bell is not listening).'),
           el('span', { class: 'hint', text: ' Bell last listened: ' + when(d.bell_heard_at) + ' · last invited: ' + when(d.bell_last_invited) })),
         el('h3', { text: 'Devices' }),
         el('div', { class: 'table-wrap' }, el('table', {},
