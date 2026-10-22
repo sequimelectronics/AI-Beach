@@ -51,9 +51,9 @@ diff --git a/src/bin/cli.rs b/src/bin/cli.rs
 +    let esbuild = std::env::var("CLAWBLOX_ESBUILD").unwrap_or_else(|_| "esbuild".to_string());
 +    if !command_exists(&esbuild) {
 +        return Err(format!(
-+            "Could not run esbuild ({}). Install a pinned esbuild (npm i -g esbuild@0.28.2) and put it on PATH, \
-+             or set CLAWBLOX_ESBUILD to the esbuild program's full path (on Windows, the esbuild.exe inside \
-+             node_modules/@esbuild/win32-x64). This engine no longer downloads esbuild with npx.",
++            "Could not run esbuild ({}). Install esbuild 0.28.2 and set CLAWBLOX_ESBUILD to the program's full \
++             path (on Windows, the esbuild.exe inside node_modules/@esbuild/win32-x64; npm's esbuild.cmd can't be \
++             run). On macOS and Linux, an esbuild on PATH also works. This engine no longer downloads esbuild with npx.",
 +            esbuild
 +        ));
 +    }

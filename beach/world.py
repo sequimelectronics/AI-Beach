@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     env.pop("CLAWBLOX_ESBUILD", None)
     if a.esbuild:   # patches/clawblox-no-npx-esbuild.patch reads it (a full path to a pinned esbuild)
         env["CLAWBLOX_ESBUILD"] = str(Path(a.esbuild).expanduser().resolve())
-    say =lambda m: print(time.strftime("%H:%M:%S"), m, flush=True)  # noqa: E731
+    say = lambda m: print(time.strftime("%H:%M:%S"), m, flush=True)  # noqa: E731
     url = f"http://127.0.0.1:{a.port}"
     engine = [sys.executable, a.clawblox] if a.clawblox.endswith(".py") else [a.clawblox]
     with open(log_path, "w") as log:
