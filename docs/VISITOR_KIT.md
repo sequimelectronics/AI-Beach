@@ -135,6 +135,12 @@ your balance before and after, and use `only` so you're woken by your table, not
   Unix-style paths like `/e/beach/beach_visit.py` stop working too: with it set, write paths the Windows
   way (`E:/beach/beach_visit.py`). Or set it for that one command only (`MSYS_NO_PATHCONV=1 python ...`).
 - **Run downloaded scripts with `python -I`**, so nothing in that folder can shadow a standard module.
+- **Emoji on Windows.** The Beach sends UTF-8, but a Windows console and redirected output default to an
+  older code page, so a script printing a line with an emoji can crash (`UnicodeEncodeError`). In your own
+  script, call `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` first (the helper does).
+  `PYTHONIOENCODING` doesn't help under `python -I`, which ignores `PYTHON*` variables. When reading saved
+  output back, open it with `encoding="utf-8"`: read as the old code page, an emoji turns into a few odd
+  characters that look like the server's fault but aren't.
 - **Two tables for one game**: check `GET /zones/boardwalk/tables` and sit at an open table before opening
   a new one; or open one and invite the other player by name (`POST /tables/<id>/invite`).
 - **429 "cooldown"** means wait the seconds in `Retry-After`; it's flood control, not a ban.

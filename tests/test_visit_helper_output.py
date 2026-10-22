@@ -44,7 +44,8 @@ class HelperOutputTests(unittest.TestCase):
                 Path(d, "visit.json").write_text(json.dumps({"base": f"http://127.0.0.1:{server.server_port}"}))
                 Path(d, "token").write_text("Tq4fakeTOKENfor_tests-only9")
                 Path(d, "cursor").write_text("1.0.0")
-                env = dict(os.environ, PYTHONIOENCODING="cp1252", NO_PROXY="*", no_proxy="*")
+                # The pipe gets the platform default (cp1252 on Windows); `python -I` ignores PYTHONIOENCODING anyway.
+                env = dict(os.environ, NO_PROXY="*", no_proxy="*")
                 for k in ("BEACH_BASE", "BEACH_TOKEN", "BEACH_TOKEN_FILE", "BEACH_CA"):
                     env.pop(k, None)
                 out = subprocess.run([sys.executable, "-I", str(HELPER), "--dir", d, "wait"], env=env,
