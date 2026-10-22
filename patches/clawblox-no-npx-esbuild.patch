@@ -1,0 +1,83 @@
+Clawblox: never download esbuild at run time (no `npx --yes esbuild` fallback); use a pinned one
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, on its own or after the
+other ten; apply all eleven in the order of the README's table.
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-no-npx-esbuild.patch
+    cargo build --release
+
+Why (a security review, 10-21): each time a world starts, Clawblox bundles its renderer with esbuild.
+When no `esbuild` program was found on PATH, it ran `npx --yes esbuild`, which fetches whatever esbuild
+is newest from the npm registry and runs it with the world's account: unpinned code from the internet,
+at every start, without anyone choosing it. On Windows this was the usual path, because a global
+`npm install -g esbuild` makes only an `esbuild.cmd` shim, which Clawblox's program check doesn't run.
+
+What changes: Clawblox uses the esbuild named by the CLAWBLOX_ESBUILD environment variable (a full path,
+for a pinned copy), or `esbuild` on PATH. If neither runs, the world stops with a message that says how
+to install one, instead of downloading anything. AI Beach's launcher sets CLAWBLOX_ESBUILD from its
+`--esbuild` option (or AI_BEACH_ESBUILD). On Windows, point it at the native program inside the npm
+package: node_modules/@esbuild/win32-x64/esbuild.exe.
+
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -1628,23 +1628,21 @@ fn bundle_renderer_with_esbuild(
+         )
+     })?;
+ 
+-    let mut needs_npm_cache = false;
+-    let mut cmd = if command_exists("esbuild") {
+-        let mut c = Command::new("esbuild");
+-        c.arg(source.as_os_str());
+-        c
+-    } else if command_exists("npx") {
+-        needs_npm_cache = true;
+-        let mut c = Command::new("npx");
+-        c.args(["--yes", "esbuild"]);
+-        c.arg(source.as_os_str());
+-        c
+-    } else {
+-        return Err(
+-            "Could not find esbuild or npx in PATH. Install esbuild (npm i -D esbuild) or Node.js."
+-                .to_string(),
+-        );
+-    };
++    // AI Beach: never fetch esbuild at run time. The old fallback ran `npx --yes esbuild`, which downloads
++    // whatever esbuild is newest from the npm registry each time a world starts: unpinned code, run with
++    // the world's account. Use the esbuild named by CLAWBLOX_ESBUILD (a full path, for a pinned copy), or
++    // one on PATH; otherwise stop and say how to install one.
++    let esbuild = std::env::var("CLAWBLOX_ESBUILD").unwrap_or_else(|_| "esbuild".to_string());
++    if !command_exists(&esbuild) {
++        return Err(format!(
++            "Could not run esbuild ({}). Install a pinned esbuild (npm i -g esbuild@0.28.2) and put it on PATH, \
++             or set CLAWBLOX_ESBUILD to the esbuild program's full path (on Windows, the esbuild.exe inside \
++             node_modules/@esbuild/win32-x64). This engine no longer downloads esbuild with npx.",
++            esbuild
++        ));
++    }
++    let mut cmd = Command::new(&esbuild);
++    cmd.arg(source.as_os_str());
+ 
+     cmd.current_dir(game_dir).args([
+         "--bundle",
+@@ -1655,18 +1653,6 @@ fn bundle_renderer_with_esbuild(
+         "--log-level=warning",
+     ]);
+ 
+-    if needs_npm_cache {
+-        let npm_cache_dir = std::env::temp_dir().join("clawblox-npm-cache");
+-        std::fs::create_dir_all(&npm_cache_dir).map_err(|e| {
+-            format!(
+-                "Failed to create npm cache dir {}: {}",
+-                npm_cache_dir.display(),
+-                e
+-            )
+-        })?;
+-        cmd.env("NPM_CONFIG_CACHE", &npm_cache_dir);
+-    }
+-
+     let output = cmd
+         .arg(format!("--outfile={}", out.display()))
+         .output()

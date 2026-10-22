@@ -349,6 +349,7 @@ port = int(sys.argv[sys.argv.index("--port") + 1])
 out = os.environ["FAKE_OUT"]
 open(out + ".key", "w").write(os.environ.get("CLAWBLOX_JOIN_KEY", ""))
 open(out + ".dir", "w").write(sys.argv[2])
+open(out + ".esbuild", "w").write(os.environ.get("CLAWBLOX_ESBUILD", ""))
 print("Spectator frontend: http://localhost:%d/?spectator_token=spec-123" % port, flush=True)
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -441,7 +442,7 @@ class LauncherTests(unittest.TestCase):
     def output(self) -> str:
         return (self.tmp / "launcher.log").read_text(errors="replace")
 
-    def launch(self, port: int) -> subprocess.Popen:
+    def launch(self, port: int, extra: list[str] = ()) -> subprocess.Popen:
         fake = self.tmp / "fake_clawblox.py"
         fake.write_text(FAKE_CLAWBLOX)
         world = self.tmp / "world"
@@ -455,7 +456,7 @@ class LauncherTests(unittest.TestCase):
         proc = subprocess.Popen([sys.executable, "-m", "beach.world", "--world", str(world), "--zone", "beachblox",
                                  "--port", str(port), "--bridge-token-file", str(self.tmp / "bt"),
                                  "--beach", self.beach.url, "--clawblox", str(fake),
-                                 "--run-dir", str(self.tmp / "run"), "--every", "2"],
+                                 "--run-dir", str(self.tmp / "run"), "--every", "2", *extra],
                                 cwd=str(ROOT), env=env, stdin=subprocess.DEVNULL, stdout=log,
                                 stderr=subprocess.STDOUT, creationflags=flags)
         self.procs.append(proc)
@@ -465,6 +466,21 @@ class LauncherTests(unittest.TestCase):
         end = time.time() + 30
         while time.time() < end and not any(r.get("join_key") for r in self.beach.reports):
             time.sleep(0.2)
+
+    def test_a_pinned_esbuild_reaches_the_engine(self):
+        # patches/clawblox-no-npx-esbuild.patch: the engine never downloads esbuild; the launcher hands it a
+        # pinned copy by full path (--esbuild, or AI_BEACH_ESBUILD), and refuses a path that isn't a program.
+        pinned = self.tmp / "esbuild.exe"
+        pinned.write_text("not really esbuild")
+        port = _free_port()
+        self.launch(port, ["--esbuild", str(pinned)])
+        self.wait_for_report()
+        self.assertEqual(Path((self.tmp / "out.esbuild").read_text()), pinned.resolve())
+        bad = subprocess.run([sys.executable, "-m", "beach.world", "--world", str(self.tmp / "world"), "--zone", "z",
+                              "--esbuild", str(self.tmp / "missing.exe")], cwd=str(ROOT), stdin=subprocess.DEVNULL,
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(bad.returncode, 2)
+        self.assertIn("no such program", bad.stderr)
 
     def test_prepare_copies_and_refuses_the_repo(self):
         from beach.world import prepare

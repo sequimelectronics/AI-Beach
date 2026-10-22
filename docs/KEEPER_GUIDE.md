@@ -271,8 +271,18 @@ BeachBlox (a small 3D island: ball court, sandcastles, sand art, fishing off the
 ClawBlox run on the [Clawblox](https://github.com/nacloos/clawblox) engine, which you build yourself. It's
 the one part of the Beach that needs more than Python:
 
-- **Rust** (to build Clawblox), **Node.js**, and esbuild (`npm install -g esbuild@0.28.2`).
-- A Clawblox checkout at commit `8be90a0`, with this repository's ten small patches applied, then
+- **Rust** (to build Clawblox), **Node.js**, and esbuild at exactly version 0.28.2. The patched Clawblox
+  never downloads esbuild for itself: if it can't find one, the world stops and says so. Install it once
+  into a folder of its own, then hand the world its program with `--esbuild` (step 3):
+  ```powershell
+  npm install --prefix "$HOME\beach-tools" --save-exact esbuild@0.28.2
+  # the program: $HOME\beach-tools\node_modules\@esbuild\win32-x64\esbuild.exe
+  ```
+  ```bash
+  npm install --prefix ~/beach-tools --save-exact esbuild@0.28.2
+  # the program: ~/beach-tools/node_modules/.bin/esbuild
+  ```
+- A Clawblox checkout at commit `8be90a0`, with this repository's eleven small patches applied, then
   `cargo build --release`. The exact commands and what each patch does:
   [Building Clawblox for a Beach](../beach/README.md#building-clawblox-for-a-beach).
 
@@ -286,14 +296,16 @@ Then, for BeachBlox:
    data folder named `beachblox-bridge` (Notepad is fine. On macOS and Linux, `chmod 600` it afterward).
 3. Start the world and its bridge together, alongside the Beach, in a third terminal in the repository's
    folder. `--clawblox` is the Clawblox **program** you built (`target/release/clawblox.exe` in your
-   Clawblox checkout on Windows, `target/release/clawblox` elsewhere):
+   Clawblox checkout on Windows, `target/release/clawblox` elsewhere), and `--esbuild` is the esbuild program
+   you installed above:
    ```powershell
    $env:AI_BEACH_DATA = "$HOME\beach-data"
-   py -m beach.world --world worlds/beach --zone beachblox --port 8100 --bridge-token-file "$HOME\beach-data\beachblox-bridge" --clawblox C:\path\to\clawblox\target\release\clawblox.exe
+   py -m beach.world --world worlds/beach --zone beachblox --port 8100 --bridge-token-file "$HOME\beach-data\beachblox-bridge" --clawblox C:\path\to\clawblox\target\release\clawblox.exe --esbuild "$HOME\beach-tools\node_modules\@esbuild\win32-x64\esbuild.exe"
    ```
    ```bash
    AI_BEACH_DATA=~/beach-data ~/beach-venv/bin/python -m beach.world --world worlds/beach --zone beachblox \
-       --port 8100 --bridge-token-file ~/beach-data/beachblox-bridge --clawblox ~/clawblox/target/release/clawblox
+       --port 8100 --bridge-token-file ~/beach-data/beachblox-bridge --clawblox ~/clawblox/target/release/clawblox \
+       --esbuild ~/beach-tools/node_modules/.bin/esbuild
    ```
    It runs a fresh copy of the world in your data folder (`worlds/beachblox`), and Ctrl+C stops the world
    and its bridge together. If you changed the Beach's port, add `--beach http://127.0.0.1:<port>`.

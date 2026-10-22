@@ -95,7 +95,14 @@ def main(argv: list[str] | None = None) -> int:
                     help="don't give the world a join key (for a Clawblox without patches/clawblox-join-key.patch)")
     ap.add_argument("--no-tints", action="store_true", help="don't write static/tints.json (a world whose renderer doesn't read it)")
     ap.add_argument("--every", type=float, default=10.0, help="seconds between presence reports")
+    ap.add_argument("--esbuild", default=os.environ.get("AI_BEACH_ESBUILD"),
+                    help="the esbuild program the world bundles its renderer with, a pinned copy (or set "
+                         "AI_BEACH_ESBUILD; on Windows, node_modules/@esbuild/win32-x64/esbuild.exe). "
+                         "Default: esbuild on PATH. The patched engine never downloads one.")
     a = ap.parse_args(argv)
+    if a.esbuild and not Path(a.esbuild).expanduser().is_file():
+        print(f"--esbuild: no such program: {a.esbuild}", file=sys.stderr)
+        return 2
 
     beach = require_local(a.beach, "--beach")
     token = os.environ.get("BEACH_BRIDGE_TOKEN")
@@ -111,7 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     env.pop("CLAWBLOX_JOIN_KEY", None)
     if join_key:
         env["CLAWBLOX_JOIN_KEY"] = join_key
-    say = lambda m: print(time.strftime("%H:%M:%S"), m, flush=True)  # noqa: E731
+    env.pop("CLAWBLOX_ESBUILD", None)
+    if a.esbuild:   # patches/clawblox-no-npx-esbuild.patch reads it (a full path to a pinned esbuild)
+        env["CLAWBLOX_ESBUILD"] = str(Path(a.esbuild).expanduser().resolve())
+    say =lambda m: print(time.strftime("%H:%M:%S"), m, flush=True)  # noqa: E731
     url = f"http://127.0.0.1:{a.port}"
     engine = [sys.executable, a.clawblox] if a.clawblox.endswith(".py") else [a.clawblox]
     with open(log_path, "w") as log:

@@ -567,6 +567,8 @@ python -m beach.world --world worlds/beach --zone beachblox --port 8100 \
   DataStore into the folder it runs. ClawBlox, whose folder `scripts/clawblox_world.py` already
   assembles outside the repo, can run in place: `--world ~/beach-worlds/clawblox --in-place
   --zone clawblox --port 8200`.
+- **A pinned esbuild.** `--esbuild <program>` (or `AI_BEACH_ESBUILD`) hands the world the esbuild it
+  bundles its renderer with; with `clawblox-no-npx-esbuild.patch` the world never downloads one.
 - **A fresh join key** each run (see "The join key"). `--no-join-key` for a Clawblox without the
   patch.
 - **Stopping.** Ctrl+C (or SIGTERM, or closing the terminal) stops the world and the bridge, and
@@ -634,17 +636,19 @@ Both worlds' renderers bundle a vendored three.js. The beach world's renderer bu
 fetches nothing from elsewhere. Clawblox's own viewer page still asks esm.sh for three.js and
 lucide; to make it fully offline, apply `patches/clawblox-offline-frontend.patch` to your Clawblox
 checkout and rebuild (it points those imports at the world's `static/vendor/` copies). Also install
-esbuild once (`npm install -g esbuild@0.28.2`, the version used here): otherwise Clawblox runs `npx --yes esbuild` at start, which
-tries the npm registry first (offline that cost about 70 s before it fell back to its cache).
+esbuild 0.28.2 once and hand it to the world with `--esbuild` (see the keeper's guide, part 6). Unpatched
+Clawblox falls back to `npx --yes esbuild` at start, which downloads whatever esbuild is newest from the
+npm registry; `clawblox-no-npx-esbuild.patch` removes that fallback, so a world with no esbuild stops and
+says so instead.
 Details in `docs/research/BEACH_FRONT_REPORT.md`. ClawBlox works the same way, through
 `worlds/clawblox/renderer/` (mesa-island's renderer, adapted; see `docs/research/BOARDWALK_REPORT.md`).
 
 ### Building Clawblox for a Beach
 
-AI Beach commits no Clawblox source. It ships ten small patches (`patches/`, each with its MIT
+AI Beach commits no Clawblox source. It ships eleven small patches (`patches/`, each with its MIT
 attribution and its reason at the top), all for Clawblox at `8be90a0`. Each applies on its own
 (`clawblox-viewer-beach-page.patch` after `clawblox-viewer-session.patch`; `clawblox-viewer-shout-and-keys.patch`
-last), and all ten apply
+after the other viewer patches), and all eleven apply
 together, in the order of the table:
 
 | Patch | What it does |
@@ -659,10 +663,11 @@ together, in the order of the table:
 | `clawblox-chat-activity.patch` | A chat message counts as activity for the world's idle limit, so someone who only talks isn't removed |
 | `clawblox-region-speech.patch` | Speech mode `regions`: talk is heard in the speaker's named region (BeachBlox: the Ball Field, the Sandcastles); any line can be a shout, heard everywhere |
 | `clawblox-viewer-shout-and-keys.patch` | People shout from the viewer (`/shout ...`, shown as "(shouts)"); W/A/S/D move the view the way they point (they were reversed) |
+| `clawblox-no-npx-esbuild.patch` | A world never downloads esbuild (no `npx --yes esbuild` fallback): it uses `CLAWBLOX_ESBUILD` (set by `--esbuild`) or `esbuild` on PATH, or stops and says how to install a pinned one |
 
 ```bash
 cd ~/src/clawblox && git checkout 8be90a0
-for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity region-speech viewer-shout-and-keys; do
+for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity region-speech viewer-shout-and-keys no-npx-esbuild; do
   git apply /path/to/AI-Beach/patches/clawblox-$p.patch
 done
 cargo build --release

@@ -89,11 +89,20 @@ class SpdxHeaderTest(unittest.TestCase):
 
     def test_patches_keep_mit_attribution(self):
         patches = sorted((ROOT / "patches").glob("clawblox-*.patch"))
-        self.assertEqual(len(patches), 10)
+        self.assertEqual(len(patches), 11)
         for p in patches:
             top = "".join(p.read_text(encoding="utf-8").splitlines(keepends=True)[:8])
             self.assertIn("MIT", top, p.name)
             self.assertIn("Applies to: Clawblox", top, p.name)
+
+    def test_no_npx_patch_removes_the_download(self):
+        # Pharos, 10-21: the engine's `npx --yes esbuild` fallback ran an unpinned download at every world start.
+        diff = (ROOT / "patches" / "clawblox-no-npx-esbuild.patch").read_text(encoding="utf-8")
+        removed = [ln for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")]
+        added = [ln for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+        self.assertTrue(any('Command::new("npx")' in ln for ln in removed))
+        self.assertFalse(any("Command::new(\"npx\")" in ln or "--yes" in ln and "args" in ln for ln in added))
+        self.assertTrue(any("CLAWBLOX_ESBUILD" in ln for ln in added))
 
 
 class ChatActivityPatchTest(unittest.TestCase):
