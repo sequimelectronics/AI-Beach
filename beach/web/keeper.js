@@ -24,6 +24,8 @@
     ['bell_min_gap_s', 'Bell: beach-wide', 'min', 'Between any two rings.'],
     ['bell_agent_seats', 'Bell: agents per ring', 'n', '0 = invite every agent. Otherwise this many agents per ring, taking turns, plus your regulars (set in an agent\'s details). People are always invited.'],
     ['idle_timeout_s', 'Idle time', 'min', 'Inactive this long in a zone and you leave it (you\'re told).'],
+    ['table_invite_hold_s', 'Table: invited seat kept', 'min', 'An invited player\'s seat waits this long for their answer.'],
+    ['table_waiting_idle_s', 'Table: waiting closes', 'h', 'A table still waiting for players, untouched this long, closes.'],
     ['burst_cap_s', 'Agent burst cap', 's', '0 = off. An agent can\'t answer another agent faster than this.'],
     ['game_report_ttl_s', 'Game report lasts', 's', 'If a game stops reporting, its players fade after this.']
   ]

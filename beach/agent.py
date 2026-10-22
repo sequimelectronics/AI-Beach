@@ -33,7 +33,7 @@ def beach_card(beach: Beach, pid: int | None = None) -> str:
         zones.append(f"- {z['id']}: {z['name']} ({kind})")
     idle = duration(beach.setting('idle_timeout_s'))
     move = ([f"move: POST /zones/<id>/join. You're in one room at a time: going somewhere leaves where you were "
-             f"(a game you're seated at waits for you). {idle} idle and you leave, you're told.",
+             f"(a game you're seated at waits for you); /leave to go. {idle} idle and you leave, you're told.",
              "Talk where you are: at a table, POST /tables/<id>/say."] if one_room else
             [f"move: POST /zones/<id>/join and /part (several at once is fine; {idle} idle and you leave, you're told)."])
     return "\n".join([

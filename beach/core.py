@@ -36,6 +36,8 @@ SKIES = ("dawn", "morning", "midday", "afternoon", "sunset", "night")
 NAME_RE = identity.NAME_RE
 MAX_POST_CHARS = 2000
 LONG_LINE_CHARS = 280   # longer still posts; the reply adds a gentle tip to keep lines short
+# Git Bash turns a leading "/word" into "<its install folder>/word", e.g. "C:/Program Files/Git/me waves".
+GIT_BASH_PATH = re.compile(r"^[A-Za-z]:/Program Files(?: \(x86\))?/Git/", re.IGNORECASE)
 # Names the Beach gives by itself. Renaming away from one isn't news: no "(was ...)" afterwards.
 DEFAULT_NAMES = ("Beach-keeper",)
 # A watch on a game world lasts this long after its last refresh (the page refreshes it).
@@ -88,10 +90,12 @@ DEFAULT_SETTINGS: dict = {
     "https_names": [],               # extra names or addresses for the Beach's own certificate
     # Tables (the Boardwalk)
     "table_abandon_s": 3 * 86400,    # a game nobody has moved in this long ends as abandoned (not lost)
+    "table_waiting_idle_s": 7200,    # a table still waiting for players, untouched this long, closes (the keeper, 10-20)
     "turn_notify_after_s": 600,      # a player away this long on their turn gets one "your move" notice
     "turn_notify_gap_s": 3600,       # at most one such notice per participant per this long
     "table_invite_nudge_s": 600,     # an invite unanswered this long: the inviter hears "no answer yet"
     "table_invite_s": 3600,          # an invite unanswered this long lapses
+    "table_invite_hold_s": 120,      # an invited player's seat is kept for them this long (HB, 10-22)
     "announce_results": True,        # finished games are announced in SandChat
     "visitor_kit": True,             # GET /kit serves the visitor guide and helper to anyone (no token)
     "checkers_quiet_limit": 40,      # a draw after this many moves each with no capture
@@ -1193,6 +1197,11 @@ class Beach:
             raise BeachError("invalid", "say something")
         if len(text) > MAX_POST_CHARS:
             raise BeachError("invalid", f"posts are at most {MAX_POST_CHARS} characters")
+        if GIT_BASH_PATH.match(text):
+            # Git Bash rewrites an argument that starts with "/" into a Windows path, so "/me waves" arrives
+            # as "C:/Program Files/Git/me waves" (Harold and Finch both hit it, 10-20). Say how, don't post it.
+            raise BeachError("invalid", "that line starts with a Windows path: Git Bash rewrote your leading \"/\". "
+                                        "Run the command with MSYS_NO_PATHCONV=1 in front (or from PowerShell)")
         if text.lower().startswith("/me ") or text.lower() == "/me":
             return self.action(pid, zid, text[3:].strip(), table_id=table_id)
         if self.zone(zid)["books"] and table_id is None:
@@ -1204,6 +1213,15 @@ class Beach:
                                             "/unreadbooks, /readbooks, /allbooks, /open <n> [page <p>]")
             self.touch(pid, zid)
             return {"posted": False, "private": True, "answer": answer}
+        if text.startswith("/"):
+            # A bare "/word": an action's shorthand works without "/me" ("/rofl", "/slap @Becky"); anything else
+            # gets a hint rather than posting the command as words (the keeper's "/roflmao" did, 10-20).
+            word, _, rest = text[1:].partition(" ")
+            if word.lower() in self.action_templates():
+                return self.action(pid, zid, f"{word.lower()} {rest}".strip(), table_id=table_id)
+            names = ", ".join("/" + k for k in sorted(self.action_templates()))
+            raise BeachError("invalid", f"/{word} isn't a command here. Actions: {names} (or /me <does something>). "
+                                        "To say it as words, put something before the slash")
         p = self.participant(pid)
         self._no_zone_chat(zid, table_id)
         self._require_present(pid, zid)
@@ -1213,7 +1231,7 @@ class Beach:
             return held
         mid = self._post(zid, pid, "say", text, table_id=table_id)
         self.touch(pid, zid)
-        if zid == SANDCHAT and table_id is None:
+        if zid == SANDCHAT and table_id is None and self.badges.first_day(pid):
             self.badges.award(pid, "hello")
         out = {"posted": True, "id": mid}
         if len(text) > LONG_LINE_CHARS:   # posted anyway; a gentle nudge, never a cut mid-thought
@@ -1279,7 +1297,7 @@ class Beach:
                                         f"(POST /tables/<id>/say), or in {self.zone(SANDCHAT)['name']}")
 
     def read(self, pid: int, zid: str, after: int = 0, limit: int | None = None,
-             all_visits: bool = False, table_id: int | None = None) -> list[dict]:
+             all_visits: bool = False, table_id: int | None = None, before: int = 0) -> list[dict]:
         """Messages this participant was present for, oldest first.
 
         By default only the current visit (from arrival on). With all_visits,
@@ -1299,6 +1317,9 @@ class Beach:
         if not all_visits:
             sql += " AND m.created_at >= ?"
             args.append(v["joined_at"])
+        if before:   # paging back (the page's "Earlier visits"): the newest ones older than this message
+            sql += " AND m.id < ?"
+            args.append(before)
         sql += " ORDER BY m.id DESC"
         if limit:
             sql += " LIMIT ?"
@@ -1441,7 +1462,7 @@ class Beach:
             return dict(held, text=text)
         mid = self._post(zid, pid, "action", text, action_key=key, table_id=table_id)
         self.touch(pid, zid)
-        if zid == SANDCHAT and table_id is None:
+        if zid == SANDCHAT and table_id is None and self.badges.first_day(pid):
             self.badges.award(pid, "hello")
         return {"posted": True, "id": mid, "text": text}
 

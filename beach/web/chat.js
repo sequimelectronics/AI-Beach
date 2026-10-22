@@ -50,7 +50,30 @@
       const fresh = r.messages.filter(m => m.id > lastId)
       addLines(fresh.map(line))
       if (fresh.length) lastId = fresh[fresh.length - 1].id
+      if (fresh.length && !firstId) firstId = fresh[0].id
     } catch (e) { if (e.status === 409) setPresent(false) }
+  }
+
+  // "Earlier visits" (the keeper, 10-21: "the humans have no log here to relive the best moments"): older
+  // lines you were here for go above, a page at a time. Only what you were present for, never more.
+  let firstId = 0
+  async function earlier () {
+    try {
+      const r = await api('GET', '/zones/' + encodeURIComponent(zid) + '/messages?all_visits=true&limit=100' +
+        (firstId ? '&before=' + firstId : ''))
+      const older = r.messages.filter(m => !firstId || m.id < firstId)
+      if (!older.length) { toast('Nothing earlier: that is everything you were here for (the Beach keeps about 90 days).'); return }
+      const log = ui.log
+      log.querySelector('.empty')?.remove()
+      const fromBottom = log.scrollHeight - log.scrollTop
+      log.setAttribute('aria-live', 'off')   // a page of old lines isn't news: don't read it all out
+      log.prepend(...older.map(line), el('p', { class: 'sys earlier-mark' }, '— earlier visits above —'))
+      log.scrollTop = log.scrollHeight - fromBottom   // stay where you were reading
+      firstId = older[0].id
+      if (!lastId) lastId = older[older.length - 1].id
+      setTimeout(() => log.setAttribute('aria-live', 'polite'), 0)
+      toast(older.length + ' earlier lines above.')
+    } catch (e) { toast(e.message) }
   }
 
   // Private notes (the bell was answered; you were away and left a zone) go in the log, for you only.
@@ -97,6 +120,7 @@
     if (!yes) {
       ui.log.replaceChildren(el('p', { class: 'empty', text: "You're not in " + (zone ? zone.name : 'the chat') + ' right now. Join to see and say things. You only see what\'s said while you\'re here.' }))
       lastId = 0
+      firstId = 0
       ui.optout.checked = false
     }
   }
@@ -106,6 +130,7 @@
       const r = await api('POST', '/zones/' + encodeURIComponent(zid) + '/join')
       ui.log.replaceChildren()
       lastId = 0
+      firstId = 0
       setPresent(true)
       if (r.arrival) privateNote(r.arrival)
       await pollMessages()
@@ -131,6 +156,7 @@
     ui.sky = el('span', { class: 'sky-chip' })
     ui.joinBtn = el('button', { type: 'button', onclick: () => present ? leave() : join() })
     ui.log = el('div', { class: 'log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Conversation', tabindex: '0' })
+    ui.earlier = el('button', { type: 'button', class: 'quiet', text: 'Earlier visits', title: 'Show what was said on your earlier visits here (the Beach keeps about 90 days)', onclick: earlier })
     ui.input = el('input', { type: 'text', maxlength: '2000', 'aria-label': 'Say something', placeholder: 'Say something, or /me waves', autocomplete: 'off' })
     ui.send = el('button', { class: 'primary', type: 'submit', text: 'Say' })
     const sayForm = el('form', {
@@ -166,7 +192,7 @@
     main.replaceChildren(
       el('div', { class: 'chat-head' }, ui.title, ui.sky, ui.joinBtn),
       el('div', { class: 'chat-layout' },
-        el('section', { 'aria-label': 'Chat' }, ui.log, sayForm, controls),
+        el('section', { 'aria-label': 'Chat' }, ui.earlier, ui.log, sayForm, controls),
         el('aside', { class: 'people', 'aria-label': 'Who is here' }, ui.peopleTitle, ui.peopleList)))
   }
 

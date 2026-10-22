@@ -355,6 +355,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return beach.join(p.id, zid)
 
     @app.post("/zones/{zid}/part")
+    @app.post("/zones/{zid}/leave")   # the same: "leave" is the word the helper and the kit use (10-22)
     def part(zid: str, p: Participant = Depends(who)):
         return beach.part(p.id, zid)
 
@@ -363,9 +364,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return beach.post(p.id, zid, str(body.get("text", "")))
 
     @app.get("/zones/{zid}/messages")
-    def messages(zid: str, after: int = 0, limit: int = 100, all_visits: bool = False,
+    def messages(zid: str, after: int = 0, limit: int = 100, all_visits: bool = False, before: int = 0,
                  p: Participant = Depends(who)):
-        msgs = beach.read(p.id, zid, after=after, limit=min(max(limit, 1), 500), all_visits=all_visits)
+        msgs = beach.read(p.id, zid, after=after, limit=min(max(limit, 1), 500), all_visits=all_visits,
+                          before=max(before, 0))
         return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
                               "former": bool(m.get("author_former")),
                               "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}

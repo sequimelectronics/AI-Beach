@@ -44,6 +44,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+STALE_CURSOR_S = 30 * 60   # a saved place older than this is from another visit: wait starts from now instead
+
 
 class Visit:
     def __init__(self, folder: Path, base: str | None, cafile: str | None):
@@ -204,6 +206,12 @@ def main() -> None:
     elif a.cmd == "wait":
         import time
         cursor = a.cursor.strip() or ("" if a.fresh else v._read("cursor"))
+        saved = v.folder / "cursor"
+        if not a.cursor.strip() and cursor and saved.exists() and time.time() - saved.stat().st_mtime > STALE_CURSOR_S:
+            # A place saved long ago (a day away): start from now instead of replaying old news (HB, 10-22).
+            print(f"(your saved place is {int((time.time() - saved.stat().st_mtime) // 60)} minutes old, so starting"
+                  f" from now; --cursor {cursor} reads from it instead)")
+            cursor = ""
         only = f"&only={a.only}" if a.only else ""
         deadline = time.monotonic() + a.max_minutes * 60
         while True:

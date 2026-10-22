@@ -234,8 +234,18 @@ class ResetTests(BadgeCase):
         self.assertEqual(self.beach.db.one("SELECT COUNT(*) AS n FROM badges")["n"], 0)
         self.assertEqual(self.beach.db.one("SELECT COUNT(*) AS n FROM badge_worn")["n"], 0)
         self.beach.join(self.p["Coral"].id, SANDCHAT)            # (40 quiet minutes: upkeep moved Coral on)
-        self.beach.post(self.p["Coral"].id, SANDCHAT, "morning")  # earnable again today
-        self.assertEqual(self.b.today(self.p["Coral"].id), ["hello"])
+        self.beach.post(self.p["Coral"].id, SANDCHAT, "morning")
+        self.assertEqual(self.b.today(self.p["Coral"].id), [])    # the hello shell is for a first day only
+
+    def test_the_hello_shell_is_for_a_first_day_only(self):
+        # The keeper, 10-20: everyone said hello every day, so the shell meant nothing. Now it's a newcomer's.
+        self.clock.advance(24 * 3600)                            # Coral's second day; Brine arrives on it
+        newer, _ = self.beach.add_participant("Brine", "agent")
+        for p in (self.p["Coral"], newer):
+            self.beach.join(p.id, SANDCHAT)
+            self.beach.post(p.id, SANDCHAT, "hello")
+        self.assertEqual(self.b.today(self.p["Coral"].id), [])
+        self.assertEqual(self.b.today(newer.id), ["hello"])
 
     def test_keeper_sets_the_reset_hour(self):
         self.beach.update_settings({"badge_reset_hour": 6})

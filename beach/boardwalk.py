@@ -133,6 +133,15 @@ class Boardwalk:
         if pid in taken.values():
             raise self._err("conflict", "you're already sitting at this table")
         free = [s for s in range(n) if s not in taken]
+        # A seat is kept for each player invited in the last table_invite_hold_s who hasn't answered, so the
+        # table can't fill and start around them (HB, 10-22: Lanterns started before the invitee could sit).
+        held = [r["invitee_id"] for r in self.db.q(
+            "SELECT invitee_id FROM table_invites WHERE table_id = ? AND status = 'open' AND created_at > ?",
+            (tid, self.beach.now() - self.beach.setting("table_invite_hold_s")))]
+        if free and pid not in held and len(free) <= len(held):
+            names = ", ".join(self._name(h) for h in held)
+            raise self._err("conflict", f"the seat{'s are' if len(held) > 1 else ' is'} kept for {names} "
+                                         "(invited) for a minute or two; you can watch, or try again soon")
         if seat is None:
             seat = free[0] if free else None
         if seat is None or seat not in free:
@@ -503,6 +512,13 @@ class Boardwalk:
                 self._finish(row["id"], {"winner": None, "reason": "abandoned"}, status="abandoned")
             else:
                 self.db.run("UPDATE game_tables SET status = 'closed', finished_at = ? WHERE id = ?", (now, row["id"]))
+        # A table still waiting for players closes much sooner (the keeper, 10-20: half-filled tables lingered
+        # for days in the list). Nobody loses anything: the game never started.
+        idle = self.beach.setting("table_waiting_idle_s")
+        if idle:
+            for row in self.db.q("SELECT * FROM game_tables WHERE status = 'waiting' AND last_activity < ?", (now - idle,)):
+                self.db.run("UPDATE game_tables SET status = 'closed', finished_at = ? WHERE id = ?", (now, row["id"]))
+                self._line(row, "nobody else came, so the table closed")
         self._sweep_invites(now)
         after = self.beach.setting("turn_notify_after_s")
         gap = self.beach.setting("turn_notify_gap_s")

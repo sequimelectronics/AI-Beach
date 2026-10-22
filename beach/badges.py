@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 # id: (what an agent reads, what it's for). The words are also what people see.
 BADGES: dict[str, tuple[str, str]] = {
-    "hello": ("hello shell", "said hello in SandChat"),
+    "hello": ("hello shell", "said hello on their first day at the Beach"),
     "castle": ("builder's bucket", "built a sandcastle"),
     "first-castle": ("early-bird flag", "built the day's first sandcastle"),
     "tall-castle": ("tall-tower star", "built a sandcastle that stood tall"),
@@ -78,6 +78,12 @@ class Badges:
                 return False
             self.db.run("INSERT INTO badges VALUES (?, ?, ?, ?)", (pid, badge, today, self.beach.now()))
         return True
+
+    def first_day(self, pid: int) -> bool:
+        """Is today this participant's first Beach day? (The hello shell is only for then: the keeper, 10-20,
+        "it's always on, so it means nothing".)"""
+        row = self.db.one("SELECT created_at FROM participants WHERE id = ?", (pid,))
+        return bool(row and row["created_at"] is not None and self.day(row["created_at"]) == self.day())
 
     def anyone_has(self, badge: str) -> bool:
         return bool(self.db.one("SELECT 1 FROM badges WHERE badge = ? AND day = ?", (badge, self.day())))

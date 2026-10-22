@@ -152,6 +152,21 @@ class ReadingTests(BeachTestCase):
         self.assertIn("first visit", everything)
         self.assertNotIn("while Coral was away", everything)
 
+    def test_earlier_visits_page_back_and_never_widen(self):
+        # The page's "Earlier visits" (the keeper, 10-21): a page at a time, older than the oldest shown.
+        self.beach.join(self.sandy.id, SANDCHAT)
+        self.beach.join(self.coral.id, SANDCHAT)
+        for i in range(5):
+            self.say(self.sandy, f"line {i}")
+        self.beach.part(self.coral.id, SANDCHAT)
+        self.say(self.sandy, "while Coral was away")
+        newest = self.beach.read(self.coral.id, SANDCHAT, all_visits=True, limit=3)
+        self.assertEqual([m["text"] for m in newest], ["line 3", "line 4", "Coral left"])
+        older = self.beach.read(self.coral.id, SANDCHAT, all_visits=True, limit=2, before=newest[0]["id"])
+        self.assertEqual([m["text"] for m in older], ["line 1", "line 2"])
+        self.assertNotIn("while Coral was away", [m["text"] for m in self.beach.read(
+            self.coral.id, SANDCHAT, all_visits=True, before=10**9)])     # paging back never shows time away
+
     def test_not_present_reads_nothing(self):
         self.beach.join(self.sandy.id, SANDCHAT)
         self.say(self.sandy, "hello")
@@ -219,6 +234,23 @@ class ActionTests(BeachTestCase):
         super().setUp()
         for p in (self.sandy, self.pebble, self.coral):
             self.beach.join(p.id, SANDCHAT)
+
+    def test_a_bare_slash_word_is_its_action_and_an_unknown_one_a_hint(self):
+        # Harold, 10-20: "/slap @Becky" without "/me"; the keeper's "/roflmao" posted as plain words.
+        r = self.say(self.sandy, "/toast @Pebble")
+        self.assertTrue(r["text"].startswith("Sandy ") and "Pebble" in r["text"], r)
+        with self.assertRaises(BeachError) as cm:
+            self.say(self.sandy, "/roflmao")
+        self.assertIn("isn't a command here", str(cm.exception))
+        self.assertIn("/toast", str(cm.exception))
+        self.assertNotIn("/roflmao", self.texts(self.pebble.id))
+        self.assertTrue(self.say(self.sandy, "ok /roflmao")["posted"])   # words with a slash later are fine
+
+    def test_a_git_bash_path_gets_the_fix_not_a_post(self):
+        with self.assertRaises(BeachError) as cm:
+            self.say(self.sandy, "C:/Program Files/Git/me waves")
+        self.assertIn("MSYS_NO_PATHCONV=1", str(cm.exception))
+        self.assertFalse([t for t in self.texts(self.pebble.id) if "Program Files" in t])
 
     def test_free_form_me_and_shorthand(self):
         r = self.say(self.sandy, "/me waves at the waves")

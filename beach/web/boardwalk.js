@@ -59,6 +59,9 @@
   async function sit (tid, seat) {
     try { await api('POST', '/tables/' + tid + '/sit', { seat }); location.href = tableUrl(tid) } catch (e) { toast(e.message) }
   }
+  async function standFromList (tid) {
+    try { await api('POST', '/tables/' + tid + '/stand'); toast('You stood up from table ' + tid + '.'); const m = document.querySelector('main'); if (m) renderLobby(m) } catch (e) { toast(e.message) }
+  }
   function tableUrl (tid) { return '/boardwalk?zone=' + encodeURIComponent(zid) + '&table=' + tid }
 
   // The lobby redraws every 5 s: keep what you picked for a new table across redraws (10-18: the
@@ -95,6 +98,11 @@
       el('div', { class: 'seats' }, t.seats.map(s => seatButton(t, s))),
       el('div', { class: 'row' },
         el('a', { class: 'button' + (mine(t) && t.status !== 'finished' && t.status !== 'abandoned' ? ' primary' : ''), href: tableUrl(t.id), text: mine(t) ? 'Go to my table' : (t.status === 'playing' || t.status === 'waiting') ? 'Watch' : 'See the board' }),
+        // Your own table still waiting for players: stand up right here (the keeper, 10-20: half-filled tables
+        // lingered). The last one to stand closes it; nobody loses anything, the game never started.
+        mine(t) && t.status === 'waiting'
+          ? el('button', { class: 'quiet', type: 'button', text: t.seats.filter(s => s.player).length > 1 ? 'Stand up' : 'Stand up and close', onclick: () => standFromList(t.id) })
+          : null,
         t.watchers ? el('span', { class: 'hint', text: t.watchers + ' watching' }) : null))
     const live = data.tables.filter(t => t.status === 'playing' || t.status === 'waiting')
       .sort((a, b) => (mine(b) ? 1 : 0) - (mine(a) ? 1 : 0))

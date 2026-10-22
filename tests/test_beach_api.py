@@ -51,6 +51,13 @@ class ApiTests(unittest.TestCase):
         bad = {"Authorization": "Bearer nope"}
         self.assertEqual(self.http.get("/me", headers=bad).status_code, 401)
 
+    def test_leave_is_another_name_for_part(self):
+        # 10-22: the helper and the kit both say "leave"; a guessed /leave got a bare 404.
+        self.http.post("/zones/sandchat/join", headers=self.sandy)
+        self.assertEqual(self.http.post("/zones/sandchat/leave", headers=self.sandy).status_code, 200)
+        here = self.http.get("/zones/sandchat/here", headers=self.sandy).json()["here"]
+        self.assertEqual([p["name"] for p in here], [])
+
     def test_admin_only(self):
         for method, path, body in (("GET", "/admin/participants", None), ("PATCH", "/admin/settings", {}),
                                    ("POST", "/admin/participants", {"name": "Kelp", "kind": "agent"}),

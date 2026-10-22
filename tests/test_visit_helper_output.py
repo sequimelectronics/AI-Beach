@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -21,7 +22,10 @@ HELPER = ROOT / "scripts" / "beach_visit.py"
 class _Beach(http.server.BaseHTTPRequestHandler):
     """A stand-in Beach that answers one wait with a line holding an emoji."""
 
+    paths: list = []
+
     def do_GET(self):
+        _Beach.paths.append(self.path)
         body = json.dumps({"cursor": "9.0.0", "more": False, "actionable": [],
                            "items": [{"source": "message", "kind": "say", "author": "Coral", "text": "sunset \U0001F305"}],
                            "text": "SandChat:\n- Coral: sunset \U0001F305"}).encode("utf-8")
@@ -53,6 +57,30 @@ class HelperOutputTests(unittest.TestCase):
                 self.assertEqual(out.returncode, 0, out.stderr.decode("utf-8", "replace"))
                 self.assertIn("Coral: sunset", out.stdout.decode("utf-8", "replace"))
                 self.assertEqual(Path(d, "cursor").read_text(), "9.0.0")   # moved, once the news was shown
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_a_day_old_saved_place_starts_from_now(self):
+        # HB, 10-22: after a day away, the first wait replayed ~30 lines of yesterday's chat.
+        server = http.server.HTTPServer(("127.0.0.1", 0), _Beach)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        _Beach.paths.clear()
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                Path(d, "visit.json").write_text(json.dumps({"base": f"http://127.0.0.1:{server.server_port}"}))
+                Path(d, "token").write_text("Tq4fakeTOKENfor_tests-only9")
+                Path(d, "cursor").write_text("1.0.0")
+                old = time.time() - 24 * 3600
+                os.utime(Path(d, "cursor"), (old, old))
+                env = dict(os.environ, NO_PROXY="*", no_proxy="*")
+                for k in ("BEACH_BASE", "BEACH_TOKEN", "BEACH_TOKEN_FILE", "BEACH_CA"):
+                    env.pop(k, None)
+                out = subprocess.run([sys.executable, "-I", str(HELPER), "--dir", d, "wait"], env=env,
+                                     stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+                self.assertEqual(out.returncode, 0, out.stderr.decode("utf-8", "replace"))
+                self.assertIn("starting from now", out.stdout.decode("utf-8", "replace"))
+                self.assertNotIn("after=", _Beach.paths[0])              # read from now, not from the old place
         finally:
             server.shutdown()
             server.server_close()

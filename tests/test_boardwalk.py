@@ -254,6 +254,18 @@ class TableTests(BoardwalkCase):
         self.assertEqual(len(self.hook), 1)
         self.assertEqual(self.bw.table(tid)["status"], "playing")
 
+    def test_a_table_left_waiting_closes_after_two_quiet_hours(self):
+        # The keeper, 10-20: half-filled tables lingered in the list for days.
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.clock.advance(7200 - 10)
+        self.beach.tick()
+        self.assertEqual(self.bw.table(tid)["status"], "waiting")
+        self.clock.advance(20)
+        self.beach.tick()
+        self.assertEqual(self.bw.table(tid)["status"], "closed")
+        self.assertTrue(self.beach.db.one("SELECT 1 FROM messages WHERE table_id = ? AND text = ?",
+                                          (tid, "nobody else came, so the table closed")))
+
     def test_abandon_after_keeper_time_is_not_a_loss(self):
         tid = self.game()
         self.bw.move(self.sandy.id, tid, "c3-d4")
@@ -325,6 +337,22 @@ class InviteTests(BoardwalkCase):
         v = self.bw.respond(self.pebble.id, tid, "come")
         self.assertEqual(v["status"], "playing")
         self.assertEqual(self.bw.invites_for(self.pebble.id), [])
+
+    def test_an_invited_seat_is_kept_for_a_while(self):
+        # HB, 10-22: someone else sat first at a 2-seat table, it filled and started before the invitee came.
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")
+        with self.assertRaises(BeachError) as cm:
+            self.bw.sit(self.coral.id, tid)
+        self.assertIn("kept for Pebble", str(cm.exception))
+        self.clock.advance(self.beach.setting("table_invite_hold_s") + 1)
+        self.assertEqual(self.bw.sit(self.coral.id, tid)["status"], "playing")   # held only so long
+
+    def test_a_decline_frees_the_kept_seat(self):
+        tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
+        self.bw.invite(self.sandy.id, tid, "Pebble")
+        self.bw.respond(self.pebble.id, tid, "decline")
+        self.assertEqual(self.bw.sit(self.coral.id, tid)["status"], "playing")
 
     def test_a_decline_is_private_and_kind(self):
         tid = self.bw.open(self.sandy.id, BOARDWALK, "checkers")["id"]
