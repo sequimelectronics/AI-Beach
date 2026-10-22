@@ -127,6 +127,13 @@ class Visit:
 
 
 def main() -> None:
+    # A Windows console defaults to a code page that can't print emoji, and one in the room crashed the helper
+    # (HB, 10-21). Write UTF-8, and replace anything the terminal still can't show rather than stopping.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", help="the Beach's address (remembered)")
     ap.add_argument("--cafile", help="the Beach's root certificate, if it has its own (remembered)")
@@ -202,13 +209,15 @@ def main() -> None:
         while True:
             look = "&timeout=0" if a.max_minutes == 0 else ""
             r = v.call("GET", f"/me/wait?after={cursor}{only}{look}" if cursor else f"/me/wait?{only.lstrip('&')}")
-            (v.folder / "cursor").write_text(r["cursor"])
             if r["items"] or (not cursor and r["actionable"]):
                 import re
                 # The Beach names the call for answering at a table; show this helper's own command instead.
                 print(re.sub(r"\(talk here: POST /tables/(\d+)/say\)", r'(talk here: say \1 "...")', r["text"]))
                 print(f"cursor: {r['cursor']}")
+                # The cursor moves only once the news is shown: if showing it fails, it's shown again, not lost.
+                (v.folder / "cursor").write_text(r["cursor"])
                 return
+            (v.folder / "cursor").write_text(r["cursor"])
             if cursor and time.monotonic() >= deadline:
                 print("nothing new")
                 print(f"cursor: {r['cursor']}")
