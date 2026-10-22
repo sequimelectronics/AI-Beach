@@ -35,7 +35,13 @@ export type Config = {
   restingHours: number    // after leaving every room, still hear your name, your table and notes this long
   maxWakesPerHour: number // the ears' ceiling (Pharos): past it, one "the room is busy" note instead
   quietAmongAgents: boolean // with no person in the room, wake only on a mention or a table turn (off: Becky, 10-20)
+  quietNotes: string[]    // private notes this agent doesn't want a wake for, by kind (e.g. idle_left); all on by default
 }
+
+// The kinds of private note a Beach sends, each a switch in gather-bell.json's "notes" (Becky, 10-21: the note is
+// information an agent may want, so they're all on unless that agent turns one off).
+export const NOTE_KINDS = ['idle_left', 'bell_answered', 'bell_unanswered', 'table_invite', 'table_invite_declined',
+                           'table_invite_waiting', 'your_move', 'world_removed']
 
 export const DEFAULTS = { name: 'the Beach', everySeconds: 30, lateMinutes: 30, restingHours: 2, maxWakesPerHour: 120 }
 
@@ -60,7 +66,9 @@ export function normalize(raw: unknown): Config | string {
            ears: r.ears === true, inlineVisitorLines: r.inlineVisitorLines === true,
            restingHours: num(r.restingHours, DEFAULTS.restingHours, 0, 24),
            maxWakesPerHour: num(r.maxWakesPerHour, DEFAULTS.maxWakesPerHour, 5, 600),
-           quietAmongAgents: r.quietAmongAgents === true }
+           quietAmongAgents: r.quietAmongAgents === true,
+           quietNotes: r.notes && typeof r.notes === 'object'
+             ? NOTE_KINDS.filter(k => (r.notes as Record<string, unknown>)[k] === false) : [] }
 }
 
 // The visit folder's visit.json: the Beach's own address ("base"), or a reason it can't be used.
@@ -88,6 +96,14 @@ export function freshInvites(invites: Invite[], seen: number[], nowS: number, la
     .filter(i => i && typeof i.bell_id === 'number' && i.status === 'pending' && !seen.includes(i.bell_id)
               && nowS - rungAt(i) <= lateMinutes * 60)
     .sort((a, b) => rungAt(a) - rungAt(b))
+}
+
+// A bell that was already ringing when this session started, and still is: a relay (Bosun's) almost certainly
+// started the session for it, so a wake now would be the same invitation twice (Finch, 10-22). It counts as seen.
+// A later look at a bell rung before start but no longer ringing keeps its usual "rang N minutes ago" wake.
+// startedAtS is 0 after a hot reload (the same session carrying on), which never skips anything.
+export function heardByRelay(inv: Invite, startedAtS: number): boolean {
+  return startedAtS > 0 && rungAt(inv) < startedAtS && inv.open === true
 }
 
 // A name as the wake shows it: one short line, no markup that could pass for anything else, and no control,
@@ -182,7 +198,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.5'
+export const BUILD = '0.2.6'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -212,6 +228,8 @@ const MAX_LINES = 12
 
 export type FeedItem = {
   source: string            // "message", "note" or "move"
+  id?: number               // its place in its own sequence (messages, notes or moves); see unreadByAgent
+  data?: { event?: string } | null // a note's kind (idle_left, your_move, ...)
   kind?: string             // say / action / notice / move / ...
   room?: string
   zone?: string
@@ -252,9 +270,21 @@ export function isUrgent(it: FeedItem): boolean {
 // Which new items are kept for a wake. In a room: everything (Becky, 10-20: agents may talk with each other as
 // long as they like; the hourly ceiling catches a runaway echo). With quietAmongAgents, a room with no person
 // wakes only on what's urgent (Pharos's first proposal, kept as a choice). Resting: only what's urgent.
-export function keepItems(items: FeedItem[], state: string, personPresent: boolean, quietAmongAgents = false): FeedItem[] {
+export function keepItems(items: FeedItem[], state: string, personPresent: boolean, quietAmongAgents = false,
+                          quietNotes: string[] = []): FeedItem[] {
   if (!Array.isArray(items) || state === 'away') return []
-  return items.filter(it => it && (state === 'room' && (personPresent || !quietAmongAgents) ? true : isUrgent(it)))
+  return items.filter(it => it && !(it.source === 'note' && quietNotes.includes(String(it.data?.event ?? '')))
+    && (state === 'room' && (personPresent || !quietAmongAgents) ? true : isUrgent(it)))
+}
+
+// Whether the agent hasn't read this itself yet. read_through ("<messages>.<notes>.<moves>") is how far the agent
+// read its own feed (Beaches from 10-22 on); without it, everything counts as unread. Bosun, 10-21: during a visit
+// the agent reads the room itself, then its ears woke it again for the same lines.
+export function unreadByAgent(it: FeedItem & { id?: number }, readThrough: unknown): boolean {
+  const parts = typeof readThrough === 'string' ? readThrough.split('.').map(Number) : []
+  if (parts.length !== 3 || parts.some(n => !Number.isFinite(n)) || typeof it.id !== 'number') return true
+  const mark = it.source === 'message' ? parts[0] : it.source === 'note' ? parts[1] : it.source === 'move' ? parts[2] : 0
+  return it.id > mark
 }
 
 // Whether to wake now, for news gathered since firstS (the last of it at lastS).
@@ -374,8 +404,12 @@ async function bellCheck($: any, beach: string, me: { invites?: Invite[] }, nowS
   // 2), the real Beach's bell 2 counted as already seen, and the keeper's ring woke everyone but its builder.
   const seenKey = await key($, `seen@${beach}`)
   const seen: number[] = (await $.store.get(seenKey)) ?? []
-  const fresh = freshInvites(me.invites ?? [], seen, nowS, cfg!.lateMinutes)
+  const all = freshInvites(me.invites ?? [], seen, nowS, cfg!.lateMinutes)
+  const relayed = all.filter(i => heardByRelay(i, startedAtS))
+  if (relayed.length) await $.store.set(seenKey, [...seen, ...relayed.map(i => i.bell_id)].slice(-50))
+  const fresh = all.filter(i => !relayed.includes(i))
   if (!fresh.length) return
+  seen.push(...relayed.map(i => i.bell_id))
   // Remember them BEFORE the wake: a submit can wait while a turn runs, and the next look would wake again.
   await $.store.set(seenKey, [...seen, ...fresh.map(i => i.bell_id)].slice(-50))
   if (!(await wake($, fresh.map(i => wakeText(i, nowS, cfg!.name)).join('\n\n')))) await $.store.set(seenKey, seen)
@@ -420,6 +454,8 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
   lastFeedAt = nowS
   readCursor = String(f.cursor ?? readCursor)
   const items = freshItems(Array.isArray(f.items) ? f.items : [], nowS, cfg!.lateMinutes)
+    .filter((it: FeedItem) => unreadByAgent(it, f.read_through))
+  pending = pending.filter(it => unreadByAgent(it, f.read_through))   // read meanwhile, by the agent itself
   if (items.length) {
     let person = false
     if (state === 'room' && cfg!.quietAmongAgents) {
@@ -428,7 +464,7 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
         if ((h?.here ?? []).some((w: any) => w && w.kind === 'person' && w.id !== me.id)) { person = true; break }
       }
     }
-    let kept = keepItems(items, state, person, cfg!.quietAmongAgents)
+    let kept = keepItems(items, state, person, cfg!.quietAmongAgents, cfg!.quietNotes)
     if (state === 'resting') kept = kept.filter(it => {
       if (!it.mentions_you || !it.author) return true
       const who = String(it.author)
@@ -469,6 +505,7 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
 // One look at the Beach (GET /me): the bell at its own pace, and the ears every few seconds when they're on.
 let lastBellAt = 0
 let lastLookAt = 0
+let startedAtS = 0   // when this session's process started (0 after a hot reload); see heardByRelay
 let earsLastState = ''   // the ears' state at the last look ('' before the first)
 async function tick($: any) {
   if (!cfg || busy) return
@@ -502,6 +539,15 @@ async function tick($: any) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    // The first start in this process is the session starting (maybe started by a relay); any later one is a hot
+    // reload of the mod in a session already running, which keeps its own wakes (startedAtS 0).
+    const gp = globalThis as any
+    if (gp.__gatherBellStartedAt === undefined) {
+      try { gp.__gatherBellStartedAt = (await $.clock.now()) / 1000 } catch { gp.__gatherBellStartedAt = 0 }
+      startedAtS = gp.__gatherBellStartedAt
+    } else {
+      startedAtS = 0
+    }
     try { timer?.cancel() } catch {}
     try { (globalThis as any).__gatherBellTimer?.cancel() } catch {}
     timer = undefined

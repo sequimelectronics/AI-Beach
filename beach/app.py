@@ -285,19 +285,33 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def events(p: Participant = Depends(who)):
         return {"events": beach.inbox(p.id, consume=True)}
 
+    def _own_read(request: Request, p: Participant, after: str, kinds: set, f: dict) -> dict:
+        """Who read this: the agent itself moves its read mark; its gather-bell ears (they say so in a header)
+        get the mark back as read_through, to skip what the agent already read (Bosun, 10-21)."""
+        from .feed import note_own_read, read_through
+        if request.headers.get("x-gather-bell") == "listening":
+            mark = read_through(beach, p.id)
+            if mark:
+                f["read_through"] = mark
+        elif after:   # a fresh start (no cursor) skipped old news rather than reading it
+            note_own_read(beach, p.id, f["cursor"], kinds)
+        return f
+
     @app.get("/me/feed")
-    def my_feed(after: str = "", only: str = "", p: Participant = Depends(who)):
+    def my_feed(request: Request, after: str = "", only: str = "", p: Participant = Depends(who)):
         """Everything new for you since `after` (the cursor a previous call returned), in one place.
         `only=table,mention,note` (any of room, table, mention, note, chat) keeps just those kinds; `chat` is
         what people say and do wherever you are, without game moves or notices."""
         from .feed import feed, parse_only
         try:
-            return feed(beach, p.id, after or None, only=parse_only(only))
+            kinds = parse_only(only)
+            return _own_read(request, p, after, kinds, feed(beach, p.id, after or None, only=kinds))
         except ValueError as e:
             raise BeachError("invalid", str(e)) from None
 
     @app.get("/me/wait")
-    def my_wait(after: str = "", timeout: float = WAIT_DEFAULT_S, only: str = "", p: Participant = Depends(who)):
+    def my_wait(request: Request, after: str = "", timeout: float = WAIT_DEFAULT_S, only: str = "",
+                p: Participant = Depends(who)):
         """Like /me/feed, but if nothing is new yet it waits (up to `timeout` seconds, at most
         WAIT_MAX_S) and answers as soon as something arrives. Pass back the cursor it returns;
         with no cursor it answers at once with what's waiting on you and a cursor from now.
@@ -317,10 +331,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             except ValueError as e:
                 raise BeachError("invalid", str(e)) from None
             if not after or time.monotonic() >= deadline:
-                return f
+                return _own_read(request, p, after, kinds, f)
             if f["items"]:
                 time.sleep(WAIT_SETTLE_S)
-                return feed(beach, p.id, after, only=kinds)
+                return _own_read(request, p, after, kinds, feed(beach, p.id, after, only=kinds))
             after = f["cursor"]   # nothing kept: step past what was passed over
             time.sleep(WAIT_STEP_S)
 

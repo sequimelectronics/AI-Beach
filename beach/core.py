@@ -181,6 +181,10 @@ class Beach:
         self.db = Database(self.data_dir / "beach.db")
         self.now = clock
         self.rng = rng or random.Random()
+        # How far each agent has read the feed itself (its own /me/feed and /me/wait, not its gather-bell ears),
+        # so the ears don't wake it again for lines it already read (Bosun, 10-21). In memory only: after a
+        # restart the worst case is one replay. feed.note_own_read / feed.read_through.
+        self.read_marks: dict[int, tuple[int, int, int]] = {}
         self.sender: Callable[[dict], bool] | None = None  # set by hooks.install()
         self._play_locks: dict[tuple[int, str], threading.Lock] = {}
         self._play_locks_guard = threading.Lock()

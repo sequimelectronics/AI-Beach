@@ -219,6 +219,31 @@ class WaitApiTests(Case):
         self.http.post("/zones/sandchat/join", headers=self.h)
         self.beach.join(self.coral.id, SANDCHAT)
 
+    def test_the_ears_learn_how_far_the_agent_read_itself(self):
+        # Bosun, 10-21: an agent reads the room itself, then its ears (the gather-bell mod) woke it for the same lines.
+        ears = dict(self.h, **{"X-Gather-Bell": "listening"})
+        start = self.http.get("/me/feed", headers=self.h).json()["cursor"]
+        self.assertNotIn("read_through", self.http.get(f"/me/feed?after={start}", headers=ears).json())
+        self.beach.post(self.coral.id, SANDCHAT, "the sunset is lovely")
+        own = self.http.get(f"/me/feed?after={start}", headers=self.h).json()      # the agent reads it itself
+        heard = self.http.get(f"/me/feed?after={start}", headers=ears).json()
+        self.assertEqual(heard["read_through"], own["cursor"])                     # so the ears can skip it
+        # The ears' own reads never move the mark; a fresh start (no cursor) doesn't count as reading.
+        self.beach.post(self.coral.id, SANDCHAT, "and the tide is out")
+        self.http.get(f"/me/feed?after={start}", headers=ears)
+        self.http.get("/me/feed", headers=self.h)
+        self.assertEqual(self.http.get(f"/me/feed?after={start}", headers=ears).json()["read_through"], own["cursor"])
+
+    def test_a_chat_only_read_leaves_notes_and_moves_to_the_ears(self):
+        start = self.http.get("/me/feed", headers=self.h).json()["cursor"]
+        self.beach._note(self.sandy.id, "Your move at table 3", kind="event", data={"event": "your_move"})
+        self.beach.post(self.coral.id, SANDCHAT, "hello")
+        own = self.http.get(f"/me/feed?after={start}&only=chat", headers=self.h).json()
+        m, i, v = own["cursor"].split(".")
+        heard = self.http.get(f"/me/feed?after={start}", headers=dict(self.h, **{"X-Gather-Bell": "listening"})).json()
+        self.assertEqual(heard["read_through"].split(".")[0], m)                  # chat: read
+        self.assertNotEqual(heard["read_through"].split(".")[1], i)               # the note: not read, still news
+
     def test_slow_answers_are_noted_by_path_only(self):
         # 10-18: a stall left no trace. A slow answer gets one stderr line: method, path, time; never the
         # query string. (SLOW_S lowered so any answer counts; the long wait call is left out.)

@@ -92,6 +92,27 @@ def parse_only(only: str | None) -> set[str]:
     return wanted
 
 
+def note_own_read(beach: Beach, pid: int, cursor: str, only: set[str]) -> None:
+    """An agent read its feed itself, up to `cursor`: remember how far, for its ears (see read_through). A read
+    filtered with `only` counts only for what it could show: `chat` for room and table lines, `note` for notes,
+    `table` for moves. So an agent reading only chat still gets its "your move" from its ears."""
+    try:
+        c = parse_cursor(cursor)
+    except ValueError:
+        return
+    if c is None:
+        return
+    keep = (not only or "chat" in only, not only or "note" in only, not only or "table" in only)
+    old = beach.read_marks.get(pid, (0, 0, 0))
+    beach.read_marks[pid] = tuple(max(o, n) if k else o for o, n, k in zip(old, c, keep))
+
+
+def read_through(beach: Beach, pid: int) -> str | None:
+    """How far this agent has read for itself ("<messages>.<notes>.<moves>"), or None."""
+    m = beach.read_marks.get(pid)
+    return ".".join(map(str, m)) if m else None
+
+
 def _wanted(it: dict, only: set[str]) -> bool:
     if "mention" in only and it.get("mentions_you"):
         return True

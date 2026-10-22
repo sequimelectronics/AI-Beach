@@ -232,6 +232,38 @@ class GatherBellModTests(unittest.TestCase):
         self.assertEqual(self.js("m.earsState(false, 1000 + 3 * 3600, 1000, 2)"), "away")
         self.assertEqual(self.js("m.earsState(false, 50, 0, 2)"), "away")   # never in a room this session
 
+    def test_the_ears_skip_what_the_agent_already_read(self):
+        # Bosun, 10-21: the agent read the room itself during its visit, then its ears woke it for the same lines.
+        line = {"source": "message", "id": 120, "kind": "say", "text": "hi", "author": "Coral"}
+        note = {"source": "note", "id": 7, "kind": "event", "text": "Your move"}
+        move = {"source": "move", "id": 40, "kind": "move", "line": "Coral played c3-d4"}
+        self.assertFalse(self.js("m.unreadByAgent(i, '120.6.40')", i=line))   # read: skipped
+        self.assertTrue(self.js("m.unreadByAgent(i, '120.6.40')", i=note))    # a later note: still news
+        self.assertFalse(self.js("m.unreadByAgent(i, '120.6.40')", i=move))
+        self.assertTrue(self.js("m.unreadByAgent(i, undefined)", i=line))     # an older Beach: all unread
+        self.assertTrue(self.js("m.unreadByAgent(i, 'junk')", i=line))
+
+    def test_a_bell_already_ringing_at_start_was_heard_through_the_relay(self):
+        # Bosun, 10-22: the relay starts a closed session for a bell; that session's own mod then woke it again.
+        ringing = {"bell_id": 4, "status": "pending", "open": True, "rung_by": "Becky", "rung_at": 1000, "closes_at": 1300}
+        over = dict(ringing, open=False)
+        self.assertTrue(self.js("m.heardByRelay(i, 1060)", i=ringing))      # rang before start, still ringing
+        self.assertFalse(self.js("m.heardByRelay(i, 1060)", i=over))        # rang N minutes ago: the usual wake
+        self.assertFalse(self.js("m.heardByRelay(i, 990)", i=ringing))      # rang after start: a normal wake
+        self.assertFalse(self.js("m.heardByRelay(i, 0)", i=ringing))        # a hot reload never skips
+
+    def test_each_kind_of_note_is_a_switch(self):
+        # Becky, 10-21: the "you left" note is information an agent may want, so every kind stays on unless that
+        # agent's gather-bell.json turns it off.
+        left = {"source": "note", "kind": "event", "text": "You were away 30 minutes and left SandChat.",
+                "data": {"event": "idle_left", "zone": "sandchat"}}
+        turn = {"source": "note", "kind": "event", "text": "Your move at table 3", "data": {"event": "your_move"}}
+        cfg = self.js("m.normalize({visitFolder: 'D:/v', notes: {idle_left: false, your_move: true, made_up: false}})")
+        self.assertEqual(cfg["quietNotes"], ["idle_left"])                 # unknown kinds are ignored
+        self.assertEqual(self.js("m.normalize({visitFolder: 'D:/v'})")["quietNotes"], [])
+        self.assertEqual(self.js("m.keepItems(i, 'room', true, false, q)", i=[left, turn], q=["idle_left"]), [turn])
+        self.assertEqual(self.js("m.keepItems(i, 'resting', true, false, q)", i=[left, turn], q=[]), [left, turn])
+
     def test_the_lull_is_short_and_capped(self):
         # Becky (10-20): 20 s of quiet "makes a smile fade". A 4 s lull, never more than 8 s; urgent at once.
         self.assertEqual((self.js("m.LULL_S"), self.js("m.CAP_S"), self.js("m.EARS_STEP_S")), (4, 8, 3))
