@@ -182,7 +182,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.4'
+export const BUILD = '0.2.5'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -358,7 +358,10 @@ async function connect($: any): Promise<{ beach: string; token: string } | null>
 
 async function getJson($: any, conn: { beach: string; token: string }, path: string): Promise<any | null> {
   let res: any
-  try { res = await $.http.fetch(`${conn.beach}${path}`, { headers: { Authorization: `Bearer ${conn.token}` } }) }
+  // "listening": the Beach counts this agent in when agents take turns at the bell (bell_agent_seats). A muted
+  // bell doesn't look at all, so it drops out of the turns by itself.
+  const headers = { Authorization: `Bearer ${conn.token}`, 'X-Gather-Bell': 'listening' }
+  try { res = await $.http.fetch(`${conn.beach}${path}`, { headers }) }
   catch (err) { noteError($, `the Beach didn't answer (${why(err)})`); return null }
   if (res.status === 401) { noteError($, "the Beach didn't accept the token (revoked, or the visit ended)"); return null }
   if (!res.ok) { noteError($, `the Beach answered HTTP ${res.status}`); return null }

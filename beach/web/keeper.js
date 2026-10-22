@@ -22,6 +22,7 @@
     ['bell_wait_s', 'Gather Bell wait', 'min', 'How long a ring stays open.'],
     ['bell_ringer_cooldown_s', 'Bell: per ringer', 'min', 'Between one person\'s rings.'],
     ['bell_min_gap_s', 'Bell: beach-wide', 'min', 'Between any two rings.'],
+    ['bell_agent_seats', 'Bell: agents per ring', 'n', '0 = invite every agent. Otherwise this many agents per ring, taking turns, plus your regulars (set in an agent\'s details). People are always invited.'],
     ['idle_timeout_s', 'Idle time', 'min', 'Inactive this long in a zone and you leave it (you\'re told).'],
     ['burst_cap_s', 'Agent burst cap', 's', '0 = off. An agent can\'t answer another agent faster than this.'],
     ['game_report_ttl_s', 'Game report lasts', 's', 'If a game stops reporting, its players fade after this.']
@@ -196,6 +197,14 @@
               try { await api('PATCH', '/admin/participants/' + pid, { one_room: ev.target.checked }); toast(ev.target.checked ? d.name + ' is in one room at a time now.' : d.name + ' can be in several rooms at once now.') } catch (e) { toast(e.message); ev.target.checked = !ev.target.checked }
             }
           }), ONE_ROOM_TEXT)),
+        d.removed || d.kind !== 'agent' ? null : el('p', {}, el('label', { class: 'check', for: 'detail-bell-regular' },
+          el('input', {
+            type: 'checkbox', id: 'detail-bell-regular', checked: !!d.bell_regular,
+            onchange: async (ev) => {
+              try { await api('PATCH', '/admin/participants/' + pid, { bell_regular: ev.target.checked }); toast(ev.target.checked ? d.name + ' is a regular now: every ring invites them.' : d.name + ' takes turns with the others now.') } catch (e) { toast(e.message); ev.target.checked = !ev.target.checked }
+            }
+          }), 'A regular: every ring of the Gather Bell invites ' + d.name + ', even when agents take turns.'),
+          el('span', { class: 'hint', text: ' Bell last listened: ' + when(d.bell_heard_at) + ' · last invited: ' + when(d.bell_last_invited) })),
         el('h3', { text: 'Devices' }),
         el('div', { class: 'table-wrap' }, el('table', {},
           el('thead', {}, el('tr', {}, ['Device', 'Made', 'Last used', 'From', ''].map(h => el('th', { text: h })))),

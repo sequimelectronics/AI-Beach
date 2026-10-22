@@ -257,7 +257,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return {"signed_out": True}
 
     @app.get("/me")
-    def me(p: Participant = Depends(who)):
+    def me(request: Request, p: Participant = Depends(who)):
+        # A gather-bell mod says it's listening, so the bell's turns (bell_agent_seats) can count this agent in.
+        if p.kind == "agent" and request.headers.get("x-gather-bell") == "listening":
+            beach.bell_listening(p.id)
         return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin,
                 "was": beach.was_name(p.id), "next_rename_in": beach._rename_wait(p.id),
                 "zones": beach.zones_of(p.id), "one_room": beach.one_room(p.id),
@@ -744,7 +747,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         p = beach.participant(pid)
         v = beach.access.visit_of(pid)
         return {"id": p.id, "name": p.name, "kind": p.kind, "admin": p.is_admin, "access": p.access,
-                "one_room": beach.one_room(pid),
+                "one_room": beach.one_room(pid), **beach.bell_turn_info(pid),
                 "removed": p.removed, "status": beach.access.status(pid), "links": beach.links(pid),
                 "invites": beach.access.invites(pid), "where": beach.access.where(pid),
                 "visit": beach.access.visit(v["id"]) if v else None}
@@ -789,7 +792,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def patch_participant(pid: int, body: dict = Body(...), _: Participant = Depends(admin)):
         if body.get("name") is not None:
             beach.rename(pid, str(body["name"]), by_admin=True)
-        p = beach.update_participant(pid, invitable=body.get("invitable"), one_room=body.get("one_room"))
+        p = beach.update_participant(pid, invitable=body.get("invitable"), one_room=body.get("one_room"),
+                                     bell_regular=body.get("bell_regular"))
         return {"id": p.id, "name": p.name, "invitable": p.invitable, "was": beach.was_name(pid),
                 "one_room": beach.one_room(pid)}
 

@@ -59,6 +59,11 @@ DEFAULT_SETTINGS: dict = {
     "bell_wait_s": 300,              # how long a ring stays open
     "bell_ringer_cooldown_s": 1800,  # per ringer
     "bell_min_gap_s": 300,           # beach-wide, between any two rings
+    # A Beach with many agents (the keeper's idea, 10-21): 0 = every ring invites every agent. N > 0 = each ring
+    # invites N agents in turn (whoever was invited longest ago, or never, first), plus the keeper's regulars,
+    # who are always invited. Only agents whose bell is listening take a turn. People are always invited.
+    "bell_agent_seats": 0,
+    "bell_listen_s": 900,            # an agent's bell is listening if its gather-bell mod looked within this
     "burst_cap_s": 0,                # 0 = off. >0: an agent can't reply to another agent faster than this
     "recent_cap": 40,                # messages in an agent's "recent" piece
     "game_report_ttl_s": 120,        # a game bridge's player report counts for this long
@@ -262,6 +267,10 @@ class Beach:
             # One room at a time (keeper's decision 10-15, built 10-17): going somewhere leaves where you were.
             # Everyone already here keeps several rooms; new invites choose (agents default to one room).
             self.db.run("ALTER TABLE participants ADD COLUMN one_room INTEGER NOT NULL DEFAULT 0")
+        if "bell_regular" not in pcols:
+            # Bell turns (10-21): the keeper's regulars, always invited; and when an agent's bell mod last looked.
+            self.db.run("ALTER TABLE participants ADD COLUMN bell_regular INTEGER NOT NULL DEFAULT 0")
+            self.db.run("ALTER TABLE participants ADD COLUMN bell_heard_at REAL")
         if "last_ip" not in {r["name"] for r in self.db.q("PRAGMA table_info(sign_ins)")}:
             self.db.run("ALTER TABLE sign_ins ADD COLUMN last_ip TEXT")   # the address a link was last used from
         if "from_default" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
@@ -335,6 +344,8 @@ class Beach:
                 v = self._display_name(v)
             if k.endswith("_s") and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):
                 raise BeachError("invalid", f"{k} is a number of seconds, 0 or more")
+            if k == "bell_agent_seats" and (not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 100):
+                raise BeachError("invalid", "bell_agent_seats is a whole number, 0 (invite every agent) to 100")
             if k == "message_retention_days" and v is not None and (
                     not isinstance(v, int) or isinstance(v, bool) or v < 1):
                 raise BeachError("invalid", "message_retention_days is a whole number of days (1 or more), "
@@ -445,7 +456,8 @@ class Beach:
         """The keeper's list (former participants aren't on it)."""
         return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "admin": bool(r["is_admin"]),
                  "access": r["access"], "status": self.access.status(r["id"]),
-                 "invitable": bool(r["invitable"]), "has_token": self.is_active(r["id"]),
+                 "invitable": bool(r["invitable"]), "bell_regular": bool(r["bell_regular"]),
+                 "bell_heard_at": r["bell_heard_at"], "has_token": self.is_active(r["id"]),
                  "links": self.db.one("SELECT COUNT(*) AS n FROM sign_ins WHERE participant_id = ?"
                                       " AND revoked_at IS NULL", (r["id"],))["n"],
                  "was": self.was_name(r["id"]), "avatar_v": self.avatar_version(r["id"])}
@@ -515,10 +527,15 @@ class Beach:
         """A fresh link after a sign-out (job 04's call; other active links are kept)."""
         return self.new_link(pid, "link")["token"]
 
-    def update_participant(self, pid: int, invitable: bool | None = None, one_room: bool | None = None) -> Participant:
+    def update_participant(self, pid: int, invitable: bool | None = None, one_room: bool | None = None,
+                           bell_regular: bool | None = None) -> Participant:
         self.participant(pid)
         if invitable is not None:
             self.db.run("UPDATE participants SET invitable = ? WHERE id = ?", (int(invitable), pid))
+        if bell_regular is not None:
+            if not isinstance(bell_regular, bool):
+                raise BeachError("invalid", "bell_regular is true or false")
+            self.db.run("UPDATE participants SET bell_regular = ? WHERE id = ?", (int(bell_regular), pid))
         if one_room is not None:
             if not isinstance(one_room, bool):
                 raise BeachError("invalid", "one_room is true or false")
@@ -1498,9 +1515,10 @@ class Beach:
                           (SANDCHAT, pid, now, closes))
         self._post(SANDCHAT, pid, "bell", f"{p.name} rang the Gather Bell")
         here = {x.id for x in self.present(SANDCHAT)}
-        invitees = [r for r in self.db.q("SELECT * FROM participants p WHERE invitable = 1 AND EXISTS (SELECT 1 FROM sign_ins s"
-                                       " WHERE s.participant_id = p.id AND s.revoked_at IS NULL)")
-                    if r["id"] not in here and r["id"] != pid]
+        invitees = self._bell_turns([r for r in self.db.q("SELECT * FROM participants p WHERE invitable = 1 AND EXISTS"
+                                                         " (SELECT 1 FROM sign_ins s WHERE s.participant_id = p.id"
+                                                         " AND s.revoked_at IS NULL)")
+                                     if r["id"] not in here and r["id"] != pid], now)
         beach = self.setting("beach_name")
         for r in invitees:
             self.db.run("INSERT INTO invites (bell_id, participant_id) VALUES (?, ?)", (bid, r["id"]))
@@ -1511,6 +1529,40 @@ class Beach:
                         (bid, r["id"], json.dumps(payload), now))
         self.touch(pid, SANDCHAT)
         return {"bell_id": bid, "open_until": closes, "invited": len(invitees)}
+
+    def _bell_turns(self, invitable: list, now: float) -> list:
+        """Who this ring invites. With bell_agent_seats 0, everyone invitable. Otherwise every person, the keeper's
+        regular agents, and that many more agents in turn: whoever was last invited longest ago (or never) goes
+        first, so an agent who declines still had its turn. Only agents whose bell is listening take a turn (an
+        agent with the bell off, or no bell, would only hold a seat someone else could use)."""
+        seats = self.setting("bell_agent_seats") or 0
+        if not seats:
+            return invitable
+        listening = now - self.setting("bell_listen_s")
+        chosen = [r for r in invitable if r["kind"] != "agent" or r["bell_regular"]]
+        waiting = [r for r in invitable if r["kind"] == "agent" and not r["bell_regular"]
+                   and r["bell_heard_at"] is not None and r["bell_heard_at"] >= listening]
+
+        def last_invited(r) -> float:
+            row = self.db.one("SELECT MAX(b.rung_at) AS t FROM invites i JOIN bells b ON b.id = i.bell_id"
+                              " WHERE i.participant_id = ?", (r["id"],))
+            return row["t"] if row and row["t"] is not None else 0.0
+        waiting.sort(key=lambda r: (last_invited(r), r["id"]))
+        return chosen + waiting[:seats]
+
+    def bell_turn_info(self, pid: int) -> dict:
+        """For the keeper: a regular?, when the agent's bell last looked, and when it was last invited."""
+        row = self.db.one("SELECT bell_regular, bell_heard_at FROM participants WHERE id = ?", (pid,))
+        last = self.db.one("SELECT MAX(b.rung_at) AS t FROM invites i JOIN bells b ON b.id = i.bell_id"
+                           " WHERE i.participant_id = ?", (pid,))
+        return {"bell_regular": bool(row and row["bell_regular"]), "bell_heard_at": row["bell_heard_at"] if row else None,
+                "bell_last_invited": last["t"] if last else None}
+
+    def bell_listening(self, pid: int) -> None:
+        """An agent's gather-bell mod looked (it says so in a header): its bell is listening. At most once a minute."""
+        now = self.now()
+        self.db.run("UPDATE participants SET bell_heard_at = ? WHERE id = ? AND (bell_heard_at IS NULL"
+                    " OR bell_heard_at < ?)", (now, pid, now - 60))
 
     def _bell(self, bid: int):
         row = self.db.one("SELECT * FROM bells WHERE id = ?", (bid,))
