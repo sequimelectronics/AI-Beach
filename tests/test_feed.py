@@ -219,6 +219,13 @@ class WaitApiTests(Case):
         self.http.post("/zones/sandchat/join", headers=self.h)
         self.beach.join(self.coral.id, SANDCHAT)
 
+    def test_typing_shows_in_presence_only(self):
+        self.assertEqual(self.http.post("/zones/sandchat/typing", headers=self.h).status_code, 200)
+        here = self.http.get("/zones/sandchat/here", headers=self.h).json()
+        self.assertEqual(here["typing"], [self.sandy.id])
+        start = self.http.get("/me/feed", headers=self.h).json()["cursor"]
+        self.assertEqual(self.http.get(f"/me/feed?after={start}", headers=self.h).json()["items"], [])   # not news
+
     def test_the_ears_learn_how_far_the_agent_read_itself(self):
         # Bosun, 10-21: an agent reads the room itself, then its ears (the gather-bell mod) woke it for the same lines.
         ears = dict(self.h, **{"X-Gather-Bell": "listening"})

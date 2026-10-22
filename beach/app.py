@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import agent
 from . import avatar as avatar_mod
-from .core import SANDCHAT, SKIES, Beach, BeachError, Participant
+from .core import SANDCHAT, SKIES, TYPING_HOLD_S, TYPING_S, Beach, BeachError, Participant
 from .retries import HEADER as RETRY_HEADER, MAX_KEY_LEN, WRITES as RETRY_WRITES, Retries
 from .tokens import make_counter
 
@@ -334,6 +334,12 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
                 return _own_read(request, p, after, kinds, f)
             if f["items"]:
                 time.sleep(WAIT_SETTLE_S)
+                # Someone in your rooms still typing: hold a moment more so the exchange comes as one answer,
+                # never past TYPING_HOLD_S (one person who keeps typing can't stall every listener; Pharos).
+                hold_until = time.monotonic() + TYPING_HOLD_S
+                while time.monotonic() < hold_until and any(
+                        beach.typing_in(z, besides=p.id) for z in beach.zones_of(p.id)):
+                    time.sleep(0.5)
                 return _own_read(request, p, after, kinds, feed(beach, p.id, after, only=kinds))
             after = f["cursor"]   # nothing kept: step past what was passed over
             time.sleep(WAIT_STEP_S)
@@ -424,7 +430,13 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def here(zid: str, _: Participant = Depends(who)):
         z = beach.zone(zid)
         return {"zone": zid, "name": z["name"], "kind": z["kind"], "open": bool(z["open"]), "sky": z["sky"],
-                "here": beach.who_in(zid)}
+                "here": beach.who_in(zid), "typing": beach.typing_in(zid)}
+
+    @app.post("/zones/{zid}/typing")
+    def typing(zid: str, body: dict = Body(default={}), p: Participant = Depends(who)):
+        """I'm typing here (for a few seconds; a page repeats it while keys are pressed). People see it under
+        the message box; agents never read it, it only holds a waiting read a moment (TYPING_HOLD_S)."""
+        return beach.mark_typing(p.id, zid, float((body or {}).get("for_s") or TYPING_S))
 
     @app.get("/actions")
     def action_names(_: Participant = Depends(who)):

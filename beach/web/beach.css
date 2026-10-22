@@ -218,6 +218,8 @@ body.sky-night .chat-head h1, body.sky-night .chat-head .sky-chip { color: #fff;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 1rem;
 }
 .log p { margin: .15em 0; overflow-wrap: anywhere; }
+.typing-line { min-height: 1.4em; margin: .2em 0 .4em; font-style: italic; }   /* room kept, so nothing jumps */
+.typing-mark { color: var(--ink-soft); }
 .log .t { color: #7a6a60; margin-right: .5em; font-size: .85em; }
 .log .say .who { font-weight: 700; }
 /* Actions read differently from speech by several cues at once, never color alone: italic, their own

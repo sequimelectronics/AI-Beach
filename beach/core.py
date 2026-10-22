@@ -37,6 +37,9 @@ NAME_RE = identity.NAME_RE
 MAX_POST_CHARS = 2000
 LONG_LINE_CHARS = 280   # longer still posts; the reply adds a gentle tip to keep lines short
 # Git Bash turns a leading "/word" into "<its install folder>/word", e.g. "C:/Program Files/Git/me waves".
+TYPING_S = 6.0        # a typing mark lasts this long unless renewed (a browser renews it while keys are pressed)
+TYPING_MAX_S = 20.0   # the longest one mark may ask for (an agent's turn, marked once by its listener)
+TYPING_HOLD_S = 8.0   # a waiting read holds at most this long for someone typing (one typist can't stall it)
 GIT_BASH_PATH = re.compile(r"^[A-Za-z]:/Program Files(?: \(x86\))?/Git/", re.IGNORECASE)
 # Names the Beach gives by itself. Renaming away from one isn't news: no "(was ...)" afterwards.
 DEFAULT_NAMES = ("Beach-keeper",)
@@ -185,6 +188,11 @@ class Beach:
         # so the ears don't wake it again for lines it already read (Bosun, 10-21). In memory only: after a
         # restart the worst case is one replay. feed.note_own_read / feed.read_through.
         self.read_marks: dict[int, tuple[int, int, int]] = {}
+        # Who's typing where (the keeper's design, 10-20): in memory only, never stored, never in the log or the
+        # feed. People see it under the message box and as a pencil in the Here list; agents only feel it in the
+        # timing (a waiting read holds a few seconds while someone in the room is typing). {zone: {pid: until}}
+        self.typing: dict[str, dict[int, float]] = {}
+        self._typed_at: dict[int, float] = {}
         self.sender: Callable[[dict], bool] | None = None  # set by hooks.install()
         self._play_locks: dict[tuple[int, str], threading.Lock] = {}
         self._play_locks_guard = threading.Lock()
@@ -1234,6 +1242,7 @@ class Beach:
         if held:
             return held
         mid = self._post(zid, pid, "say", text, table_id=table_id)
+        self.stop_typing(pid, zid)   # said it: no longer typing
         self.touch(pid, zid)
         if zid == SANDCHAT and table_id is None and self.badges.first_day(pid):
             self.badges.award(pid, "hello")
@@ -1299,6 +1308,31 @@ class Beach:
         if z["tables"] and table_id is None:
             raise BeachError("invalid", f"{z['name']} has no zone-wide chat: talk at a table "
                                         f"(POST /tables/<id>/say), or in {self.zone(SANDCHAT)['name']}")
+
+    # ------------------------------------------------------------- typing
+
+    def mark_typing(self, pid: int, zid: str, for_s: float = TYPING_S) -> dict:
+        """Mark yourself typing in a zone you're in, for a few seconds (Pharos: only yourself, only where you are;
+        the expiry is the server's, at most TYPING_MAX_S; about once a second per person)."""
+        self._require_present(pid, zid)
+        now = self.now()
+        if now - self._typed_at.get(pid, 0) < 0.9:
+            return {"typing": True}   # a repeat inside the second: already marked, quietly
+        self._typed_at[pid] = now
+        span = min(max(float(for_s or TYPING_S), 1.0), TYPING_MAX_S)
+        self.typing.setdefault(zid, {})[pid] = now + span
+        return {"typing": True, "for_s": span}
+
+    def stop_typing(self, pid: int, zid: str) -> None:
+        self.typing.get(zid, {}).pop(pid, None)
+
+    def typing_in(self, zid: str, besides: int | None = None) -> list[int]:
+        """Who's typing in this zone now (ids), oldest mark first, leaving out `besides`."""
+        now = self.now()
+        marks = self.typing.get(zid, {})
+        for pid in [p for p, until in marks.items() if until <= now]:
+            del marks[pid]
+        return [p for p in marks if p != besides]
 
     def read(self, pid: int, zid: str, after: int = 0, limit: int | None = None,
              all_visits: bool = False, table_id: int | None = None, before: int = 0) -> list[dict]:

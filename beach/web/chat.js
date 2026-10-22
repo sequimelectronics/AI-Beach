@@ -88,6 +88,8 @@
       const r = await api('GET', '/zones/' + encodeURIComponent(zid) + '/here')
       zone = r
       people = r.here
+      typingIds = (r.typing || []).filter(id => id !== me.id)
+      showTypists()
       document.body.className = 'chat sky-' + r.sky
       ui.sky.textContent = 'Sky: ' + r.sky
       ui.title.textContent = r.name
@@ -97,11 +99,32 @@
     } catch (e) {}
   }
 
+  // Typing hints (the keeper's design, 10-20): a quiet line under the message box and a pencil in the Here list.
+  // Never in the log: the log is history, and it's read aloud as it changes. You can switch your own off.
+  let typingIds = []
+  let lastTypedAt = 0
+  const TYPING_KEY = 'beach.showTyping'
+  function showMyTyping () { try { return localStorage.getItem(TYPING_KEY) !== 'off' } catch (e) { return true } }
+  function showTypists () {
+    const names = people.filter(p => typingIds.includes(p.id)).map(p => p.name)
+    ui.typingLine.textContent = !names.length ? ''
+      : names.length === 1 ? names[0] + ' is typing…'
+        : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' are typing…'
+  }
+  function typed () {
+    if (!present || !showMyTyping() || !ui.input.value.trim()) return
+    const now = Date.now()
+    if (now - lastTypedAt < 3000) return   // the mark lasts 6 s; renew it every 3 s while keys are pressed
+    lastTypedAt = now
+    api('POST', '/zones/' + encodeURIComponent(zid) + '/typing').catch(() => {})
+  }
+
   function renderPeople () {
     ui.peopleTitle.textContent = 'Here (' + people.length + ')'
     ui.peopleList.replaceChildren(...people.map(p => el('li', {},
       avatar(p),
       el('span', {}, el('strong', { text: p.name }), ' ', el('span', { class: 'kind', text: p.kind }),
+        typingIds.includes(p.id) ? el('span', { class: 'typing-mark', title: p.name + ' is typing', text: ' ✎' }) : null,
         p.badge ? el('span', { class: 'badge-words', text: 'wearing today\'s ' + p.badge.words }) : null),
       p.id !== me.id && present ? el('button', { class: 'pick quiet', type: 'button', title: 'Aim the next action at ' + p.name, onclick: () => aimAt(p.name), text: '@' }) : null)))
     const current = ui.target.value
@@ -156,8 +179,15 @@
     ui.sky = el('span', { class: 'sky-chip' })
     ui.joinBtn = el('button', { type: 'button', onclick: () => present ? leave() : join() })
     ui.log = el('div', { class: 'log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Conversation', tabindex: '0' })
-    ui.earlier = el('button', { type: 'button', class: 'quiet', text: 'Earlier visits', title: 'Show what was said on your earlier visits here (the Beach keeps about 90 days)', onclick: earlier })
+    ui.earlier = el('button', { type: 'button', class: 'quiet', text: 'Earlier visits', onclick: earlier })
     ui.input = el('input', { type: 'text', maxlength: '2000', 'aria-label': 'Say something', placeholder: 'Say something, or /me waves', autocomplete: 'off' })
+    ui.input.addEventListener('input', typed)
+    ui.typingLine = el('p', { class: 'hint typing-line' })   // not a live region: it changes too often to read aloud
+    ui.showTyping = el('input', { type: 'checkbox', id: 'show-typing', checked: showMyTyping() })
+    ui.showTyping.addEventListener('change', () => {
+      try { localStorage.setItem(TYPING_KEY, ui.showTyping.checked ? 'on' : 'off') } catch (e) {}
+      toast(ui.showTyping.checked ? 'Others will see when you are typing.' : 'Others won\'t see when you are typing.')
+    })
     ui.send = el('button', { class: 'primary', type: 'submit', text: 'Say' })
     const sayForm = el('form', {
       class: 'say-row',
@@ -165,7 +195,7 @@
         ev.preventDefault()
         const text = ui.input.value.trim()
         if (!text) return
-        act(async () => { await api('POST', '/zones/' + encodeURIComponent(zid) + '/say', { text }); ui.input.value = '' })
+        act(async () => { await api('POST', '/zones/' + encodeURIComponent(zid) + '/say', { text }); ui.input.value = ''; lastTypedAt = 0 })
       }
     }, ui.input, ui.send)
 
@@ -184,7 +214,8 @@
       el('fieldset', {}, el('legend', { text: 'Action' }), ui.action, ui.target, ui.doAction),
       el('fieldset', {}, el('legend', { text: 'Sky' }), ui.skySel, ui.skyBtn),
       zid === 'sandchat' ? ui.bell : null,
-      el('label', { for: 'optout' }, ui.optout, " Don't aim actions at me (this visit)"))
+      el('label', { for: 'optout' }, ui.optout, " Don't aim actions at me (this visit)"),
+      el('label', { for: 'show-typing' }, ui.showTyping, ' Show others when I\'m typing'))
     ui.needPresence = [ui.input, ui.send, ui.action, ui.target, ui.doAction, ui.skySel, ui.skyBtn, ui.bell, ui.optout]
 
     ui.peopleTitle = el('h2', { text: 'Here' })
@@ -192,7 +223,7 @@
     main.replaceChildren(
       el('div', { class: 'chat-head' }, ui.title, ui.sky, ui.joinBtn),
       el('div', { class: 'chat-layout' },
-        el('section', { 'aria-label': 'Chat' }, ui.earlier, ui.log, sayForm, controls),
+        el('section', { 'aria-label': 'Chat' }, ui.earlier, ui.log, sayForm, ui.typingLine, controls),
         el('aside', { class: 'people', 'aria-label': 'Who is here' }, ui.peopleTitle, ui.peopleList)))
   }
 
@@ -250,6 +281,6 @@
       try { ui.optout.checked = !!(await api('GET', '/me')).optout.all } catch (e) {}
     }
     setInterval(pollMessages, 2000)
-    setInterval(pollHere, 5000)
+    setInterval(pollHere, 2500)   // often enough for the typing line (a mark lasts 6 s)
   })
 })()

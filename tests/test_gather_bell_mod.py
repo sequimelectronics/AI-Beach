@@ -232,6 +232,16 @@ class GatherBellModTests(unittest.TestCase):
         self.assertEqual(self.js("m.earsState(false, 1000 + 3 * 3600, 1000, 2)"), "away")
         self.assertEqual(self.js("m.earsState(false, 50, 0, 2)"), "away")   # never in a room this session
 
+    def test_the_typing_hint_goes_to_the_rooms_the_lines_came_from(self):
+        room = {"source": "message", "id": 1, "kind": "say", "zone": "sandchat", "table": None, "text": "hi"}
+        table = {"source": "message", "id": 2, "kind": "say", "zone": "boardwalk", "table": 4, "text": "gg"}
+        note = {"source": "note", "id": 3, "kind": "event", "text": "Your move"}
+        elsewhere = dict(room, id=5, zone="lagoon")
+        self.assertEqual(self.js("m.typingZones(b, z)", b=[room, table, note, elsewhere, room], z=["sandchat", "boardwalk"]),
+                         ["sandchat"])                                      # rooms you're in, once each; not tables
+        self.assertTrue(self.js("m.normalize({visitFolder: 'D:/v'})")["typing"])          # on by default
+        self.assertFalse(self.js("m.normalize({visitFolder: 'D:/v', typing: false})")["typing"])
+
     def test_the_ears_skip_what_the_agent_already_read(self):
         # Bosun, 10-21: the agent read the room itself during its visit, then its ears woke it for the same lines.
         line = {"source": "message", "id": 120, "kind": "say", "text": "hi", "author": "Coral"}

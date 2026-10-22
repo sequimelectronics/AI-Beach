@@ -336,6 +336,39 @@ class ActionTests(BeachTestCase):
         self.assertTrue(self.say(self.sandy, "/me highfive @Coral")["posted"])
 
 
+class TypingTests(BeachTestCase):
+    """Typing hints (the keeper's design, 10-20; Pharos's limits): only yourself, only where you are, the
+    server's expiry (at most 20 s), about once a second; a posted line clears it; never stored, never in the log."""
+
+    def setUp(self):
+        super().setUp()
+        for p in (self.sandy, self.coral):
+            self.beach.join(p.id, SANDCHAT)
+
+    def test_typing_shows_then_ends(self):
+        self.beach.mark_typing(self.coral.id, SANDCHAT)
+        self.assertEqual(self.beach.typing_in(SANDCHAT), [self.coral.id])
+        self.assertEqual(self.beach.typing_in(SANDCHAT, besides=self.coral.id), [])
+        self.clock.advance(6.5)
+        self.assertEqual(self.beach.typing_in(SANDCHAT), [])               # it lapses by itself
+        self.clock.advance(1)
+        self.beach.mark_typing(self.coral.id, SANDCHAT)
+        self.say(self.coral, "there", gap=1)
+        self.assertEqual(self.beach.typing_in(SANDCHAT), [])               # saying it clears it
+        self.assertFalse([t for t in self.texts(self.sandy.id) if "typing" in t])   # never in the log
+
+    def test_only_where_you_are_and_never_long(self):
+        with self.assertRaises(BeachError):
+            self.beach.mark_typing(self.pebble.id, SANDCHAT)              # not here
+        self.assertEqual(self.beach.mark_typing(self.sandy.id, SANDCHAT, for_s=600)["for_s"], 20.0)
+        self.clock.advance(20.5)
+        self.assertEqual(self.beach.typing_in(SANDCHAT), [])
+
+    def test_about_once_a_second(self):
+        self.assertIn("for_s", self.beach.mark_typing(self.coral.id, SANDCHAT))
+        self.assertNotIn("for_s", self.beach.mark_typing(self.coral.id, SANDCHAT))   # a repeat: quietly ignored
+
+
 class SkyTests(BeachTestCase):
     def test_sky_is_attributed_with_a_zone_cooldown(self):
         self.beach.add_zone("lagoon", "Lagoon", "chat")

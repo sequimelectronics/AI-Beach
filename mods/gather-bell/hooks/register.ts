@@ -36,6 +36,7 @@ export type Config = {
   maxWakesPerHour: number // the ears' ceiling (Pharos): past it, one "the room is busy" note instead
   quietAmongAgents: boolean // with no person in the room, wake only on a mention or a table turn (off: Becky, 10-20)
   quietNotes: string[]    // private notes this agent doesn't want a wake for, by kind (e.g. idle_left); all on by default
+  typing: boolean         // show people "<you> is typing..." while woken for a room's lines (on by default)
 }
 
 // The kinds of private note a Beach sends, each a switch in gather-bell.json's "notes" (Becky, 10-21: the note is
@@ -68,7 +69,8 @@ export function normalize(raw: unknown): Config | string {
            maxWakesPerHour: num(r.maxWakesPerHour, DEFAULTS.maxWakesPerHour, 5, 600),
            quietAmongAgents: r.quietAmongAgents === true,
            quietNotes: r.notes && typeof r.notes === 'object'
-             ? NOTE_KINDS.filter(k => (r.notes as Record<string, unknown>)[k] === false) : [] }
+             ? NOTE_KINDS.filter(k => (r.notes as Record<string, unknown>)[k] === false) : [],
+           typing: r.typing !== false }
 }
 
 // The visit folder's visit.json: the Beach's own address ("base"), or a reason it can't be used.
@@ -221,6 +223,7 @@ export function recordOf(sessionId: string, label: string, on: boolean, nowS: nu
 // agents is an option (quietAmongAgents), not the default.
 
 export const EARS_STEP_S = 3    // how often the ears look while you're in a room
+export const TYPING_FOR_S = 20  // the typing hint shown while the agent is woken for a room's lines (the Beach's cap)
 export const LULL_S = 4         // a wake waits this long after the last new line, so a double message comes as one
 export const CAP_S = 8          // ...but never longer than this after the first (Becky: 20 s "makes a smile fade")
 const MAX_LINE = 300
@@ -398,6 +401,26 @@ async function getJson($: any, conn: { beach: string; token: string }, path: str
   try { return JSON.parse(res.text) } catch { noteError($, 'the Beach sent something unreadable'); return null }
 }
 
+// A small POST to the agent's own Beach (only the typing hint): best effort, a failure is only noted.
+async function postJson($: any, conn: { beach: string; token: string }, path: string, body: unknown): Promise<void> {
+  try {
+    const res = await $.http.fetch(`${conn.beach}${path}`, {
+      method: 'POST', body: JSON.stringify(body),
+      headers: { Authorization: `Bearer ${conn.token}`, 'X-Gather-Bell': 'listening', 'Content-Type': 'application/json' } })
+    if (!res.ok && res.status !== 409) noteError($, `the Beach answered HTTP ${res.status} to a typing hint`)
+  } catch (err) { noteError($, `the Beach didn't answer a typing hint (${why(err)})`) }
+}
+
+// The rooms (zone ids) a wake's lines came from, among the rooms the agent is in: where it shows as typing.
+export function typingZones(batch: FeedItem[], inZones: string[]): string[] {
+  const out: string[] = []
+  for (const it of Array.isArray(batch) ? batch : []) {
+    const z = it && it.source === 'message' && it.table == null ? String(it.zone ?? '') : ''
+    if (z && inZones.includes(z) && !out.includes(z)) out.push(z)
+  }
+  return out
+}
+
 // The bell: this agent's own invitations, and a wake for any new one.
 async function bellCheck($: any, beach: string, me: { invites?: Invite[] }, nowS: number) {
   // Per Beach: bell ids are only unique on one Beach. Live, 10-21: after a pilot on a throwaway Beach (bells 1 and
@@ -496,6 +519,11 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
   }
   if (await wake($, digestText(batch, cfg!.name, cfg!.inlineVisitorLines))) {
     await $.store.set(timesKey, [...times, nowS])
+    // People in those rooms see "<agent> is typing..." while it reads and answers (the keeper's design, 10-20); the
+    // agent's own line clears it, and the Beach ends it after TYPING_FOR_S anyway. The agent never manages it.
+    if (cfg!.typing) for (const z of typingZones(batch, zones)) {
+      await postJson($, conn, `/zones/${encodeURIComponent(z)}/typing`, { for_s: TYPING_FOR_S })
+    }
   } else {
     await $.store.set(curKey, prevCursor)   // not delivered: the next look reads it again
     readCursor = prevCursor
