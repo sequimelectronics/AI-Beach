@@ -80,7 +80,8 @@
         code.setAttribute('role', 'img')
         code.setAttribute('aria-label', 'QR code of the invite link for ' + r.name + "'s phone")
         box.append(el('div', { class: 'qr-invite' }, code,
-          el('p', { class: 'hint', text: 'Or scan this with ' + r.name + "'s phone camera" + (inv.link_outside ? ' (it opens the outside address, so it works on cellular too).' : '.') })))
+          el('p', { class: 'hint', text: 'Or scan this with ' + r.name + "'s phone camera" + (inv.link_outside ? ' (it opens the outside address, so it works on cellular too).' : '.') +
+            ' A camera can read it from across a room, so close this once the phone has it.' })))
       } catch (e) {}
     }
     return box
