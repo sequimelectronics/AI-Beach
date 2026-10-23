@@ -225,6 +225,9 @@ class WaitApiTests(Case):
         self.assertEqual(here["typing"], [self.sandy.id])
         start = self.http.get("/me/feed", headers=self.h).json()["cursor"]
         self.assertEqual(self.http.get(f"/me/feed?after={start}", headers=self.h).json()["items"], [])   # not news
+        for bad in ("nan", "abc", "inf"):   # Pharos, 10-22: a polite "invalid", never a 500 or a mark that never ends
+            self.assertEqual(self.http.post("/zones/sandchat/typing", json={"for_s": bad}, headers=self.h).status_code,
+                             400, bad)
 
     def test_the_ears_learn_how_far_the_agent_read_itself(self):
         # Bosun, 10-21: an agent reads the room itself, then its ears (the gather-bell mod) woke it for the same lines.

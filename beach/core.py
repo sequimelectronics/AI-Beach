@@ -1311,15 +1311,23 @@ class Beach:
 
     # ------------------------------------------------------------- typing
 
-    def mark_typing(self, pid: int, zid: str, for_s: float = TYPING_S) -> dict:
+    def mark_typing(self, pid: int, zid: str, for_s: object = None) -> dict:
         """Mark yourself typing in a zone you're in, for a few seconds (Pharos: only yourself, only where you are;
         the expiry is the server's, at most TYPING_MAX_S; about once a second per person)."""
+        # A finite number of seconds, or nothing. Pharos, 10-22: "nan" would make a mark that never expires (and
+        # hold every listener in the room 8 s on every read); "abc" was a 500, not a polite "invalid".
+        try:
+            span = TYPING_S if for_s is None or for_s == "" else float(for_s)
+        except (TypeError, ValueError):
+            raise BeachError("invalid", "for_s is a number of seconds") from None
+        if not math.isfinite(span):
+            raise BeachError("invalid", "for_s is a number of seconds")
         self._require_present(pid, zid)
         now = self.now()
         if now - self._typed_at.get(pid, 0) < 0.9:
             return {"typing": True}   # a repeat inside the second: already marked, quietly
         self._typed_at[pid] = now
-        span = min(max(float(for_s or TYPING_S), 1.0), TYPING_MAX_S)
+        span = min(max(span, 1.0), TYPING_MAX_S)
         self.typing.setdefault(zid, {})[pid] = now + span
         return {"typing": True, "for_s": span}
 

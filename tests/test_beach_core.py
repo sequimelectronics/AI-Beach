@@ -364,6 +364,14 @@ class TypingTests(BeachTestCase):
         self.clock.advance(20.5)
         self.assertEqual(self.beach.typing_in(SANDCHAT), [])
 
+    def test_only_a_finite_number_of_seconds(self):
+        # Pharos, 10-22: "nan" made a mark that never expired (min/max keep a NaN), holding every listener's reads.
+        for bad in ("nan", "inf", "-inf", "abc", float("nan"), [3]):
+            with self.assertRaises(BeachError, msg=repr(bad)):
+                self.beach.mark_typing(self.coral.id, SANDCHAT, bad)
+        self.assertEqual(self.beach.typing_in(SANDCHAT), [])
+        self.assertEqual(self.beach.mark_typing(self.coral.id, SANDCHAT, "4")["for_s"], 4.0)
+
     def test_about_once_a_second(self):
         self.assertIn("for_s", self.beach.mark_typing(self.coral.id, SANDCHAT))
         self.assertNotIn("for_s", self.beach.mark_typing(self.coral.id, SANDCHAT))   # a repeat: quietly ignored

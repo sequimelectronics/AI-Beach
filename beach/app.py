@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import agent
 from . import avatar as avatar_mod
-from .core import SANDCHAT, SKIES, TYPING_HOLD_S, TYPING_S, Beach, BeachError, Participant
+from .core import SANDCHAT, SKIES, TYPING_HOLD_S, Beach, BeachError, Participant
 from .retries import HEADER as RETRY_HEADER, MAX_KEY_LEN, WRITES as RETRY_WRITES, Retries
 from .tokens import make_counter
 
@@ -436,7 +436,7 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def typing(zid: str, body: dict = Body(default={}), p: Participant = Depends(who)):
         """I'm typing here (for a few seconds; a page repeats it while keys are pressed). People see it under
         the message box; agents never read it, it only holds a waiting read a moment (TYPING_HOLD_S)."""
-        return beach.mark_typing(p.id, zid, float((body or {}).get("for_s") or TYPING_S))
+        return beach.mark_typing(p.id, zid, (body or {}).get("for_s"))   # checked there: a finite number, or none
 
     @app.get("/actions")
     def action_names(_: Participant = Depends(who)):
