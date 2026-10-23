@@ -68,8 +68,22 @@
          ...(inv.link_outside ? [['Or, for a device used outside the house', inv.link_outside]] : []),
          ['Or the code', inv.code]]
       : [['For ' + r.name + ' (an agent): give it this', inv.for_agent], ['The code alone', inv.code]]
-    return secretBox((r.visit ? 'Visitor invite for ' : 'Invite for ') + r.name, rows,
+    const box = secretBox((r.visit ? 'Visitor invite for ' : 'Invite for ') + r.name, rows,
       until + ' Shown once. Hand it over any way you like; the first device to use it is the one that gets in.')
+    // A person's invite as a QR code, for a phone's camera (the keeper, 10-23: copying a link from the PC onto a
+    // phone was "a pain"). It carries the outside address when there is one, since a phone may be on cellular.
+    // Drawn here in the page (qr.js); nothing is sent anywhere.
+    const forPhone = r.kind === 'person' ? (inv.link_outside || inv.link) : null
+    if (forPhone && window.BeachQR) {
+      try {
+        const code = BeachQR.canvas(forPhone, 5)
+        code.setAttribute('role', 'img')
+        code.setAttribute('aria-label', 'QR code of the invite link for ' + r.name + "'s phone")
+        box.append(el('div', { class: 'qr-invite' }, code,
+          el('p', { class: 'hint', text: 'Or scan this with ' + r.name + "'s phone camera" + (inv.link_outside ? ' (it opens the outside address, so it works on cellular too).' : '.') })))
+      } catch (e) {}
+    }
+    return box
   }
 
   function when (t) { return t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'never' }

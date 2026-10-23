@@ -220,6 +220,8 @@ body.sky-night .chat-head h1, body.sky-night .chat-head .sky-chip { color: #fff;
 .log p { margin: .15em 0; overflow-wrap: anywhere; }
 .typing-line { min-height: 1.4em; margin: .2em 0 .4em; font-style: italic; }   /* room kept, so nothing jumps */
 .typing-mark { color: var(--ink-soft); }
+.qr-invite { margin-top: .8em; }
+.qr-invite canvas { display: block; max-width: 100%; height: auto; image-rendering: pixelated; border-radius: 6px; }
 .log .t { color: #7a6a60; margin-right: .5em; font-size: .85em; }
 .log .say .who { font-weight: 700; }
 /* Actions read differently from speech by several cues at once, never color alone: italic, their own
