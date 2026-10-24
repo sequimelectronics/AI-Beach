@@ -200,7 +200,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.6'
+export const BUILD = '0.2.7'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -210,8 +210,13 @@ export function recordPath(home: string, sessionId: string): string | null {
   return `${h}/.claude/gather-bell/sessions/${sessionId}.json`
 }
 
-export function recordOf(sessionId: string, label: string, on: boolean, nowS: number, beachName: string) {
-  return { session: sessionId, name: cleanName(label), on: !!on, lastSeen: Math.floor(nowS), beach: cleanName(beachName), build: BUILD }
+// beachId: this agent's participant id on its Beach (from GET /me), once known. A relay matches it against a
+// bell's invitees (GET /bell/<id>/invited), so a rename on the Beach can't quietly break the match (Bosun, 10-23).
+export function recordOf(sessionId: string, label: string, on: boolean, nowS: number, beachName: string, beachId?: number) {
+  const rec: Record<string, unknown> = { session: sessionId, name: cleanName(label), on: !!on, lastSeen: Math.floor(nowS),
+                                         beach: cleanName(beachName), build: BUILD }
+  if (typeof beachId === 'number' && Number.isInteger(beachId) && beachId > 0) rec.beachId = beachId
+  return rec
 }
 
 // ------------------------------------------------------------------------------------------------- the ears
@@ -352,6 +357,7 @@ export function wakesInHour(times: number[], nowS: number): number[] {
 }
 
 let lastRecordAt = 0
+let myBeachId: number | undefined   // learned from GET /me; written into the record (see recordOf)
 async function writeRecord($: any, on: boolean) {
   if (!cfg) return
   try {
@@ -360,7 +366,7 @@ async function writeRecord($: any, on: boolean) {
     const path = recordPath(String(home), sid)
     if (!path) return noteError($, "can't place the opt-in record (home folder or session id not usable)")
     const nowS = (await $.clock.now()) / 1000
-    await $.fs.write(path, JSON.stringify(recordOf(sid, cfg.label, on, nowS, cfg.name)) + '\n')
+    await $.fs.write(path, JSON.stringify(recordOf(sid, cfg.label, on, nowS, cfg.name, myBeachId)) + '\n')
     lastRecordAt = nowS
   } catch (err) { noteError($, `couldn't write the opt-in record (${why(err)})`) }
 }
@@ -556,6 +562,7 @@ async function tick($: any) {
     const me = await getJson($, conn, '/me')
     if (!me) return
     lastError = ''
+    if (typeof me.id === 'number' && me.id !== myBeachId) { myBeachId = me.id; lastRecordAt = 0 }   // record it soon
     if (bellDue) { lastBellAt = nowS; await bellCheck($, conn.beach, me, nowS) }
     if (cfg.ears) await earsCheck($, conn, me, nowS)
   } catch (err) {

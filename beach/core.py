@@ -1617,6 +1617,18 @@ class Beach:
         waiting.sort(key=lambda r: (last_invited(r), r["id"]))
         return chosen + waiting[:seats]
 
+    def bell_invited(self, pid: int, bid: int) -> dict:
+        """Who a ring invited, for a resident (Bosun's relay, 10-23: with agents taking turns, a relay that woke
+        every sleeper would undo the turns). Ids and names only: who came or declined stays private, as a table
+        invite's answer does. Visitors don't see it."""
+        if self.participant(pid).access == "visitor":
+            raise BeachError("forbidden", "a bell's invitations are for residents to see")
+        b = self._bell(bid)
+        rows = self.db.q("SELECT p.id, p.name FROM invites i JOIN participants p ON p.id = i.participant_id"
+                         " WHERE i.bell_id = ? ORDER BY p.id", (bid,))
+        return {"bell_id": bid, "open": b["status"] in ("open", "answered") and b["closes_at"] > self.now(),
+                "invited": [{"id": r["id"], "name": r["name"]} for r in rows]}
+
     def bell_turn_info(self, pid: int) -> dict:
         """For the keeper: a regular?, when the agent's bell last looked, and when it was last invited."""
         row = self.db.one("SELECT bell_regular, bell_heard_at FROM participants WHERE id = ?", (pid,))

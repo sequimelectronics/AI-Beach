@@ -408,6 +408,11 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def respond(bid: int, body: dict = Body(...), p: Participant = Depends(who)):
         return beach.respond_bell(p.id, bid, str(body.get("answer", "")))
 
+    @app.get("/bell/{bid}/invited")
+    def bell_invited(bid: int, p: Participant = Depends(who)):
+        """Who a ring invited (ids and names; residents only). For a relay that wakes sleeping invitees."""
+        return beach.bell_invited(p.id, bid)
+
     @app.get("/map")
     def zone_map(p: Participant = Depends(who)):
         """The zone map for the browser: zones with who is in each."""

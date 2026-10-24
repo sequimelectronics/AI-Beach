@@ -119,6 +119,21 @@ class BellListeningApiTests(BeachTestCase):
         self.assertTrue(d["bell_regular"])
         self.assertIn("bell_last_invited", d)
 
+    def test_residents_see_who_a_ring_invited_but_not_who_came(self):
+        # Bosun, 10-23: a relay waking every sleeper would undo the turns; it wakes only the ring's invitees.
+        self.beach.update_settings({"bell_agent_seats": 1})
+        self.beach.join(self.sandy.id, SANDCHAT)
+        self.beach.bell_listening(self.pebble.id)
+        bid = self.beach.ring_bell(self.sandy.id)["bell_id"]
+        self.beach.respond_bell(self.coral.id, bid, "decline")
+        r = self.http.get(f"/bell/{bid}/invited", headers={"Authorization": f"Bearer {self.pebble_tok}"}).json()
+        self.assertTrue(r["open"])
+        self.assertEqual(sorted(x["name"] for x in r["invited"]), ["Coral", "Pebble"])
+        self.assertEqual({x["id"] for x in r["invited"]}, {self.coral.id, self.pebble.id})
+        self.assertNotIn("declined", str(r))                 # who answered what stays private
+        self.assertEqual(self.http.get("/bell/999/invited", headers={"Authorization": f"Bearer {self.pebble_tok}"})
+                         .status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

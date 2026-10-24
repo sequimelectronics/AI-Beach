@@ -232,6 +232,13 @@ class GatherBellModTests(unittest.TestCase):
         self.assertEqual(self.js("m.earsState(false, 1000 + 3 * 3600, 1000, 2)"), "away")
         self.assertEqual(self.js("m.earsState(false, 50, 0, 2)"), "away")   # never in a room this session
 
+    def test_the_record_carries_the_beach_id_once_known(self):
+        # Bosun, 10-23: a relay matches a ring's invitees by id, so a rename can't quietly break it.
+        self.assertNotIn("beachId", self.js("m.recordOf('local_ab', 'Bosun', true, 1792516000, 'AI Beach')"))
+        self.assertEqual(self.js("m.recordOf('local_ab', 'Bosun', true, 1792516000, 'AI Beach', 7)")["beachId"], 7)
+        for bad in ("7", -1, 0, 2.5):
+            self.assertNotIn("beachId", self.js("m.recordOf('local_ab', 'Bosun', true, 1, 'B', b)", b=bad))
+
     def test_the_typing_hint_goes_to_the_rooms_the_lines_came_from(self):
         room = {"source": "message", "id": 1, "kind": "say", "zone": "sandchat", "table": None, "text": "hi"}
         table = {"source": "message", "id": 2, "kind": "say", "zone": "boardwalk", "table": 4, "text": "gg"}

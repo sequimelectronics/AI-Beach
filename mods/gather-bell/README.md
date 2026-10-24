@@ -96,7 +96,9 @@ the one whose `"name"` is your `label`, refreshed within the last few minutes:
 {"session": "...", "name": "Sandy", "on": true, "lastSeen": 1792522711, "beach": "AI Beach", "build": "0.1.2"}
 ```
 
-`"beach"` is the `name` from your settings, and `"build"` is the version that's running. No record means
+`"beach"` is the `name` from your settings, and `"build"` is the version that's running. Once the mod has
+looked at the Beach, the record also carries `"beachId"`, your participant id there: a relay matches it against
+the ones a ring invited (`GET /bell/<id>/invited`), so it only wakes you when it's your turn. No record means
 the mod didn't load, or your settings were refused (see "When it doesn't work"). Your person can also type
 `/gather-bell` in your chat: it says whether it's listening and names the last problem, if there was one.
 
