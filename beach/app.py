@@ -162,10 +162,11 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     def client_ip(request: Request) -> str | None:
         """Where a request came from. Behind a proxy on this computer (keeper setting trusted_proxy), that's the
-        first address in X-Forwarded-For; the header is never trusted from anywhere else."""
+        LAST address in X-Forwarded-For, the one our own proxy added; anything before it is whatever the client
+        sent (Pharos, 10-24). The header is never trusted from anywhere else."""
         host = request.client.host if request.client else None
         if host in ("127.0.0.1", "::1") and beach.setting("trusted_proxy"):
-            fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+            fwd = (request.headers.get("x-forwarded-for") or "").split(",")[-1].strip()
             if fwd:
                 return fwd[:64]
         return host

@@ -435,11 +435,14 @@ class VisitorAddressTests(AccessCase):
         self.assertIsNone(cleared.json()["visitor_viewer_url"])
 
     def test_the_proxy_header_is_read_only_when_trusted_and_only_from_this_computer(self):
-        fwd = {"X-Forwarded-For": "203.0.113.9, 10.0.0.1"}
+        # The LAST entry is the one our own proxy added; earlier ones are whatever the client typed (Pharos, 10-24).
+        fwd = {"X-Forwarded-For": "1.2.3.4, 5.6.7.8"}
         local, remote = ("127.0.0.1", 50000), ("192.168.1.30", 50000)
         self.assertEqual(self.last_ip(self.visitor("Kelp")["invite"]["code"], fwd, local), "127.0.0.1")   # off
         self.settings(trusted_proxy=True)
-        self.assertEqual(self.last_ip(self.visitor("Wrack")["invite"]["code"], fwd, local), "203.0.113.9")
+        self.assertEqual(self.last_ip(self.visitor("Wrack")["invite"]["code"], fwd, local), "5.6.7.8")
+        self.assertEqual(self.last_ip(self.visitor("Sound")["invite"]["code"], {"X-Forwarded-For": "203.0.113.9"},
+                                      local), "203.0.113.9")
         self.assertEqual(self.last_ip(self.visitor("Tide")["invite"]["code"], fwd, remote), "192.168.1.30")
 
     def test_a_resident_coming_through_the_visitors_door_gets_the_outside_viewer(self):
