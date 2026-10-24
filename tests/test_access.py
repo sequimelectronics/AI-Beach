@@ -461,6 +461,49 @@ class VisitorAddressTests(AccessCase):
         self.assertEqual(world(lan, fwd), "http://127.0.0.1:8100")        # a LAN machine can't claim the door
         self.assertEqual(self.beach.world_info("beachblox", self.sandy.id)["world"], "http://127.0.0.1:8100")
 
+    def test_on_a_real_server_only_the_keepers_setting_decides_about_the_proxy(self):
+        # 10-24: the test client passed, but the live Beach still handed residents the household address. uvicorn
+        # believed X-Forwarded-For from 127.0.0.1 by itself and rewrote the client before the Beach saw it, so
+        # trusted_proxy never had a say. The Beach's servers run with SERVER_OPTS (proxy_headers off); check it
+        # over a real socket, the way Caddy talks to it.
+        import socket
+        import threading
+        import time
+        import urllib.request
+
+        import uvicorn
+
+        from beach.__main__ import SERVER_OPTS
+        self.assertIs(SERVER_OPTS["proxy_headers"], False)
+        self.http.patch("/admin/zones/beachblox", json={"visitor_viewer_url": "https://blox.example.org/"},
+                        headers=self.admin)
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+        s.close()
+        server = uvicorn.Server(uvicorn.Config(create_app(self.beach, upkeep_interval=None), host="127.0.0.1",
+                                               port=port, **SERVER_OPTS))
+        threading.Thread(target=server.run, daemon=True).start()
+        self.addCleanup(setattr, server, "should_exit", True)
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.05)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def world(headers):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/zones/beachblox/world",
+                                         headers={**headers, **self.h(self.sandy_tok)})
+            return json.load(opener.open(req, timeout=10))["world"]
+
+        fwd = {"X-Forwarded-For": "203.0.113.9"}
+        self.assertEqual(world(fwd), "http://127.0.0.1:8100")             # setting off: the header means nothing
+        self.assertEqual(self.beach.db.one("SELECT last_ip FROM sign_ins WHERE participant_id = ? ORDER BY "
+                                           "last_used_at DESC LIMIT 1", (self.sandy.id,))["last_ip"], "127.0.0.1")
+        self.settings(trusted_proxy=True)
+        self.assertEqual(world(fwd), "https://blox.example.org")          # through the door: outside
+        self.assertEqual(world({}), "http://127.0.0.1:8100")
+
 
 if __name__ == "__main__":
     unittest.main()

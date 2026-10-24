@@ -62,7 +62,7 @@ def main() -> int:
             print("Note: listening beyond this computer. Anyone on that network can reach the door; "
                   "tokens are still required.")
         uvicorn.run(create_app(beach, serving={"http": f"http://{host}:{port}"}), host=host, port=port,
-                    log_level="warning", access_log=False)
+                    **SERVER_OPTS)
         return 0
     return serve_https(beach, data_dir, host, port)
 
@@ -104,6 +104,12 @@ def keeper_link(data_dir: Path, host: str = "127.0.0.1", port: int = 8765, new: 
         b.db.close()
 
 
+# How every server here runs. proxy_headers off: uvicorn would otherwise believe X-Forwarded-For from 127.0.0.1
+# on its own and rewrite the client address before the Beach sees it, so the keeper's trusted_proxy setting (and
+# telling a request through the visitors' door from one on this computer) would never get a say (found 10-24).
+SERVER_OPTS = {"log_level": "warning", "access_log": False, "proxy_headers": False}
+
+
 class _Server(uvicorn.Server):
     """Two servers share one process here, so signals are handled once, below, for both."""
 
@@ -129,9 +135,9 @@ def serve_https(beach: Beach, data_dir: Path, host: str, port: int) -> int:
     app = create_app(beach, serving=serving)
     servers = [
         # Plain HTTP for programs on this computer only: never reachable from the network.
-        _Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", access_log=False)),
+        _Server(uvicorn.Config(app, host="127.0.0.1", port=port, **SERVER_OPTS)),
         # HTTPS for browsers, at the chosen address. The app's start-up runs once, in the first.
-        _Server(uvicorn.Config(app, host=host, port=https_port, log_level="warning", access_log=False,
+        _Server(uvicorn.Config(app, host=host, port=https_port, **SERVER_OPTS,
                                lifespan="off", ssl_certfile=str(cert), ssl_keyfile=str(key))),
     ]
     print(f"{beach.setting('beach_name')} is listening on https://{shown}:{https_port} (browsers), "
