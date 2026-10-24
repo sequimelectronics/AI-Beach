@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import agent
 from . import avatar as avatar_mod
-from .core import SANDCHAT, SKIES, TYPING_HOLD_S, Beach, BeachError, Participant
+from .core import ARRIVED_FROM_OUTSIDE, SANDCHAT, SKIES, TYPING_HOLD_S, Beach, BeachError, Participant
 from .retries import HEADER as RETRY_HEADER, MAX_KEY_LEN, WRITES as RETRY_WRITES, Retries
 from .tokens import make_counter
 
@@ -121,6 +121,19 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
             media = response.headers.get("content-type", "application/json")
             retries.put(k, what, response.status_code, body, media)
             return Response(body, status_code=response.status_code, media_type=media)
+
+    @app.middleware("http")
+    async def _note_door(request: Request, call_next):
+        # A request through the visitors' door: the trusted proxy on this computer, carrying X-Forwarded-For.
+        # (The household reaches the Beach directly, so it never carries one from 127.0.0.1.)
+        host = request.client.host if request.client else None
+        outside = (host in ("127.0.0.1", "::1") and bool(beach.setting("trusted_proxy"))
+                   and bool((request.headers.get("x-forwarded-for") or "").strip()))
+        mark = ARRIVED_FROM_OUTSIDE.set(outside)
+        try:
+            return await call_next(request)
+        finally:
+            ARRIVED_FROM_OUTSIDE.reset(mark)
 
     @app.middleware("http")
     async def _note_slow(request: Request, call_next):

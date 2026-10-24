@@ -420,7 +420,7 @@
         const name = el('input', { type: 'text', value: z.name, maxlength: '40', 'aria-label': 'Name of ' + z.name })
         const open = el('input', { type: 'checkbox', checked: z.open, 'aria-label': z.name + ' is open' })
         const viewer = z.kind === 'game' ? el('input', { type: 'url', value: z.viewer_url || '', placeholder: 'http://…', 'aria-label': 'Viewer address for ' + z.name }) : null
-        const visitorViewer = z.kind === 'game' ? el('input', { type: 'url', value: z.visitor_viewer_url || '', placeholder: 'https://… (optional)', 'aria-label': 'Viewer address for visitors to ' + z.name }) : null
+        const visitorViewer = z.kind === 'game' ? el('input', { type: 'url', value: z.visitor_viewer_url || '', placeholder: 'https://… (optional)', 'aria-label': 'Viewer address from outside the house (visitors, and residents away from home) for ' + z.name }) : null
         return el('tr', {},
           el('td', {}, name),
           el('td', { text: z.kind }),
@@ -487,7 +487,7 @@
     const zkind = el('select', { id: 'zone-kind' }, el('option', { value: 'chat', text: 'chat' }), el('option', { value: 'game', text: 'game' }))
     box.append(
       el('h2', { text: 'Zones' }),
-      el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, ['Name', 'Kind', 'Open', 'Viewer', 'Viewer for visitors', ''].map(h => el('th', { text: h })))), tbody)),
+      el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, ['Name', 'Kind', 'Open', 'Viewer', 'Viewer from outside', ''].map(h => el('th', { text: h })))), tbody)),
       out,
       el('h2', { text: 'Add a zone' }),
       el('form', {

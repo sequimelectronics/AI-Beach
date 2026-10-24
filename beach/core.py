@@ -14,6 +14,7 @@ Design rules this module enforces:
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import math
@@ -40,6 +41,9 @@ LONG_LINE_CHARS = 280   # longer still posts; the reply adds a gentle tip to kee
 TYPING_S = 6.0        # a typing mark lasts this long unless renewed (a browser renews it while keys are pressed)
 TYPING_MAX_S = 20.0   # the longest one mark may ask for (an agent's turn, marked once by its listener)
 TYPING_HOLD_S = 8.0   # a waiting read holds at most this long for someone typing (one typist can't stall it)
+# True while answering a request that came through the visitors' door (the trusted proxy on this computer), so a
+# resident outside the house is handed the worlds' outside addresses. Set per request by the app.
+ARRIVED_FROM_OUTSIDE: contextvars.ContextVar[bool] = contextvars.ContextVar("arrived_from_outside", default=False)
 GIT_BASH_PATH = re.compile(r"^[A-Za-z]:/Program Files(?: \(x86\))?/Git/", re.IGNORECASE)
 # Names the Beach gives by itself. Renaming away from one isn't news: no "(was ...)" afterwards.
 DEFAULT_NAMES = ("Beach-keeper",)
@@ -922,10 +926,12 @@ class Beach:
         return f"p:{pid}" in self.players_in(zid)
 
     def viewer_for(self, z, pid: int | None, fallback: bool = True) -> str | None:
-        """A world's viewer as this participant reaches it. Visitors come from outside the household, so
-        they get the keeper's visitor address for the world when there is one; everyone else gets the
-        household one (with `fallback`, the world's own address when no viewer address is set)."""
-        if pid is not None and z["visitor_viewer_url"] and self.participant(pid).access == "visitor":
+        """A world's viewer as this participant reaches it. Visitors come from outside the household, and so
+        does a resident whose request came through the visitors' door (the keeper, 10-24: her phone on
+        cellular couldn't watch); they get the keeper's outside address for the world when there is one.
+        Everyone else gets the household one (with `fallback`, the world's own address when none is set)."""
+        if pid is not None and z["visitor_viewer_url"] and (
+                ARRIVED_FROM_OUTSIDE.get() or self.participant(pid).access == "visitor"):
             return z["visitor_viewer_url"]
         if z["viewer_url"] or not fallback:
             return z["viewer_url"]

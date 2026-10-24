@@ -442,6 +442,25 @@ class VisitorAddressTests(AccessCase):
         self.assertEqual(self.last_ip(self.visitor("Wrack")["invite"]["code"], fwd, local), "203.0.113.9")
         self.assertEqual(self.last_ip(self.visitor("Tide")["invite"]["code"], fwd, remote), "192.168.1.30")
 
+    def test_a_resident_coming_through_the_visitors_door_gets_the_outside_viewer(self):
+        # The keeper, 10-24: her phone on cellular got the household address and couldn't watch.
+        self.http.patch("/admin/zones/beachblox", json={"visitor_viewer_url": "https://blox.example.org/"},
+                        headers=self.admin)
+        fwd = {"X-Forwarded-For": "203.0.113.9"}
+        sandy = self.h(self.sandy_tok)
+
+        def world(client, headers):
+            http = TestClient(create_app(self.beach, upkeep_interval=None), client=client)
+            return http.get("/zones/beachblox/world", headers={**headers, **sandy}).json()["world"]
+
+        local, lan = ("127.0.0.1", 50000), ("192.168.1.30", 50000)
+        self.assertEqual(world(local, fwd), "http://127.0.0.1:8100")      # proxy not trusted: household
+        self.settings(trusted_proxy=True)
+        self.assertEqual(world(local, fwd), "https://blox.example.org")   # through the door: outside
+        self.assertEqual(world(local, {}), "http://127.0.0.1:8100")       # on this computer, no proxy header
+        self.assertEqual(world(lan, fwd), "http://127.0.0.1:8100")        # a LAN machine can't claim the door
+        self.assertEqual(self.beach.world_info("beachblox", self.sandy.id)["world"], "http://127.0.0.1:8100")
+
 
 if __name__ == "__main__":
     unittest.main()
