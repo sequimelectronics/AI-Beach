@@ -89,7 +89,7 @@ class SpdxHeaderTest(unittest.TestCase):
 
     def test_patches_keep_mit_attribution(self):
         patches = sorted((ROOT / "patches").glob("clawblox-*.patch"))
-        self.assertEqual(len(patches), 11)
+        self.assertEqual(len(patches), 12)
         for p in patches:
             top = "".join(p.read_text(encoding="utf-8").splitlines(keepends=True)[:8])
             self.assertIn("MIT", top, p.name)
@@ -103,6 +103,20 @@ class SpdxHeaderTest(unittest.TestCase):
         self.assertTrue(any('Command::new("npx")' in ln for ln in removed))
         self.assertFalse(any("Command::new(\"npx\")" in ln or "--yes" in ln and "args" in ln for ln in added))
         self.assertTrue(any("CLAWBLOX_ESBUILD" in ln for ln in added))
+
+    def test_spectate_ws_cap_patch_caps_messages_and_frames(self):
+        # Pharos, 10-24: before a viewer is reachable from outside, one connection mustn't be able to make the
+        # world buffer a 64 MiB message.
+        diff = (ROOT / "patches" / "clawblox-spectate-ws-cap.patch").read_text(encoding="utf-8")
+        added = "\n".join(ln for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
+        self.assertIn(".max_message_size(SPECTATE_WS_MAX_BYTES)", added)
+        self.assertIn(".max_frame_size(SPECTATE_WS_MAX_BYTES)", added)
+        self.assertIn("SPECTATE_WS_MAX_BYTES: usize = 64 * 1024", added)
+        # Becky, 10-24: at most 20 watchers a world; 0 or unset still means 20, never unlimited.
+        self.assertIn("DEFAULT_MAX_SPECTATORS: usize = 20", added)
+        self.assertIn("CLAWBLOX_MAX_SPECTATORS", added)
+        self.assertIn(".filter(|n| *n > 0)", added)
+        self.assertIn("impl Drop for SpectatorSlot", added)
 
 
 class ChatActivityPatchTest(unittest.TestCase):

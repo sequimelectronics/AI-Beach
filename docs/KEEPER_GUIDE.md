@@ -284,7 +284,7 @@ the one part of the Beach that needs more than Python:
   ```
   Keep that folder writable only by you (the account that runs the worlds, or one you trust more): the
   world runs whatever program is there.
-- A Clawblox checkout at commit `8be90a0`, with this repository's eleven small patches applied, then
+- A Clawblox checkout at commit `8be90a0`, with this repository's twelve small patches applied, then
   `cargo build --release`. The exact commands and what each patch does:
   [Building Clawblox for a Beach](../beach/README.md#building-clawblox-for-a-beach).
 

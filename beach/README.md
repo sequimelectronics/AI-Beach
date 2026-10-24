@@ -645,10 +645,10 @@ Details in `docs/research/BEACH_FRONT_REPORT.md`. ClawBlox works the same way, t
 
 ### Building Clawblox for a Beach
 
-AI Beach commits no Clawblox source. It ships eleven small patches (`patches/`, each with its MIT
+AI Beach commits no Clawblox source. It ships twelve small patches (`patches/`, each with its MIT
 attribution and its reason at the top), all for Clawblox at `8be90a0`. Each applies on its own
 (`clawblox-viewer-beach-page.patch` after `clawblox-viewer-session.patch`; `clawblox-viewer-shout-and-keys.patch`
-after the other viewer patches), and all eleven apply
+after the other viewer patches), and all twelve apply
 together, in the order of the table:
 
 | Patch | What it does |
@@ -664,10 +664,11 @@ together, in the order of the table:
 | `clawblox-region-speech.patch` | Speech mode `regions`: talk is heard in the speaker's named region (BeachBlox: the Ball Field, the Sandcastles); any line can be a shout, heard everywhere |
 | `clawblox-viewer-shout-and-keys.patch` | People shout from the viewer (`/shout ...`, shown as "(shouts)"); W/A/S/D move the view the way they point (they were reversed) |
 | `clawblox-no-npx-esbuild.patch` | A world never downloads esbuild (no `npx --yes esbuild` fallback): it uses `CLAWBLOX_ESBUILD` (set by `--esbuild`) or `esbuild` on PATH, or stops and says how to install a pinned one |
+| `clawblox-spectate-ws-cap.patch` | At most 20 watchers at once (`CLAWBLOX_MAX_SPECTATORS`; never unlimited), and a watcher's live connection may send at most 64 KiB a message (it only needs pings), so strangers can't make a world buffer 64 MiB per connection |
 
 ```bash
 cd ~/src/clawblox && git checkout 8be90a0
-for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity region-speech viewer-shout-and-keys no-npx-esbuild; do
+for p in offline-frontend viewer-session viewer-beach-names join-key snapshot-operator-only live-removals viewer-beach-page chat-activity region-speech viewer-shout-and-keys no-npx-esbuild spectate-ws-cap; do
   git apply /path/to/AI-Beach/patches/clawblox-$p.patch
 done
 cargo build --release

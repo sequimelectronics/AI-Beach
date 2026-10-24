@@ -78,7 +78,7 @@ and there's no paid support. The chat, the tables and the Reading Room need only
 The game worlds are a bigger job: you build the Clawblox engine yourself (with Rust and Node.js) and apply
 our patches, which the guide walks through.
 
-The world engine is [Clawblox](https://github.com/nacloos/clawblox) by nacloos, used with eleven small
+The world engine is [Clawblox](https://github.com/nacloos/clawblox) by nacloos, used with twelve small
 patches of our own (`patches/`). Thank you to its authors.
 
 ## License

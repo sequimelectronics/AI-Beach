@@ -1,0 +1,90 @@
+Clawblox: limit a world's watchers (20 at once) and what each may send (64 KiB a message or frame)
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, on its own or after the
+other eleven; apply all twelve in the order of the README's table.
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-spectate-ws-cap.patch
+    cargo build --release
+
+Why (a security review, 10-24, before a world's viewer is reachable from outside the house): the
+viewer's live connection (`/spectate/ws`) only ever needs to send control frames (ping, close); the
+server reads and discards anything else. But the websocket library's default limits let one
+connection send a message of up to 64 MiB, which the world buffers in full before discarding it,
+and nothing limited how many connections there could be. A handful could push the whole machine out
+of memory, taking the Beach and its door down with the world; a crowd could slow the world for
+everyone.
+
+What changes:
+- The spectate websocket accepts messages and frames of at most 64 KiB; anything bigger closes that
+  one connection.
+- At most 20 watchers at once (CLAWBLOX_MAX_SPECTATORS sets another number; 0, unset or unreadable
+  means 20, never unlimited). Past that, a new watcher is refused before the upgrade with 503 "The
+  world is full of watchers right now; try again soon." A seat is freed whenever a connection ends,
+  however it ends.
+Checked on a running world: a viewer's updates and pings work; an oversized message closes only its
+own connection; the 21st watcher gets 503; closing one lets a new one in; a client killed without
+closing gets its seat back; the world keeps serving throughout.
+
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+index c8df188..f32a85b 100644
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -5853,7 +5853,55 @@ async fn local_spectate_ws(
+         params.spectator_token.as_deref(),
+     )?;
+     let role = SpectateRole::from_param(params.role.as_deref());
+-    Ok(ws.on_upgrade(move |socket| handle_spectate_ws(socket, state, role)))
++    // Each watcher costs the world a live stream, so only so many at once. The slot is taken before
++    // upgrading and freed when the connection ends, however it ends (the guard is dropped).
++    let Some(slot) = SpectatorSlot::take() else {
++        return Err((
++            axum::http::StatusCode::SERVICE_UNAVAILABLE,
++            "The world is full of watchers right now; try again soon.".to_string(),
++        ));
++    };
++    // A spectator only ever sends control frames (ping, close), and the server ignores anything else.
++    // Without a cap, one connection could make the world buffer a 64 MiB message before discarding it.
++    Ok(ws
++        .max_message_size(SPECTATE_WS_MAX_BYTES)
++        .max_frame_size(SPECTATE_WS_MAX_BYTES)
++        .on_upgrade(move |socket| async move {
++            let _slot = slot;
++            handle_spectate_ws(socket, state, role).await
++        }))
++}
++
++const SPECTATE_WS_MAX_BYTES: usize = 64 * 1024;
++const DEFAULT_MAX_SPECTATORS: usize = 20;
++static SPECTATORS: AtomicUsize = AtomicUsize::new(0);
++
++/// How many live viewers a world allows: CLAWBLOX_MAX_SPECTATORS, or 20 (also for 0, unset or unreadable;
++/// never unlimited).
++fn max_spectators() -> usize {
++    std::env::var("CLAWBLOX_MAX_SPECTATORS")
++        .ok()
++        .and_then(|v| v.trim().parse::<usize>().ok())
++        .filter(|n| *n > 0)
++        .unwrap_or(DEFAULT_MAX_SPECTATORS)
++}
++
++struct SpectatorSlot;
++
++impl SpectatorSlot {
++    fn take() -> Option<Self> {
++        let max = max_spectators();
++        SPECTATORS
++            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| (n < max).then_some(n + 1))
++            .ok()
++            .map(|_| SpectatorSlot)
++    }
++}
++
++impl Drop for SpectatorSlot {
++    fn drop(&mut self) {
++        SPECTATORS.fetch_sub(1, Ordering::SeqCst);
++    }
+ }
+ 
+ #[derive(Debug, Deserialize)]
