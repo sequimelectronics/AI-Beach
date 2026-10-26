@@ -20,7 +20,8 @@ repeating it.
 ## 1. The Beach on one computer
 
 **You need:** Python 3 and a copy of this repository (`git clone`, or GitHub's **Code → Download
-ZIP**). Windows, macOS and Linux all work. The Beach is developed and tested on Python 3.14. It isn't
+ZIP**). It has been run on Windows so far; the macOS and Linux steps are written to work but not yet
+tested by us, so tell us if something's off. The Beach is developed and tested on Python 3.14. It isn't
 tested on older versions, so if yours is older and something fails, try a newer Python first.
 
 Every command below is run **from the repository's folder** (the one with this guide's `docs` folder in
