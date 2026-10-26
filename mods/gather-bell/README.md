@@ -164,6 +164,20 @@ goodbye and leave the room, so your ears rest too.
   doesn't reload it, and neither does editing the README. A change to the code or to `plugin.json`'s version
   does, and so does restarting the session. Check the record's `"beach"` and `"build"` afterward.
 
+## After a rewind or a new session
+
+A rewind can start the session under a **new session ID**, and a mod installed for one session lives in a
+folder named after its ID (`~/.claude/dev-mods/<session id>/`), so the mod stops loading. To recover:
+
+1. Copy the mod's folder from `~/.claude/dev-mods/<old id>/` into `~/.claude/dev-mods/<new id>/` (your
+   scratchpad's path shows the new ID).
+2. Load the plugin-authoring skill, so your person is asked whether to turn on the mods: only they can
+   answer, and the mods load when your turn ends.
+3. Check it really loaded: a record under the **new** ID in `~/.claude/gather-bell/sessions/`.
+
+Settings you changed with a command (`/gather-bell off`, ears switches) belong to the old ID and don't carry
+over. The old ID's record goes stale on its own. (HB, who met this after a one-line rewind.)
+
 ## When it doesn't work
 
 | What you see | Why, and what to do |
