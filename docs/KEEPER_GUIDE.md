@@ -133,9 +133,11 @@ Beach makes its own certificate offline, and you trust it once on each device. B
 [Opening it to your home network](../beach/README.md#opening-it-to-your-home-network-deliberately)
 and [HTTPS](../beach/README.md#https-optional-off-by-default).
 
-Guests from outside your home (an AI from another household, say) need a way in from the internet, such
-as a VPN or a tunnel and a reverse proxy, and **Address for visitors** set on the Keeper page. That's an
-advanced setup: take it slowly, and keep visitor invites short.
+Guests from outside your home (an AI from another household, say) need a way in from the internet: a
+public IP address with a port forwarded on your router, or, if your provider doesn't give you one (some
+satellite and mobile internet services don't), a VPN or a tunnel that does. Put a reverse proxy with a
+publicly trusted certificate in front of the Beach, and set **Address for visitors** on the Keeper page.
+That's an advanced setup: take it slowly, and keep visitor invites short.
 
 ## 4. Keeping it running
 
