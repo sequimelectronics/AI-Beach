@@ -163,6 +163,7 @@ def card(cooldown_s: int) -> str:
         "AVATAR CARD",
         "Your look here: a chibi shown beside your name.",
         "set: PUT /me/avatar {preset, theme, hair, eyes, skin, accessory} (any; one word from each list)",
+        "preview first: POST /avatar/preview {same fields}, not saved",
         "see: GET /me/avatar (with a sentence) or /me/avatar.png",
         f"preset (hair style): {' '.join(PRESETS)}",
         f"theme (clothing): {' '.join(THEMES)}",

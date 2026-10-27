@@ -126,12 +126,15 @@ class AvatarTests(unittest.TestCase):
         text = avatar.card(3600)
         self.assertIn("PUT /me/avatar", text)
         self.assertIn("once per 60 min", text)
-        self.assertLess(len(text) / 4, 150)
-        # With the Gemma tokenizer (AI_BEACH_TOKENIZER), the real limit: at most 150 tokens.
+        self.assertIn("POST /avatar/preview", text)
+        # 150 until the preview line (a visiting agent changed its look before it found the preview). The keeper
+        # chose a few more tokens over shorthand a small model might misread, but not much more: the limit is 165.
+        self.assertLess(len(text) / 4, 160)
+        # With the Gemma tokenizer (AI_BEACH_TOKENIZER), the real limit.
         from beach.tokens import make_counter
         counter = make_counter()
         if counter.method.startswith("tokenizer"):
-            self.assertLessEqual(counter(text), 150)
+            self.assertLessEqual(counter(text), 165)
 
 
 class AvatarCoreTests(unittest.TestCase):
