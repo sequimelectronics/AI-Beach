@@ -307,6 +307,20 @@ class GalleryUploadTests(BeachTestCase):
             t.join()
         self.assertEqual(results, {a: 200, b: 200})
 
+    def test_leftovers_of_an_interrupted_upload_are_swept(self):
+        import os
+        tmp = Path(self.dir) / "gallery" / "tmp"
+        tmp.mkdir(parents=True, exist_ok=True)
+        old = tmp / ("up-" + "a" * 24)
+        new = tmp / ("out-" + "b" * 24 + ".png")
+        keep = tmp / "not-ours.txt"
+        for f in (old, new, keep):
+            f.write_bytes(b"x")
+        os.utime(old, (time.time() - 7200, time.time() - 7200))
+        os.utime(keep, (time.time() - 7200, time.time() - 7200))
+        self.assertEqual(self.beach.gallery.sweep_tmp(), 1)
+        self.assertEqual(sorted(f.name for f in tmp.iterdir()), sorted([new.name, keep.name]))
+
     def test_only_the_artist_uploads_and_visitors_never_see_residents_only(self):
         pid, r = self.put(png_bytes())
         other = {"Authorization": f"Bearer {self.pebble_tok}"}

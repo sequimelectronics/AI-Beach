@@ -115,6 +115,24 @@ class Gallery:
         self.tmp = self.dir / "tmp"
         self._uploads: dict[int, list[float]] = {}
         self._uploads_lock = threading.Lock()
+        self.sweep_tmp()
+
+    def sweep_tmp(self, older_than_s: float = 3600) -> int:
+        """Leftovers of an upload the Beach stopped in the middle of (a crash, a restart): gone after an hour
+        (Pharos, 11-01). Only this folder's own files, by their own names."""
+        gone = 0
+        if not self.tmp.is_dir():
+            return 0
+        cutoff = time.time() - older_than_s
+        for f in self.tmp.iterdir():
+            if f.is_file() and re.fullmatch(r"(up|out)-[0-9a-f]{24}(\.(png|jpg|webp))?", f.name):
+                try:
+                    if f.stat().st_mtime < cutoff:
+                        f.unlink()
+                        gone += 1
+                except OSError:
+                    pass
+        return gone
 
     def _err(self, code, msg, **kw):
         from .core import BeachError
