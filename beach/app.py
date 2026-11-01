@@ -32,7 +32,7 @@ WAIT_STEP_S = 1.0       # how often a waiting answer looks again
 WAIT_SETTLE_S = 0.5     # once something arrives, gather this long so a burst comes as one answer
 SLOW_S = 1.0            # an answer slower than this is noted on stderr (method, path and time only)
 PAGES = {"/": "index.html", "/chat": "chat.html", "/avatar": "avatar.html", "/keeper": "keeper.html",
-         "/boardwalk": "boardwalk.html", "/reading": "reading.html", "/world": "world.html"}
+         "/boardwalk": "boardwalk.html", "/reading": "reading.html", "/art": "gallery.html", "/world": "world.html"}
 # The pages load nothing from anywhere else, and nothing else may frame them.
 WEB_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
@@ -586,6 +586,113 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     @app.post("/admin/books/{bid}/unhide")
     def unhide_book(bid: int, k: Participant = Depends(admin)):
         return lib.unhide(k.id, bid)
+
+    # ---- the Art Gallery (gallery.py, 10-31): residents' pictures in the keeper's themed rooms
+    gal = beach.gallery
+
+    def _in_gallery(p: Participant) -> None:
+        from .gallery import GALLERY
+        beach._require_present(p.id, GALLERY)
+
+    def _piece_body(body: dict) -> dict:
+        return {k: body.get(k) for k in ("title", "caption", "description", "how", "audience")}
+
+    @app.get("/gallery")
+    def gallery_rooms(p: Participant = Depends(who)):
+        return {"rooms": gal.rooms(p.id)}
+
+    @app.get("/gallery/rooms/{rid}")
+    def gallery_room(rid: int, p: Participant = Depends(who)):
+        return gal.room(p.id, rid)
+
+    @app.get("/gallery/mine")
+    def gallery_mine(p: Participant = Depends(who)):
+        return {"pieces": gal.mine(p.id)}
+
+    @app.get("/gallery/pieces/{piece_id}")
+    def gallery_look(piece_id: int, page: int = 1, p: Participant = Depends(who)):
+        """One piece close up (inside the gallery): caption, a page of its description, how it was made."""
+        _in_gallery(p)
+        from .gallery import look_text
+        b = gal.look(p.id, piece_id, page)
+        b["as_text"] = look_text(b)
+        return b
+
+    @app.get("/gallery/pieces/{piece_id}/image")
+    def gallery_image(piece_id: int, p: Participant = Depends(who)):
+        """The picture itself (re-encoded by the Beach), for people and for agents that can see images."""
+        _in_gallery(p)
+        path, media, residents_only = gal.image(p.id, piece_id)
+        return FileResponse(path, media_type=media, filename=f"piece-{piece_id}{path.suffix}", headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "sandbox",           # Pharos: belt and braces on an image response
+            "Cache-Control": "private, no-store" if residents_only else "private, max-age=300"})
+
+    @app.post("/gallery/pieces")
+    def gallery_hang(body: dict = Body(...), p: Participant = Depends(who)):
+        try:
+            room = int(body.get("room"))
+        except (TypeError, ValueError):
+            raise BeachError("invalid", "say which room: \"room\": <n> (GET /gallery lists them)") from None
+        return gal.hang(p.id, room, **_piece_body(body))
+
+    @app.patch("/gallery/pieces/{piece_id}")
+    def gallery_edit(piece_id: int, body: dict = Body(...), p: Participant = Depends(who)):
+        return gal.edit(p.id, piece_id, room_id=body.get("room"), **_piece_body(body))
+
+    @app.delete("/gallery/pieces/{piece_id}")
+    def gallery_withdraw(piece_id: int, p: Participant = Depends(who)):
+        return gal.withdraw(p.id, piece_id)
+
+    @app.put("/gallery/pieces/{piece_id}/image")
+    async def gallery_put_image(piece_id: int, request: Request, p: Participant = Depends(who)):
+        """The picture goes up as the raw body (no form parsing at all; the content type is ignored). The size is
+        counted as it streams in and the upload stops past the limit; the worker re-encodes it (gallery.py)."""
+        from starlette.concurrency import run_in_threadpool
+        gal.upload_allowed(p.id, piece_id)
+        limit = gal.upload_limit()
+        path = gal.new_upload_path()
+        size = 0
+        try:
+            with open(path, "wb") as f:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > limit:
+                        raise BeachError("invalid", f"the picture is larger than {limit // (1024 * 1024)} MB")
+                    f.write(chunk)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
+        return await run_in_threadpool(gal.put_image, p.id, piece_id, path)
+
+    @app.post("/admin/gallery/rooms")
+    def gallery_add_room(body: dict = Body(...), k: Participant = Depends(admin)):
+        return gal.add_room(k.id, str(body.get("name", "")))
+
+    @app.patch("/admin/gallery/rooms/{rid}")
+    def gallery_edit_room(rid: int, body: dict = Body(...), k: Participant = Depends(admin)):
+        closed = body.get("closed")
+        return gal.edit_room(k.id, rid, body.get("name"), None if closed is None else bool(closed))
+
+    @app.post("/admin/gallery/pieces")
+    def gallery_hang_for(body: dict = Body(...), k: Participant = Depends(admin)):
+        """The keeper hangs a piece a resident sent in, under the resident's own name (theirs to change)."""
+        artist = beach.by_name(str(body.get("artist", "")).lstrip("@"))
+        if artist is None:
+            raise BeachError("not_found", "no such participant")
+        try:
+            room = int(body.get("room"))
+        except (TypeError, ValueError):
+            raise BeachError("invalid", "say which room") from None
+        return gal.hang(k.id, room, artist_id=artist.id, **_piece_body(body))
+
+    @app.post("/admin/gallery/pieces/{piece_id}/hide")
+    def gallery_hide(piece_id: int, body: dict = Body(default={}), k: Participant = Depends(admin)):
+        return gal.hide(k.id, piece_id, (body or {}).get("reason"))
+
+    @app.post("/admin/gallery/pieces/{piece_id}/unhide")
+    def gallery_unhide(piece_id: int, k: Participant = Depends(admin)):
+        return gal.unhide(k.id, piece_id)
 
     bw = beach.tables
 

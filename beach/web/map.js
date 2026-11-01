@@ -7,14 +7,17 @@
 
   // Spots along the trail on the map art (fractions of its width and height). Zones take them in the
   // order they were created, so a new zone never moves an old one. SandChat always gets the first.
-  const SLOTS = [[0.36, 0.43], [0.66, 0.38], [0.56, 0.72], [0.82, 0.64], [0.26, 0.74], [0.50, 0.19],
-    [0.16, 0.40], [0.72, 0.79]]
-  // The same eight spots along the trail of the upright map, for phones held portrait.
-  const SLOTS_PORTRAIT = [[0.35, 0.25], [0.66, 0.37], [0.33, 0.53], [0.68, 0.63], [0.35, 0.75], [0.66, 0.86],
-    [0.62, 0.15], [0.30, 0.89]]
+  // Spot 8 (the keeper, 11-01): the Art Gallery, just across the trail from the Reading Room, the two quiet rooms
+  // side by side (the Reading Room moved a little left to make room).
+  const SLOTS = [[0.36, 0.43], [0.61, 0.38], [0.56, 0.72], [0.82, 0.64], [0.26, 0.74], [0.50, 0.19],
+    [0.16, 0.40], [0.72, 0.79], [0.83, 0.36]]
+  // The same spots along the trail of the upright map, for phones held portrait.
+  const SLOTS_PORTRAIT = [[0.35, 0.25], [0.71, 0.37], [0.33, 0.53], [0.68, 0.63], [0.35, 0.75], [0.66, 0.86],
+    [0.62, 0.15], [0.30, 0.89], [0.27, 0.39]]   // 8, upright: the gallery sits on the Reading Room's left
   // Built-in rooms with a spot of their own (the keeper, 10-19: a boardwalk belongs on the shore, the
-  // Reading Room can sit inland). Other zones fill the free spots in the order they were created.
-  const FIXED = { boardwalk: 4, readingroom: 1 }
+  // Reading Room can sit inland, and 11-01: the Art Gallery beside it). Other zones fill the free spots in the
+  // order they were created.
+  const FIXED = { boardwalk: 4, readingroom: 1, gallery: 8 }
   const PORTRAIT = window.matchMedia('(orientation: portrait) and (max-width: 820px)')
   const slots = () => PORTRAIT.matches ? SLOTS_PORTRAIT : SLOTS
   const SKY_TINT = {
@@ -26,6 +29,8 @@
     night: 'rgba(15, 25, 70, .42)'
   }
   const ICON = {
+    // The Art Gallery: a framed picture (a sun over a hill) hanging from a nail.
+    gallery: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2.5L6.5 6M12 2.5L17.5 6" stroke="#2f2323" stroke-width="1.2" fill="none"/><rect x="3" y="6" width="18" height="14" rx="1" fill="#c98a3c" stroke="#2f2323"/><rect x="5.5" y="8.5" width="13" height="9" fill="#bfe3f2"/><circle cx="15" cy="11" r="1.6" fill="#f2c14e"/><path d="M5.5 17.5L10 12.5L13.5 16L15.5 14.5L18.5 17.5Z" fill="#5a9a5a"/></svg>',
     // The Reading Room: three books on a shelf, one leaning.
     books: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 20.5H22" stroke="#7a4b2a" stroke-width="2" stroke-linecap="round"/><rect x="4" y="6" width="4" height="13.5" rx=".6" fill="#4f7fa8" stroke="#2f2323"/><rect x="8.5" y="4" width="4.2" height="15.5" rx=".6" fill="#e0674f" stroke="#2f2323"/><rect x="14.6" y="7" width="4" height="13" rx=".6" fill="#f2c14e" stroke="#2f2323" transform="rotate(14 16.6 13.5)"/></svg>',
     tables: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="2" fill="#f5e2b3" stroke="#2f2323" stroke-width="1.5"/><path d="M7 2.5h5v5H7zM17 2.5h4.5v5H17M2.5 7.5H7v5H2.5zM12 7.5h5v5h-5zM7 12.5h5v5H7zM17 12.5h4.5v5H17zM2.5 17.5H7v4H2.5zM12 17.5h5v4h-5z" fill="#7a4b2a"/><circle cx="9.5" cy="15" r="2.2" fill="#c2462e" stroke="#2f2323"/></svg>',
@@ -98,6 +103,19 @@
     return box
   }
 
+  // A long name breaks into two balanced lines here, so its sign is only as wide as its longer line (the keeper,
+  // 11-01: "The Reading Room" wrapped by itself and left white space beside "Room").
+  function nameLines (name) {
+    if (name.length <= 12 || !name.includes(' ')) return [name]
+    let best = null
+    for (let i = name.indexOf(' '); i !== -1; i = name.indexOf(' ', i + 1)) {
+      const a = name.slice(0, i)
+      const b = name.slice(i + 1)
+      if (!best || Math.max(a.length, b.length) < Math.max(best[0].length, best[1].length)) best = [a, b]
+    }
+    return best
+  }
+
   function marker (z, slot) {
     const sign = el('button', {
       class: 'sign',
@@ -105,7 +123,8 @@
       'aria-disabled': z.open ? null : 'true',
       onclick: () => go(z)
     },
-    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : (z.books ? 'books' : z.kind)] || ICON.chat), z.name),
+    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : (z.books ? 'books' : (z.gallery ? 'gallery' : z.kind))] || ICON.chat),
+      ...nameLines(z.name).flatMap((line, i) => i ? [el('br'), line] : [line])),
     el('span', { class: 'count', text: countText(z) }),
     z.you ? el('span', { class: 'you-line' }, Beach.pin(z.you), T.t('you_' + z.you)) : null)
     sign.querySelector('svg').setAttribute('class', 'kind-icon')

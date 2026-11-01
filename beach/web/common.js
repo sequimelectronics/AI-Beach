@@ -239,6 +239,7 @@ const Beach = (() => {
     const id = encodeURIComponent(z.id)
     if (z.kind === 'game') return '/world?zone=' + id
     if (z.books) return '/reading?zone=' + id
+    if (z.gallery) return '/art?zone=' + id
     return (z.tables ? '/boardwalk?zone=' : '/chat?zone=') + id
   }
   // The order zones are listed in, here and on the map: SandChat first, then oldest first.

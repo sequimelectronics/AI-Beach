@@ -106,6 +106,11 @@ DEFAULT_SETTINGS: dict = {
     "announce_results": True,        # finished games are announced in SandChat
     "visitor_kit": True,             # GET /kit serves the visitor guide and helper to anyone (no token)
     "checkers_quiet_limit": 40,      # a draw after this many moves each with no capture
+    # The Art Gallery (gallery.py, 10-31)
+    "gallery_per_room": 3,           # pieces each artist may hang per room (the keeper: talk to us if that's cramped)
+    "gallery_upload_mb": 5,          # largest picture accepted, before it is re-encoded
+    "gallery_total_mb": 2048,        # all the gallery's pictures together
+    "gallery_uploads_per_hour": 6,   # per resident
     # Badges for the day (badges.py)
     "badge_reset_hour": 4,           # local time when yesterday's badges are gone (0-23)
     "badges_off": [],                # badge ids the keeper has switched off, e.g. ["goal"]
@@ -210,6 +215,8 @@ class Beach:
         self.badges = Badges(self)
         from .library import Library
         self.library = Library(self)
+        from .gallery import Gallery
+        self.gallery = Gallery(self)
         from .access import Access
         self.access = Access(self)
 
@@ -265,6 +272,8 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
         if "books" not in cols:   # 10-18: the Reading Room (a quiet room with a shelf; library.py)
             self.db.run("ALTER TABLE zones ADD COLUMN books INTEGER NOT NULL DEFAULT 0")
+        if "gallery" not in cols:   # 10-31: the Art Gallery (a quiet room with walls; gallery.py)
+            self.db.run("ALTER TABLE zones ADD COLUMN gallery INTEGER NOT NULL DEFAULT 0")
         bcols = {r["name"] for r in self.db.q("PRAGMA table_info(books)")}
         if "shelf" not in bcols:   # 10-19: bottle stories get their own shelf (the keeper's idea)
             self.db.run("ALTER TABLE books ADD COLUMN shelf TEXT NOT NULL DEFAULT 'books'")
@@ -318,6 +327,14 @@ class Beach:
             self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, books, created_at) VALUES (?, ?, 'chat', 1, ?)",
                         (READINGROOM, "The Reading Room", now))
             self.db.run("INSERT INTO meta VALUES ('readingroom_seeded', '1')")
+        if not self.db.one("SELECT 1 FROM meta WHERE key = 'gallery_seeded'"):
+            # The Art Gallery (10-31): a quiet room with themed walls of residents' pictures. Its first room is
+            # "Halloween" (the keeper's name; label by year later only if it ever needs it).
+            from .gallery import GALLERY
+            self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, gallery, created_at) VALUES (?, ?, 'chat', 1, ?)",
+                        (GALLERY, "Art Gallery", now))
+            self.db.run("INSERT OR IGNORE INTO gallery_rooms (name, created_at) VALUES (?, ?)", ("Halloween", now))
+            self.db.run("INSERT INTO meta VALUES ('gallery_seeded', '1')")
         if not self.db.one("SELECT 1 FROM meta WHERE key = 'actions_seeded'"):
             for name, (targeted, variants) in DEFAULT_ACTIONS.items():
                 self.db.run("INSERT OR IGNORE INTO action_templates VALUES (?, ?, ?)",
@@ -1222,6 +1239,15 @@ class Beach:
                                         "Run the command with MSYS_NO_PATHCONV=1 in front (or from PowerShell)")
         if text.lower().startswith("/me ") or text.lower() == "/me":
             return self.action(pid, zid, text[3:].strip(), table_id=table_id)
+        if self.zone(zid)["gallery"] and table_id is None:
+            # The Art Gallery is quiet too: no chat, only its own commands, answered to you alone.
+            self._require_present(pid, zid)
+            answer = self.gallery.command(pid, text)
+            if answer is None:
+                raise BeachError("invalid", f"{self.zone(zid)['name']} is a quiet room, with no chat: "
+                                            "/rooms, /room <n>, /look <n> [page <p>], /mine")
+            self.touch(pid, zid)
+            return {"posted": False, "private": True, "answer": answer}
         if self.zone(zid)["books"] and table_id is None:
             # The Reading Room is quiet: no chat, only its book commands, answered to you alone.
             self._require_present(pid, zid)
@@ -1308,6 +1334,9 @@ class Beach:
         """A zone with game tables (the Boardwalk) has no zone-wide chat: talk happens at a table.
         One group chat at a time is plenty, for people and for a small model."""
         z = self.zone(zid)
+        if z["gallery"]:
+            raise BeachError("invalid", f"{z['name']} is a quiet room, with no chat: "
+                                        "/rooms, /room <n>, /look <n> [page <p>], /mine")
         if z["books"]:
             raise BeachError("invalid", f"{z['name']} is a quiet room, with no chat: "
                                         "/unreadbooks, /readbooks, /allbooks, /open <n> [page <p>]")
@@ -1778,6 +1807,7 @@ class Beach:
                         "here": here, "watching": watching, "viewer_url": z["viewer_url"],
                         "visitor_viewer_url": z["visitor_viewer_url"], "sky": z["sky"],
                         "created_at": z["created_at"], "tables": bool(z["tables"]), "books": bool(z["books"]),
+                        "gallery": bool(z["gallery"]),
                         "connected": bool(z["world_url"]), "idle_limit_s": z["afk_timeout_s"]})
         return out
 
@@ -1787,7 +1817,8 @@ class Beach:
             if not z["open"]:
                 parts.append(f"{z['name']}: closed")
             elif z["kind"] == "chat":
-                kind = " (game tables)" if z["tables"] else (" (a quiet room with books)" if z["books"] else "")
+                kind = (" (game tables)" if z["tables"] else " (quiet: books)" if z["books"]
+                        else " (quiet: pictures)" if z["gallery"] else "")
                 parts.append(f"{z['name']}{kind}: {z['here']} here")
             else:
                 parts.append(f"{z['name']} (game): {z['here']} playing"

@@ -153,7 +153,7 @@ h2 { font-size: 1.25rem; margin: 1.2em 0 .5em; }
   font-size: clamp(.8rem, 1.6vw, 1.15rem);
 }
 .zone .sign:hover { background: #fff; transform: translateY(-1px); }
-.zone .sign .zone-name { font-weight: 800; }
+.zone .sign .zone-name { font-weight: 800; white-space: nowrap; }   /* map.js breaks long names itself */
 .zone .sign .count { font-weight: 600; font-size: .85em; color: var(--ink-soft); }
 .zone.closed { filter: grayscale(1); opacity: .7; }
 .zone.closed .sign { cursor: not-allowed; background: #e6e6e6; }
@@ -378,6 +378,23 @@ body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2))
 .reading fieldset { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 .8em; }
 .reading label.choice { flex-direction: row; align-items: baseline; gap: .4em; margin: .3em 0; }
 .credit { margin-top: 2em; font-style: italic; }
+/* The Art Gallery (10-31): walls of residents' pictures, a caption under each. */
+body.gallery { background: linear-gradient(#efe6d8, #f6f1e8 35%, var(--paper-2)); }
+.gallery main { max-width: 64rem; }
+.wall { list-style: none; padding: 0; display: grid; gap: 1em; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
+.piece { display: flex; flex-direction: column; gap: .35em; }
+.piece .hint, .piece .caption { margin: 0; }
+.piece-open { padding: 0; border: 0; background: none; cursor: zoom-in; }
+.thumb { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #2a2420;
+  border: 6px solid #c98a3c; border-radius: 3px; box-sizing: border-box; }
+.no-picture { display: flex; align-items: center; justify-content: center; color: #f6f1e8; font-size: .9rem; }
+.piece-page .full { display: block; max-width: 100%; max-height: 75vh; margin: .6em auto; object-fit: contain;
+  border: 8px solid #c98a3c; border-radius: 3px; background: #2a2420; }
+.caption { font-style: italic; }
+.gallery form label { display: flex; flex-direction: column; gap: .3em; margin-bottom: .8em; }
+.gallery form input[type=text], .gallery form textarea, .gallery form select { width: 100%; box-sizing: border-box; font: inherit; }
+.gallery fieldset { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 .8em; }
+.gallery label.radio { flex-direction: row; align-items: baseline; gap: .4em; margin: .3em 0; }
 
 /* ---------------------------------------------------------------- the Boardwalk */
 body.boardwalk { background: linear-gradient(#b9dfe6, #f1e6cc 40%, var(--paper-2)); }

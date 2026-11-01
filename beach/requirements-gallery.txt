@@ -1,0 +1,10 @@
+# The Art Gallery's image worker (beach/gallery_decode.py). Optional: without it the gallery says it can't take
+# pictures, and the rest of the Beach is unchanged. The Beach process itself never imports Pillow; only the
+# short-lived worker does.
+#
+# Pinned exactly. Install it as a binary wheel, checked by hash, into the Beach's own environment:
+#   python -m pip download Pillow==12.3.0 --only-binary=:all: -d wheels
+#   python -m pip hash wheels/*.whl          (record the hash beside the pin below)
+#   python -m pip install --require-hashes --only-binary=:all: -r beach/requirements-gallery.txt
+# Pillow bundles libjpeg-turbo, libwebp and zlib, which get security fixes: watch its releases and update the pin.
+Pillow==12.3.0

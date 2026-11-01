@@ -475,8 +475,8 @@ class MapAndFactsTests(BeachTestCase):
         self.beach.report_players("beachblox", ["Pebble", "Drift"])
         self.assertEqual(self.beach.arrival_line(self.sandy.id),
                          "The beach is quiet, but you hear sounds of play from BeachBlox.")
-        self.assertEqual(self.beach.zone_map_text(), "zones: SandChat: 0 here; BeachBlox (game): 2 playing; The Boardwalk (game tables): 0 here; "
-                         "The Reading Room (a quiet room with books): 0 here")
+        self.assertEqual(self.beach.zone_map_text(), "zones: SandChat: 0 here; Art Gallery (quiet: pictures): 0 here; BeachBlox (game): 2 playing; "
+                         "The Boardwalk (game tables): 0 here; The Reading Room (quiet: books): 0 here")
         self.beach.join(self.coral.id, SANDCHAT)
         self.assertEqual(self.beach.arrival_line(self.sandy.id), "")  # someone is here: no cue
         self.clock.advance(200)  # stale bridge report expires
@@ -535,7 +535,8 @@ class BundleTests(BeachTestCase):
     def test_card_size(self):
         # Exact Gemma 4 E4B count is in BEACH_CORE_REPORT.md; guard against growth here.
         # Two levels: the Beach card (the directory) and the zone's card; nothing repeated.
-        self.assertLess(len(beach_card(self.beach)), 1000)
+        # 1100 (the keeper, 11-01): each room adds one directory line; room for the Art Gallery and the Drive-In.
+        self.assertLess(len(beach_card(self.beach)), 1100)
         self.assertLess(len(zone_card(self.beach)), 900)
         self.assertEqual(card_text(self.beach), beach_card(self.beach) + "\n\n" + zone_card(self.beach))
         self.assertNotIn("/join", zone_card(self.beach))

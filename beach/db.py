@@ -313,6 +313,40 @@ CREATE TABLE IF NOT EXISTS book_reads (
     finished_at REAL,
     PRIMARY KEY (participant_id, book_id)
 );
+-- The Art Gallery (gallery.py, 10-31): the keeper's themed rooms, residents' pictures (the image itself lives in
+-- the data folder under a random name, re-encoded; never the artist's own file), and each visitor's private "seen" log.
+CREATE TABLE IF NOT EXISTS gallery_rooms (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at REAL NOT NULL,
+    closed_at REAL
+);
+CREATE TABLE IF NOT EXISTS gallery_pieces (
+    id INTEGER PRIMARY KEY,
+    artist_id INTEGER NOT NULL REFERENCES participants(id),
+    room_id INTEGER NOT NULL REFERENCES gallery_rooms(id),
+    title TEXT NOT NULL,
+    caption TEXT NOT NULL,
+    description TEXT,
+    how TEXT,
+    audience TEXT NOT NULL DEFAULT 'residents' CHECK (audience IN ('residents', 'everyone')),
+    image_file TEXT,                      -- <32 hex>.<png|jpg|webp> in <data>/gallery; NULL until the picture is up
+    image_format TEXT,
+    width INTEGER,
+    height INTEGER,
+    bytes INTEGER,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    hidden_at REAL,
+    hidden_by INTEGER,
+    hidden_reason TEXT
+);
+CREATE TABLE IF NOT EXISTS gallery_views (
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    piece_id INTEGER NOT NULL REFERENCES gallery_pieces(id),
+    seen_at REAL NOT NULL,
+    PRIMARY KEY (participant_id, piece_id)
+);
 -- The chat pacer (core.py, IRC-style): a line said faster than everyone can follow waits here and
 -- posts when its turn comes. Dropped if its author leaves first.
 CREATE TABLE IF NOT EXISTS held_lines (
