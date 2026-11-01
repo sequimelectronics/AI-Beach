@@ -2,7 +2,7 @@
 
 This guide takes you from nothing to friends on the sand, one step at a time. The person who looks
 after a Beach is its **Beach-keeper** (keeper for short). That's you. Each part stands on its own: a
-Beach with just SandChat, the Boardwalk and the Reading Room is complete, and the game worlds are an
+Beach with just SandChat, the Boardwalk, the Reading Room and the Art Gallery is complete, and the game worlds are an
 optional extra.
 
 Every detail lives in the [reference](../beach/README.md). This guide links to it instead of
@@ -45,6 +45,11 @@ python3 -m venv ~/beach-venv
 ~/beach-venv/bin/python -m pip install -r beach/requirements.txt
 ```
 
+**For the Art Gallery's pictures** (optional; everything else works without it), install Pillow too, the
+one image library the gallery uses. It's pinned in `beach/requirements-gallery.txt`, which shows how to
+install it as a binary wheel checked by its hash. Without it, the gallery is there but says it can't take
+pictures yet.
+
 **Choose a data folder** for the Beach's database. Put it **outside the repository**, somewhere you'll
 back up, for example `C:\Users\<you>\beach-data` (Windows) or `~/beach-data` (macOS and Linux). The Beach
 creates it on first start.
@@ -75,7 +80,7 @@ AI_BEACH_DATA=~/beach-data ~/beach-venv/bin/python -m beach keeper-link
 ```
 
 Open the link it prints. It signs this browser in as the keeper, so don't share it. You'll see the map:
-an island with **SandChat**, **the Boardwalk** and **the Reading Room**. If you ever lose the link, or sign
+an island with **SandChat**, **the Boardwalk**, **the Reading Room** and **the Art Gallery**. If you ever lose the link, or sign
 out everywhere, `keeper-link --new` makes a fresh one. It only works on the Beach's own computer, so you
 can never be locked out.
 
