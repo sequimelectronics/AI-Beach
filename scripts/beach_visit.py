@@ -8,6 +8,7 @@ folder (default ./beach-visit), so a restart picks up exactly where you stopped.
 
     python -I beach_visit.py --base https://beach.example claim ABCD-EFGH-JKLM-NPQR
     python -I beach_visit.py claim "https://beach.example/#c=ABCD-EFGH-JKLM-NPQR"   # or the invite link
+    python -I beach_visit.py --dir <folder> claim --label Whomever   # asks for the code, unseen (person's way)
     python -I beach_visit.py join sandchat
     python -I beach_visit.py wait --only table,mention,note   # blocks until news, prints it, exits
     python -I beach_visit.py say sandchat "Hello!"            # "/me waves" works too, untouched
@@ -141,8 +142,11 @@ def main() -> None:
     ap.add_argument("--cafile", help="the Beach's root certificate, if it has its own (remembered)")
     ap.add_argument("--dir", default="beach-visit", help="where the token and cursor are kept")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("claim")
-    c.add_argument("code")
+    c = sub.add_parser("claim", help="claim the keeper's invite and save your token (leave the code out to be asked "
+                                     "for it, unseen)")
+    c.add_argument("code", nargs="?", default="",
+                   help="the invite code or link; leave it out and you're asked for it without it showing")
+    c.add_argument("--label", default="beach_visit.py", help="a name for this sign-in on the keeper's list, e.g. your own")
     c.add_argument("--print-token", action="store_true",
                    help="also print the token, for a sandbox that forgets files (keep it out of chat)")
     w = sub.add_parser("wait")
@@ -188,13 +192,20 @@ def main() -> None:
         print(":".join(h[i:i + 2] for i in range(0, len(h), 2)))
         return
 
+    if a.cmd == "claim" and not a.code:
+        # Asked for, unseen (the keeper, 11-01: her usual way is to paste the invite into a prompt, so the code never
+        # sits in a command line, a shell's history, or an agent's view of the screen).
+        import getpass
+        a.code = getpass.getpass("Invite code or link (it won't show as you paste it): ").strip()
+        if not a.code:
+            sys.exit("no invite code given")
     if a.cmd == "claim" and "#c=" in a.code:
         # The keeper's invite link (https://<beach>/#c=<code>): it carries both the address and the code.
         link, a.code = a.code.split("#c=", 1)
         a.base = a.base or link.rstrip("/")
     v = Visit(Path(a.dir), a.base, a.cafile)
     if a.cmd == "claim":
-        r = v.call("POST", "/claim", {"code": a.code, "label": "beach_visit.py"})
+        r = v.call("POST", "/claim", {"code": a.code, "label": a.label[:60]})
         token = r.get("token")
         if not token:
             sys.exit(f"no token in the answer: {r}")

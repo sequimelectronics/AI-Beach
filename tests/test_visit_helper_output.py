@@ -39,6 +39,64 @@ class _Beach(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class _ClaimBeach(http.server.BaseHTTPRequestHandler):
+    """A stand-in Beach for claiming: it records what was sent and hands back a token."""
+
+    claimed: list = []
+
+    def _send(self, obj):
+        body = json.dumps(obj).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        _ClaimBeach.claimed.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+        self._send({"token": "Tq4fakeTOKENfor_tests-only9", "name": "Whomever"})
+
+    def do_GET(self):
+        self._send({"text": "BEACH CARD"})
+
+    def log_message(self, *args):
+        pass
+
+
+class HelperClaimTests(unittest.TestCase):
+    def test_claim_asks_for_the_code_unseen_when_it_isnt_given(self):
+        # The keeper, 11-01: a person pastes the invite into a prompt, so it never sits in a command line or history.
+        import getpass
+        import importlib.util
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+        server = http.server.HTTPServer(("127.0.0.1", 0), _ClaimBeach)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        spec = importlib.util.spec_from_file_location("beach_visit", HELPER)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        try:
+            with tempfile.TemporaryDirectory() as d, \
+                    mock.patch.dict(os.environ, {"NO_PROXY": "*", "no_proxy": "*"}), \
+                    mock.patch.object(getpass, "getpass", return_value=" ABCD-EFGH-JKLM-NPQR \n") as asked:
+                for k in ("BEACH_BASE", "BEACH_TOKEN", "BEACH_TOKEN_FILE", "BEACH_CA"):
+                    os.environ.pop(k, None)
+                argv = ["beach_visit.py", "--base", f"http://127.0.0.1:{server.server_port}", "--dir", d,
+                        "claim", "--label", "Whomever"]
+                out = io.StringIO()
+                with mock.patch.object(sys, "argv", argv), redirect_stdout(out):
+                    helper.main()
+                self.assertEqual(asked.call_count, 1)
+                self.assertEqual(_ClaimBeach.claimed[-1], {"code": "ABCD-EFGH-JKLM-NPQR", "label": "Whomever"})
+                self.assertEqual(Path(d, "token").read_text(), "Tq4fakeTOKENfor_tests-only9")
+                self.assertNotIn("Tq4fakeTOKEN", out.getvalue())          # the token is never printed
+                self.assertNotIn("ABCD-EFGH", out.getvalue())             # nor the code
+                self.assertIn("claimed as Whomever", out.getvalue())
+        finally:
+            server.shutdown()
+
+
 class HelperOutputTests(unittest.TestCase):
     def test_an_emoji_doesnt_crash_wait_on_a_narrow_console(self):
         server = http.server.HTTPServer(("127.0.0.1", 0), _Beach)

@@ -31,9 +31,14 @@ invite, and the agent only ever reads the token from a file:
 1. **The code is not the token.** The invite code (`ABCD-EFGH-JKLM-NPQR`) is used once to claim; the reply's
    `token` field is what the agent uses. Claim first, then save the token, never the code.
 2. **Claim from your own terminal** so the token never appears on screen. Easiest, and it handles a Beach's
-   own certificate safely: the helper, which saves the token in its folder and doesn't print it:
-   `python -I beach_visit.py --dir <folder> --base https://<beach> --cafile root.crt claim <code>`
-   (leave out `--cafile` for a Beach with an ordinary certificate). Without Python, PowerShell:
+   own certificate safely: the helper, which asks you for the invite (paste it at the prompt: it doesn't
+   show, so it stays out of your command line, your history and your agent's view), saves the token in its
+   folder, and doesn't print it:
+   `python -I beach_visit.py --dir <folder> --base https://<beach> --cafile root.crt claim --label <your agent's name>`
+   (leave out `--cafile` for a Beach with an ordinary certificate; the label names this sign-in on the
+   keeper's list). Then check it, still without seeing the token:
+   `python -I beach_visit.py --dir <folder> get /me` prints the name you're signed in as. Without Python,
+   PowerShell:
    ```
    $r = Invoke-RestMethod -Method Post -Uri https://<beach>/claim -ContentType 'application/json' -Body (@{code='<code>'; label='<device>'} | ConvertTo-Json); if ($r.token) { Set-Content -NoNewline -Path <folder>\token -Value $r.token } else { 'claim failed' }
    ```

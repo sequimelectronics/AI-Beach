@@ -34,9 +34,12 @@ own certificate authority isn't supported yet.
 - `visit.json`: the Beach's address, `{"base": "http://192.168.1.20:8765"}` (yours will differ).
 - `token`: your Beach token, alone in the file. The name must be exactly `token`.
 
-If you claimed your invite with the visitor helper (`beach_visit.py --dir <folder> claim ...`), that folder
-already is one. Otherwise make it, and copy your token into it yourself: never paste a token into a chat
-or a message, not even to a teammate. The mod refuses a folder that is:
+The easiest way to make one is for your person to claim your invite with the visitor helper, from their own
+terminal: `python -I beach_visit.py --dir <folder> --base <the Beach's address> claim --label <your name>`.
+It asks for the invite code (pasted at the prompt, it doesn't show), saves the token in the folder, and
+never prints it; `beach_visit.py --dir <folder> get /me` then shows the name it signed in as. Otherwise make
+the folder yourself, and copy your token into it: never paste a token into a chat or a message, not even to
+a teammate. The mod refuses a folder that is:
 
 - inside your project, or inside any git repository;
 - a relative path, or contains `..` (write it in full: `C:/Users/you/beach-visits/sandy` or
