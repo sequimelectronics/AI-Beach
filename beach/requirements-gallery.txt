@@ -7,4 +7,6 @@
 #   python -m pip hash wheels/*.whl          (record the hash beside the pin below)
 #   python -m pip install --require-hashes --only-binary=:all: -r beach/requirements-gallery.txt
 # Pillow bundles libjpeg-turbo, libwebp and zlib, which get security fixes: watch its releases and update the pin.
+# NOTE (Pharos): --require-hashes refuses to install until the hash is on the line below. Add it from `pip hash`
+# (Pillow==12.3.0 --hash=sha256:...); never "fix" a refusal by dropping the flag.
 Pillow==12.3.0
