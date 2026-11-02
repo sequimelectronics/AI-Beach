@@ -154,6 +154,21 @@ class DriveInApiTests(BeachTestCase):
         self.k = {"Authorization": f"Bearer {self.admin_token}"}
         self.s = {"Authorization": f"Bearer {self.sandy_tok}"}
 
+    def test_the_projector_works_only_at_home(self):
+        # Pharos (11-01): a projector is always at home, so its sign-in (or a claim) is refused through the door.
+        from beach.app import create_app
+        code = self.http.post("/admin/drivein/projectors", json={"label": "pc"}, headers=self.k).json()["code"]
+        self.beach.update_settings({"trusted_proxy": True})
+        door = TestClient(create_app(self.beach, upkeep_interval=None), client=("127.0.0.1", 50000))
+        fwd = {"X-Forwarded-For": "203.0.113.9"}    # through the visitors' door (the trusted proxy, from outside)
+        self.assertEqual(door.post("/drivein/claim", json={"code": code}, headers=fwd).status_code, 403)
+        self.assertEqual(door.post("/drivein/show", json={"title": "x"}, headers={**fwd, **self.k}).status_code, 403)
+        self.assertEqual(self.http.post("/drivein/claim", json={"code": code}).status_code, 200)   # at home: fine
+        self.http.post("/drivein/show", json={"title": "Caps"}, headers=self.k)
+        r = self.http.post("/drivein/lines", json={"lines": ["a"] * 201}, headers=self.k)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("200 lines", r.json()["message"])
+
     def test_a_projectors_sign_in_opens_only_the_screen(self):
         code = self.http.post("/admin/drivein/projectors", json={"label": "Becky's PC"}, headers=self.k).json()["code"]
         tok = self.http.post("/drivein/claim", json={"code": code}).json()["token"]

@@ -698,7 +698,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     di = beach.drivein
 
     def projectionist(authorization: str | None = Header(default=None)) -> str:
-        """The keeper, or a projector program's own sign-in (which no other route accepts)."""
+        """The keeper, or a projector program's own sign-in (which no other route accepts). Never through the
+        visitors' door: a projector is always at home, so a leaked projector sign-in can't post from outside (Pharos)."""
+        if ARRIVED_FROM_OUTSIDE.get():
+            raise HTTPException(403, "the Drive-In's projector works only at home")
         tok = (authorization or "").removeprefix("Bearer ").strip()
         p = beach.authenticate(tok) if tok else None
         if p is not None and p.is_admin:
@@ -710,6 +713,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     @app.post("/drivein/claim")
     def drivein_claim(body: dict = Body(...)):
+        if ARRIVED_FROM_OUTSIDE.get():
+            raise HTTPException(403, "the Drive-In's projector works only at home")
         return di.claim_projector(str(body.get("code", "")))
 
     @app.post("/drivein/show")

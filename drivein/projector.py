@@ -44,7 +44,12 @@ QUIET_RMS = 300                          # 16-bit amplitude under which a 0.3 s 
 IDLE_STOP_S = 30 * 60
 DENY = {"discord.exe", "teams.exe", "ms-teams.exe", "msteams.exe", "zoom.exe", "skype.exe", "slack.exe",
         "phoneexperiencehost.exe", "phonelink.exe", "claude.exe", "whatsapp.exe", "signal.exe", "telegram.exe",
-        "python.exe", "pythonw.exe"}     # calls and chat apps; Python, where a household voice may run
+        "python.exe", "pythonw.exe",     # calls and chat apps; Python, where a voice may run
+        "msedgewebview2.exe",            # app windows built on WebView2 (a voice assistant's window may be one)
+        # Parents of many other programs (Pharos, 11-01): capturing one captures its whole tree.
+        "explorer.exe", "svchost.exe", "audiodg.exe", "sihost.exe", "runtimebroker.exe", "conhost.exe",
+        "windowsterminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe"}
+TREE_CHECK_S = 10                        # during a show, the captured tree is re-checked this often
 
 
 # ---------------------------------------------------------------------------------------------- the sign-in (DPAPI)
@@ -75,6 +80,9 @@ def load_config(path: str) -> dict:
     cfg["_beach"] = base
     cfg.setdefault("whisper_port", 8796)
     cfg.setdefault("token_file", os.path.join(os.path.dirname(os.path.abspath(path)), "projector.token"))
+    # This computer's own programs that must never be captured (a household voice app's names, say): kept in the
+    # local config, never in the shared code.
+    cfg["_deny"] = DENY | {str(n).lower() for n in cfg.get("deny_also", []) if str(n).strip()}
     return cfg
 
 
@@ -224,7 +232,8 @@ def sounding_programs() -> list[dict]:
                 name = proc.name()
             except psutil.Error:
                 continue
-            found[pid] = {"pid": pid, "name": name, "titles": window_titles({pid, *_parents(proc)})}
+            found[pid] = {"pid": pid, "name": name, "created": proc.create_time(),
+                          "titles": window_titles({pid, *_parents(proc)})}
     return sorted(found.values(), key=lambda p: p["name"].lower())
 
 
@@ -263,7 +272,7 @@ class ProcessCapture:
     """Windows' per-process loopback: the sound ONE process (and its children) plays, as 16 kHz mono 16-bit samples.
     This is the only way this file captures anything."""
 
-    def __init__(self, pid: int):
+    def __init__(self, pid: int, name: str, created: float):
         import comtypes
         from comtypes import COMObject
         C = _com()
@@ -273,6 +282,17 @@ class ProcessCapture:
         self.handle = kernel32.OpenProcess(0x00100000 | 0x1000, False, pid)   # SYNCHRONIZE | QUERY_LIMITED_INFO
         if not self.handle:
             raise RuntimeError("that program has already closed")
+        # Still the program that was picked? Between the list and "yes" it could have closed and its number gone to
+        # another program (Pharos, 11-01). Checked AFTER opening it, so the number can't change hands again.
+        import psutil
+        try:
+            now = psutil.Process(pid)
+            same = now.name() == name and abs(now.create_time() - created) < 0.01
+        except psutil.Error:
+            same = False
+        if not same:
+            kernel32.CloseHandle(self.handle)
+            raise RuntimeError("that program closed and its place was taken by another; pick again")
 
         class Params(ctypes.Structure):   # AUDIOCLIENT_ACTIVATION_PARAMS: process loopback, include the target's tree
             _fields_ = [("type", ctypes.c_int), ("pid", wintypes.DWORD), ("mode", ctypes.c_int)]
@@ -378,11 +398,33 @@ def cut_point(buf: bytes) -> int | None:
     return int(CHUNK_MAX_S * RATE) * 2 if n >= CHUNK_MAX_S * RATE else None
 
 
-def pick(programs: list[dict]) -> dict | None:
-    allowed = [p for p in programs if p["name"].lower() not in DENY]
-    refused = [p for p in programs if p["name"].lower() in DENY]
+def denied_in_tree(pid: int, deny: set[str]) -> list[str]:
+    """Programs that must never be captured, in this process or anywhere under it: capturing a process captures its
+    whole tree (Pharos, 11-01: explorer, a terminal or a launcher parents a great deal). A vanished process: [] here;
+    the capture notices it's gone on its own."""
+    import psutil
+    try:
+        proc = psutil.Process(pid)
+        tree = [proc, *proc.children(recursive=True)]
+    except psutil.Error:
+        return []
+    out = []
+    for p in tree:
+        try:
+            if p.name().lower() in deny:
+                out.append(p.name())
+        except psutil.Error:
+            pass
+    return out
+
+
+def pick(programs: list[dict], deny: set[str] = DENY) -> dict | None:
+    allowed, refused = [], []
+    for p in programs:
+        bad = [p["name"]] if p["name"].lower() in deny else denied_in_tree(p["pid"], deny)
+        (refused if bad else allowed).append({**p, "why": bad})
     for p in refused:
-        print(f"  (not offered: {p['name']}: calls, chat and voice programs are never captured)")
+        print(f"  (not offered: {p['name']}: it is, or runs, {', '.join(sorted(set(p['why'])))}, which is never captured)")
     if not allowed:
         print("Nothing is playing sound right now. Start the video or game, then run this again.")
         return None
@@ -404,11 +446,15 @@ def pick(programs: list[dict]) -> dict | None:
 
 def run(cfg: dict, title: str | None) -> int:
     token = read_token(cfg)
-    choice = pick(sounding_programs())
+    deny = cfg["_deny"]
+    choice = pick(sounding_programs(), deny)
     if not choice:
         print("No show started.")
         return 1
-    cap = ProcessCapture(choice["pid"])
+    if denied_in_tree(choice["pid"], deny):   # it started something while you were choosing
+        print("That program now runs something that is never captured. No show started.")
+        return 1
+    cap = ProcessCapture(choice["pid"], choice["name"], choice["created"])
     if title:
         st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
         if st not in (200, 409):
@@ -416,12 +462,19 @@ def run(cfg: dict, title: str | None) -> int:
             sys.exit(f"the Beach refused: {r.get('message') or st}")
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector")
     print(f"\n*** ON AIR: capturing {choice['name']} (process {choice['pid']}) and nothing else. Ctrl+C stops. ***\n")
-    buf, last_speech = b"", time.monotonic()
+    buf, last_speech, tree_at = b"", time.monotonic(), time.monotonic()
     try:
         while True:
             if not cap.alive():
                 print("The program closed: capture stopped. Run again to pick a program.")
                 break
+            if time.monotonic() - tree_at >= TREE_CHECK_S:
+                tree_at = time.monotonic()
+                bad = denied_in_tree(choice["pid"], deny)
+                if bad:
+                    print(f"The show's program started {', '.join(sorted(set(bad)))}, which is never captured: "
+                          "capture stopped.")
+                    break
             buf += cap.take()
             cut = cut_point(buf)
             if cut:

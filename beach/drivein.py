@@ -35,6 +35,7 @@ DRIVEIN = "drivein"
 MAX_TITLE = 100
 MAX_LINE = 500             # characters per screen line
 MAX_POST = 4000            # characters per post from the projector
+MAX_LINES_POST = 200       # lines per post (checked before any cleaning)
 MAX_PER_MINUTE = 8000      # characters a minute (speech runs ~1,000)
 MAX_KEPT = 3000            # lines held in memory during one show (older ones drop off)
 MAX_READ = 6000            # characters per screen read (the rest: "more")
@@ -130,6 +131,8 @@ class DriveIn:
     def post_lines(self, lines: list) -> dict:
         if not isinstance(lines, list) or not lines:
             raise self._err("invalid", 'send {"lines": ["...", ...]}')
+        if len(lines) > MAX_LINES_POST:
+            raise self._err("invalid", f"at most {MAX_LINES_POST} lines per post")
         clean = [clean_text(str(x), one_line=True)[:MAX_LINE] for x in lines]
         clean = [x for x in clean if x]
         size = sum(len(x) for x in clean)

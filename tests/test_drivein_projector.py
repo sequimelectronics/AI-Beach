@@ -50,6 +50,46 @@ class ProjectorTests(unittest.TestCase):
         for name in ("Discord.exe", "Teams.exe", "ms-teams.exe", "Zoom.exe", "slack.exe", "claude.exe"):
             self.assertIn(name.lower(), projector.DENY)
 
+    def test_tree_parents_and_webview_windows_are_never_captured(self):
+        # Pharos (11-01): a voice assistant's window may be WebView2; and capturing a parent captures its whole tree.
+        import projector
+        for name in ("msedgewebview2.exe", "explorer.exe", "svchost.exe", "audiodg.exe", "cmd.exe", "powershell.exe",
+                     "pwsh.exe", "windowsterminal.exe", "conhost.exe", "sihost.exe", "runtimebroker.exe"):
+            self.assertIn(name, projector.DENY)
+
+    def test_a_denied_program_anywhere_in_the_tree_refuses_the_pick(self):
+        import os
+        import projector
+        me = os.path.basename(sys.executable).lower()            # this test runs in python(.exe)
+        self.assertIn(me, [n.lower() for n in projector.denied_in_tree(os.getpid(), {me})])
+        self.assertEqual(projector.denied_in_tree(os.getpid(), {"nothing-like-this.exe"}), [])
+        self.assertEqual(projector.denied_in_tree(999_999_999, {me}), [])          # gone: nothing to say
+        picked = projector.pick([{"pid": os.getpid(), "name": "harmless.exe", "created": 0, "titles": []}], {me})
+        self.assertIsNone(picked)                                                # refused before any question
+
+    def test_local_names_join_the_deny_list_from_the_config(self):
+        import json
+        import tempfile
+        import projector
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d, "projector.json")
+            p.write_text(json.dumps({"beach": "http://192.168.1.20:8765", "deny_also": ["Our-Voice-App.exe", " "]}))
+            deny = projector.load_config(str(p))["_deny"]
+            self.assertIn("our-voice-app.exe", deny)
+            self.assertTrue(projector.DENY <= deny)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows only")
+    def test_a_reused_process_number_is_refused(self):
+        # Pharos: between the list and "yes" the program can close and its number go to another one.
+        import os
+        import psutil
+        import projector
+        me = psutil.Process(os.getpid())
+        for name, created in ((me.name(), me.create_time() + 5), ("someone-else.exe", me.create_time())):
+            with self.assertRaises(RuntimeError) as e:
+                projector.ProcessCapture(os.getpid(), name, created)
+            self.assertIn("pick again", str(e.exception))
+
     def test_the_config_names_one_beach(self):
         import json
         import tempfile
