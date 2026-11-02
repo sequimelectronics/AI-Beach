@@ -90,23 +90,43 @@
       projectors())
   }
 
+  // A new code stays on the page, with a Copy button and the command to paste it into, until Done (the keeper, 11-01:
+  // a pop-up made her copy it, hold it in her head, click OK, then go and paste).
+  const CLAIM = 'py -E -P E:\\DriveIn\\projector\\projector.py claim --config E:\\DriveIn\\projector\\projector.json'
+
+  function copyButton (text, label) {
+    return el('button', {
+      type: 'button', text: label,
+      onclick: async (ev) => {
+        try { await navigator.clipboard.writeText(text); ev.target.textContent = 'Copied ✓' } catch (e) { toast('Select it and copy it by hand: the browser didn\'t allow copying.') }
+      }
+    })
+  }
+
   function projectors () {
     const list = el('ul', { class: 'projectors' })
+    const fresh = el('div', { class: 'projector-code' })
+    const label = el('input', { type: 'text', id: 'projector-label', maxlength: '40', value: 'my PC' })
     const box = el('details', {}, el('summary', { text: 'Projector sign-ins' }),
       el('p', { class: 'hint', text: 'The projector program has its own sign-in: it can open a show, send its words and end it, nothing else.' }),
       list,
-      el('button', {
-        type: 'button', text: 'Make a projector code',
-        onclick: async () => {
-          const label = prompt('A name for this projector (e.g. "my PC"):', 'my PC')
-          if (label === null) return
-          try {
-            const r = await api('POST', '/admin/drivein/projectors', { label })
-            prompt('Give this code to the projector program once (it works for an hour):', r.code)
-            refresh()
-          } catch (e) { toast(e.message) }
-        }
-      }))
+      el('div', { class: 'row' },
+        el('label', { for: 'projector-label' }, 'Name ', label),
+        el('button', {
+          type: 'button', text: 'Make a projector code',
+          onclick: async () => {
+            try {
+              const r = await api('POST', '/admin/drivein/projectors', { label: label.value })
+              fresh.replaceChildren(
+                el('p', {}, el('strong', { text: 'Code for "' + r.label + '": ' }), el('code', { class: 'big-code', text: r.code }), ' ', copyButton(r.code, 'Copy the code')),
+                el('p', { class: 'hint', text: 'It works once, within an hour. Run this on the computer that plays the shows, then paste the code at its prompt:' }),
+                el('p', {}, el('code', { text: CLAIM }), ' ', copyButton(CLAIM, 'Copy the command')),
+                el('button', { type: 'button', class: 'quiet', text: 'Done', onclick: () => { fresh.replaceChildren(); refresh() } }))
+              refresh()
+            } catch (e) { toast(e.message) }
+          }
+        })),
+      fresh)
     async function refresh () {
       let r
       try { r = await api('GET', '/admin/drivein/projectors') } catch (e) { return }

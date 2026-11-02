@@ -392,10 +392,15 @@ body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2))
 .screen .hint { color: #c9c3b4; }
 .screen-keeper { margin-top: .5em; }
 .screen-keeper form { display: flex; flex-direction: column; gap: .4em; }
-.screen-keeper input[type=text] { width: 100%; box-sizing: border-box; font: inherit; }
+.screen-keeper input[type=text] { width: 100%; box-sizing: border-box; font: inherit; color: #2f2323; background: #fffdf7; }
 .screen-keeper fieldset { border: 1px solid #555; border-radius: 8px; }
 .screen-keeper label.radio { display: block; margin: .2em 0; }
 .screen-keeper summary { cursor: pointer; margin-top: .5em; }
+.projector-code { margin-top: .5em; }
+.projector-code code { background: #0f131b; color: #f4efe2; padding: .15em .4em; border-radius: 6px; overflow-wrap: anywhere; }
+.projector-code .big-code { font-size: 1.2rem; letter-spacing: .05em; }
+.screen-keeper .row { display: flex; flex-wrap: wrap; align-items: center; gap: .4em; }
+.screen-keeper .row input[type=text] { width: auto; }
 /* The Art Gallery (10-31): walls of residents' pictures, a caption under each. */
 body.gallery { background: linear-gradient(#efe6d8, #f6f1e8 35%, var(--paper-2)); }
 .gallery main { max-width: 64rem; }
