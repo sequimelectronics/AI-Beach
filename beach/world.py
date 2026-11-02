@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -47,6 +48,10 @@ def default_run_dir(zone: str) -> Path:
 
 def prepare(world: Path, run_dir: Path, in_place: bool) -> Path:
     """The folder Clawblox will run: the world itself (--in-place) or a fresh copy of it."""
+    # Never a web address (patch 13, Pharos): the engine would download and unpack a world from it.
+    # A scheme has 2+ letters, so a Windows drive (C:\...) isn't one.
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]+:[\\/]", str(world)):
+        raise SystemExit("--world is a folder on this computer, never a web address")
     world = world.expanduser().resolve()
     if not (world / "world.toml").is_file():
         raise SystemExit(f"no world.toml in {world}")

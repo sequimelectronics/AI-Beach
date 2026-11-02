@@ -202,6 +202,32 @@ class LiveBeachTest(_LiveBeachWorld, unittest.TestCase):
     only a Beach can give: run alone, every character keeps the "..." placeholder (job 13 fixed
     this test, which until then expected a name the world can't know)."""
 
+    def _raw(self, payload: bytes) -> bytes:
+        port = int(self.url.rsplit(":", 1)[1])
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+            s.sendall(payload)
+            try:
+                return s.recv(256)
+            except OSError:
+                return b""
+
+    def test_http2_is_not_served(self):
+        # Patch 13: the engine serves HTTP/1 only. An HTTP/2 prior-knowledge preface (plus an empty
+        # SETTINGS frame) must not get a SETTINGS frame back (before the patch it did, on the LAN).
+        reply = self._raw(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" + bytes([0, 0, 0, 4, 0, 0, 0, 0, 0]))
+        self.assertFalse(len(reply) >= 9 and reply[3] == 4, f"an HTTP/2 SETTINGS frame came back: {reply[:24]!r}")
+        self.assertEqual(urllib.request.urlopen(self.url + "/api.md", timeout=5).status, 200)   # HTTP/1.1 still fine
+
+    def test_spectator_websocket_still_upgrades(self):
+        # The HTTP/1-only server must keep websocket upgrades working (the viewer depends on them).
+        from beach.bridge import spectator_token_from_log
+        token = spectator_token_from_log(self.log.name)
+        self.assertTrue(token)
+        reply = self._raw((f"GET /spectate/ws?spectator_token={token} HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                           "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+                           "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").encode())
+        self.assertTrue(reply.startswith(b"HTTP/1.1 101"), reply[:60])
+
     def test_beach_round(self):
         a = self.adapter("Sandy")
         b = self.adapter("Pebble")

@@ -89,7 +89,7 @@ class SpdxHeaderTest(unittest.TestCase):
 
     def test_patches_keep_mit_attribution(self):
         patches = sorted((ROOT / "patches").glob("clawblox-*.patch"))
-        self.assertEqual(len(patches), 12)
+        self.assertEqual(len(patches), 13)
         for p in patches:
             top = "".join(p.read_text(encoding="utf-8").splitlines(keepends=True)[:8])
             self.assertIn("MIT", top, p.name)
@@ -103,6 +103,20 @@ class SpdxHeaderTest(unittest.TestCase):
         self.assertTrue(any('Command::new("npx")' in ln for ln in removed))
         self.assertFalse(any("Command::new(\"npx\")" in ln or "--yes" in ln and "args" in ln for ln in added))
         self.assertTrue(any("CLAWBLOX_ESBUILD" in ln for ln in added))
+
+    def test_http1_patch_replaces_every_server_and_bumps_the_crates(self):
+        # Pharos, 11-02: h2 was reachable on a world's port (a live probe got a SETTINGS frame); nothing needs it.
+        diff = (ROOT / "patches" / "clawblox-http1-and-crate-bumps.patch").read_text(encoding="utf-8")
+        removed = [ln for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")]
+        added = "\n".join(ln for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
+        self.assertEqual(sum("axum::serve(listener, app)" in ln for ln in removed), 4)   # all four servers
+        self.assertEqual(added.count("clawblox::serve_h1::serve(listener, app,"), 4)
+        self.assertIn("http1::Builder::new()", added)
+        self.assertIn(".with_upgrades()", added)
+        self.assertNotIn("auto::Builder", added)          # hyper-util's auto builder ignores http1_only with upgrades
+        for crate, version in (("h2", "0.4.20"), ("aws-lc-sys", "0.47.0"), ("rustls", "0.23.46"),
+                               ("rustls-webpki", "0.103.16"), ("tar", "0.4.46"), ("crossbeam-epoch", "0.9.21")):
+            self.assertIn(f'+version = "{version}"', diff, crate)
 
     def test_spectate_ws_cap_patch_caps_messages_and_frames(self):
         # Pharos, 10-24: before a viewer is reachable from outside, one connection mustn't be able to make the

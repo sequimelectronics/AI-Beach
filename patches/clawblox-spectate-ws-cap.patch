@@ -1,7 +1,7 @@
 Clawblox: limit a world's watchers (20 at once) and what each may send (64 KiB a message or frame)
 
 Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, on its own or after the
-other eleven; apply all twelve in the order of the README's table.
+other twelve; apply all thirteen in the order of the README's table.
 Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
 lines of its code and is offered under the same MIT terms. Written for AI Beach.
 

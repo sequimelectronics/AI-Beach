@@ -1,0 +1,326 @@
+Clawblox: serve HTTP/1 only, and update dependencies with published security advisories
+
+Applies to: Clawblox (https://github.com/nacloos/clawblox) at commit 8be90a0, on its own or after the
+other twelve; apply all thirteen in the order of the README's table.
+Clawblox is MIT-licensed (see worlds/beach/renderer/LICENSE.clawblox); this patch changes a few
+lines of its code and is offered under the same MIT terms. Written for AI Beach.
+
+    git apply /path/to/AI-Beach/patches/clawblox-http1-and-crate-bumps.patch
+    cargo build --release
+
+Why (a security audit, 11-02): `cargo audit` on the lock found published advisories in crates the
+engine is built with. Most sit on paths a running world never takes (it makes no outbound calls and
+unpacks no archives), but one was reachable: `axum::serve` hands connections to hyper-util's "auto"
+builder, which answers an HTTP/2 prior-knowledge preface whenever hyper-util's http2 feature is
+compiled in (other dependencies turn it on), and h2 had a denial-of-service advisory. Anyone who
+could reach a world's port directly could use it. Nothing here needs HTTP/2.
+
+What changes:
+- New `src/serve_h1.rs`: every server the CLI starts (`run`, the replay server, the external
+  runtime, the app browser) serves with hyper's own HTTP/1 connection, websocket upgrades
+  included. It has no HTTP/2 code path. (hyper-util's `http1_only()` doesn't do this: its docs say
+  it's ignored once upgrades are on, and a test caught exactly that.)
+- `hyper` and `hyper-util` become direct dependencies (both already in the lock).
+- Semver-compatible updates in Cargo.lock: aws-lc-rs 1.19.0, aws-lc-sys 0.47.0, crossbeam-epoch
+  0.9.21, h2 0.4.20, rustls 0.23.46, rustls-webpki 0.103.16, tar 0.4.46, webpki-roots 1.0.11, zstd
+  0.13.4, zstd-safe 7.4.0, zstd-sys 2.1.2. Left as they were (not semver-reachable, and on paths a
+  world never uses or not built into the `clawblox` binary at all): quick-xml, quinn-proto, rsa, pyo3.
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 9a4769c..6127736 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -155,9 +155,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "aws-lc-rs"
+-version = "1.15.4"
++version = "1.19.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "7b7b6141e96a8c160799cc2d5adecd5cbbe5054cb8c7c4af53da0f83bb7ad256"
++checksum = "048006790404103c488e6c5616b3e7e702a71292aadda08e8f7698a9e0d2eb53"
+ dependencies = [
+  "aws-lc-sys",
+  "zeroize",
+@@ -165,14 +165,15 @@ dependencies = [
+ 
+ [[package]]
+ name = "aws-lc-sys"
+-version = "0.37.0"
++version = "0.47.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "5c34dda4df7017c8db52132f0f8a2e0f8161649d15723ed63fc00c82d0f2081a"
++checksum = "8bfbe32ac36b3c428696ce315464181bc4029d689fd58e3f2a4e58c252242f52"
+ dependencies = [
+  "cc",
+  "cmake",
+  "dunce",
+  "fs_extra",
++ "pkg-config",
+ ]
+ 
+ [[package]]
+@@ -402,6 +403,8 @@ dependencies = [
+  "futures-util",
+  "home",
+  "http",
++ "hyper",
++ "hyper-util",
+  "include_dir",
+  "indicatif",
+  "libc",
+@@ -576,9 +579,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "crossbeam-epoch"
+-version = "0.9.18"
++version = "0.9.21"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
++checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
+ dependencies = [
+  "crossbeam-utils",
+ ]
+@@ -768,7 +771,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
+ dependencies = [
+  "libc",
+- "windows-sys 0.61.2",
++ "windows-sys 0.59.0",
+ ]
+ 
+ [[package]]
+@@ -1026,9 +1029,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "h2"
+-version = "0.4.13"
++version = "0.4.20"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "2f44da3a8150a6703ed5d34e164b875fd14c2cdab9af1252a9a1020bde2bdc54"
++checksum = "7d29020232d6aa3fb1daca64c1127cf662cf97f254ae16c18c05b8ab635fc118"
+ dependencies = [
+  "atomic-waker",
+  "bytes",
+@@ -2278,7 +2281,7 @@ dependencies = [
+  "once_cell",
+  "socket2",
+  "tracing",
+- "windows-sys 0.60.2",
++ "windows-sys 0.59.0",
+ ]
+ 
+ [[package]]
+@@ -2585,14 +2588,14 @@ dependencies = [
+  "errno",
+  "libc",
+  "linux-raw-sys",
+- "windows-sys 0.61.2",
++ "windows-sys 0.59.0",
+ ]
+ 
+ [[package]]
+ name = "rustls"
+-version = "0.23.36"
++version = "0.23.46"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c665f33d38cea657d9614f766881e4d510e0eda4239891eea56b4cadcf01801b"
++checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
+ dependencies = [
+  "aws-lc-rs",
+  "log",
+@@ -2616,9 +2619,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "rustls-webpki"
+-version = "0.103.9"
++version = "0.103.16"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d7df23109aa6c1567d1c575b9952556388da57401e4ace1d15f79eedad0d8f53"
++checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
+ dependencies = [
+  "aws-lc-rs",
+  "ring",
+@@ -3142,9 +3145,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "tar"
+-version = "0.4.44"
++version = "0.4.46"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "1d863878d212c87a19c1a610eb53bb01fe12951c0501cf5a0d65f724914a667a"
++checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+ dependencies = [
+  "filetime",
+  "libc",
+@@ -3778,9 +3781,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "webpki-roots"
+-version = "1.0.6"
++version = "1.0.11"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
++checksum = "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171"
+ dependencies = [
+  "rustls-pki-types",
+ ]
+@@ -4354,27 +4357,27 @@ checksum = "3ff05f8caa9038894637571ae6b9e29466c1f4f829d26c9b28f869a29cbe3445"
+ 
+ [[package]]
+ name = "zstd"
+-version = "0.13.3"
++version = "0.13.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
++checksum = "cdb02c3132d251ab1606e9fc913a7da6c6ed08cc263df15edf082e1dc497d157"
+ dependencies = [
+  "zstd-safe",
+ ]
+ 
+ [[package]]
+ name = "zstd-safe"
+-version = "7.2.4"
++version = "7.4.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
++checksum = "1c8ea04668f5de8d8d51051714ba560c9536519cadcdb8829bba4fe2ad159b03"
+ dependencies = [
+  "zstd-sys",
+ ]
+ 
+ [[package]]
+ name = "zstd-sys"
+-version = "2.0.16+zstd.1.5.7"
++version = "2.1.2+zstd.1.5.7"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
++checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
+ dependencies = [
+  "cc",
+  "pkg-config",
+diff --git a/Cargo.toml b/Cargo.toml
+index 6e18707..629338e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -37,6 +37,9 @@ include_dir = "0.7"
+ indicatif = "0.17"
+ rayon = "1.11"
+ tower_governor = "0.8"
++# AI-Beach patch 13: serve HTTP/1 only (src/serve_h1.rs); both already in the lock via axum.
++hyper = { version = "1.8.1", features = ["server", "http1"] }
++hyper-util = { version = "0.1.20", features = ["service", "tokio"] }
+ clap = { version = "4", features = ["derive", "env"] }
+ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+ tokio-tungstenite = "0.28"
+diff --git a/src/app_browser.rs b/src/app_browser.rs
+index fc44b4f..45aa38f 100644
+--- a/src/app_browser.rs
++++ b/src/app_browser.rs
+@@ -351,8 +351,7 @@ pub fn run_app(path: PathBuf, port: u16, base_path: &str) {
+                 std::process::exit(1);
+             });
+ 
+-        axum::serve(listener, app)
+-            .with_graceful_shutdown(async move {
++        clawblox::serve_h1::serve(listener, app, async move {
+                 shutdown_signal().await;
+                 eprintln!("\nApp server stopped.");
+             })
+diff --git a/src/bin/cli.rs b/src/bin/cli.rs
+index f32a85b..48adab2 100644
+--- a/src/bin/cli.rs
++++ b/src/bin/cli.rs
+@@ -2475,8 +2475,7 @@ fn run_game(
+         }
+ 
+         let pid_file_clone = pid_file.clone();
+-        axum::serve(listener, app)
+-            .with_graceful_shutdown(async move {
++        clawblox::serve_h1::serve(listener, app, async move {
+                 shutdown_signal().await;
+                 eprintln!("\nShutting down...");
+                 delete_pid_file(&pid_file_clone);
+@@ -2674,8 +2673,7 @@ fn run_replay(
+             std::process::exit(1);
+         });
+ 
+-        axum::serve(listener, app)
+-            .with_graceful_shutdown(async {
++        clawblox::serve_h1::serve(listener, app, async {
+                 shutdown_signal().await;
+                 eprintln!("\nReplay server stopped.");
+             })
+@@ -3516,8 +3514,7 @@ fn run_external_runtime(
+             });
+ 
+         let pid_file_clone = pid_file.clone();
+-        axum::serve(listener, app)
+-            .with_graceful_shutdown(async move {
++        clawblox::serve_h1::serve(listener, app, async move {
+                 shutdown_signal().await;
+                 eprintln!("\nShutting down...");
+                 delete_pid_file(&pid_file_clone);
+diff --git a/src/lib.rs b/src/lib.rs
+index c81d813..c9e650f 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -18,6 +18,7 @@ pub mod recording;
+ pub mod replay;
+ pub mod replay_agent_log;
+ pub mod replay_metadata;
++pub mod serve_h1;
+ pub mod snapshot;
+ pub mod workspace_recording;
+ pub mod world_capability_proxy;
+diff --git a/src/serve_h1.rs b/src/serve_h1.rs
+new file mode 100644
+index 0000000..4bc0d82
+--- /dev/null
++++ b/src/serve_h1.rs
+@@ -0,0 +1,45 @@
++//! HTTP/1-only serving (AI-Beach patch 13).
++//!
++//! `axum::serve` hands each connection to hyper-util's "auto" builder, which also answers an
++//! HTTP/2 prior-knowledge preface whenever hyper-util's http2 feature is compiled in (other
++//! dependencies turn it on). Nothing here needs HTTP/2: worlds are plain HTTP on the LAN and
++//! HTTP/1.1 behind a proxy. Serving HTTP/1 only removes the whole HTTP/2 server surface.
++
++use std::future::Future;
++
++use axum::Router;
++use hyper::server::conn::http1;
++use hyper_util::rt::TokioIo;
++use hyper_util::service::TowerToHyperService;
++use tokio::net::TcpListener;
++
++/// Serve `app` on `listener`, HTTP/1.1 only (websocket upgrades included), until `shutdown`
++/// completes. Stops accepting new connections then; open ones finish on their own tasks.
++pub async fn serve<F>(listener: TcpListener, app: Router, shutdown: F) -> std::io::Result<()>
++where
++    F: Future<Output = ()> + Send + 'static,
++{
++    let mut shutdown = std::pin::pin!(shutdown);
++    loop {
++        let (stream, _) = tokio::select! {
++            accepted = listener.accept() => match accepted {
++                Ok(pair) => pair,
++                // A failed accept (e.g. too many open files) shouldn't end the server.
++                Err(_) => {
++                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
++                    continue;
++                }
++            },
++            _ = &mut shutdown => return Ok(()),
++        };
++        let service = TowerToHyperService::new(app.clone());
++        tokio::spawn(async move {
++            // hyper's own HTTP/1 connection: it has no HTTP/2 code path at all. (hyper-util's auto
++            // builder ignores http1_only once upgrades are on; its docs say so, and a test caught it.)
++            let _ = http1::Builder::new()
++                .serve_connection(TokioIo::new(stream), service)
++                .with_upgrades()
++                .await;
++        });
++    }
++}

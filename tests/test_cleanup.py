@@ -497,6 +497,9 @@ class LauncherTests(unittest.TestCase):
             prepare(world, self.tmp / "mine", in_place=False)     # someone else's folder
         with self.assertRaises(SystemExit):
             prepare(ROOT / "worlds" / "beach", self.tmp / "x", in_place=True)   # the repo's own world
+        for url in ("https://github.com/someone/world/tree/main/w", "http://example.org/w", "HTTPS://x/y"):
+            with self.assertRaises(SystemExit):                    # a web address, never (patch 13)
+                prepare(Path(url), self.tmp / "y", in_place=False)
 
     def test_starts_both_and_stops_both(self):
         port = _free_port()
