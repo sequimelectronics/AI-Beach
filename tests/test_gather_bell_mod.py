@@ -263,12 +263,17 @@ class GatherBellModTests(unittest.TestCase):
     def test_the_ears_hold_their_news_while_the_agent_is_mid_turn(self):
         # Porter, 11-01 (Bosun's replay, 10-26): a wake submitted mid-turn waited with its text fixed while the agent
         # read the same lines itself, then arrived as a replay. Now the ears hold until the session's own turn ends.
-        self.assertTrue(self.js("m.turnRunningAfter(false, 'turn.start', undefined)"))
-        self.assertFalse(self.js("m.turnRunningAfter(true, 'turn.complete', undefined)"))
-        self.assertFalse(self.js("m.turnRunningAfter(false, 'turn.start', 'agent-1')"))    # a subagent's turn: no
-        self.assertTrue(self.js("m.turnRunningAfter(true, 'turn.complete', 'agent-1')"))
+        self.assertEqual(self.js("m.turnStartedAfter(0, 'turn.start', undefined, 1000)"), 1000)
+        self.assertEqual(self.js("m.turnStartedAfter(1000, 'turn.complete', undefined, 1100)"), 0)
+        self.assertEqual(self.js("m.turnStartedAfter(0, 'turn.start', 'agent-1', 1000)"), 0)       # a subagent's turn
+        self.assertEqual(self.js("m.turnStartedAfter(1000, 'turn.complete', 'agent-1', 1100)"), 1000)
+        self.assertTrue(self.js("m.turnHolds(1000, 1100)"))       # mid-turn: hold
+        self.assertFalse(self.js("m.turnHolds(0, 1100)"))         # between turns: wake as usual
+        # Pharos: a missed turn.complete must never leave the ears deaf; after 15 minutes the hold lapses.
+        self.assertTrue(self.js("m.turnHolds(1000, 1000 + 15 * 60 - 1)"))
+        self.assertFalse(self.js("m.turnHolds(1000, 1000 + 15 * 60)"))
         src = (ROOT / "mods" / "gather-bell" / "hooks" / "register.ts").read_text(encoding="utf-8")
-        hold = src.index("if (turnRunning) return")
+        hold = src.index("if (turnHolds(turnStartedAt, nowS)) return")
         self.assertLess(src.index("pending = pending.filter(it => unreadByAgent(it, f.read_through))"), hold)
         self.assertLess(hold, src.index("await wake($, digestText("))
         self.assertIn("on('turn.start'", src)

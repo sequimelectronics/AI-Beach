@@ -458,10 +458,16 @@ const mentionAt = new Map<string, number>()   // while resting: at most one name
 // ears hold their news instead of waking: a submit waits for the turn to end with its text already fixed, and the
 // agent often reads the same lines during that turn, so the wake arrived as a replay (Bosun 10-26; Porter, 11-01).
 // Held news is checked against the agent's own reads on the next look after the turn, and only what's left wakes.
-let turnRunning = false
-export function turnRunningAfter(running: boolean, event: string, agentId: unknown): boolean {
-  if (agentId !== undefined && agentId !== null) return running
-  return event === 'turn.start' ? true : event === 'turn.complete' ? false : running
+// Kept as the turn's start time, not a flag, and stale after TURN_HOLD_MAX_S (Pharos, 11-01): if a turn's end is ever
+// missed (an interrupt, an error), the ears hold for at most that long instead of going silently deaf.
+const TURN_HOLD_MAX_S = 15 * 60
+let turnStartedAt = 0
+export function turnStartedAfter(startedAt: number, event: string, agentId: unknown, nowS: number): number {
+  if (agentId !== undefined && agentId !== null) return startedAt
+  return event === 'turn.start' ? nowS : event === 'turn.complete' ? 0 : startedAt
+}
+export function turnHolds(startedAt: number, nowS: number): boolean {
+  return startedAt > 0 && nowS - startedAt < TURN_HOLD_MAX_S
 }
 
 async function earsCheck($: any, conn: { beach: string; token: string }, me: any, nowS: number) {
@@ -518,7 +524,7 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
     }
   }
   if (!pending.length) { await $.store.set(curKey, readCursor); return }   // nothing to say: move past it
-  if (turnRunning) return   // hold it: the agent may read it now; the next look after the turn re-checks
+  if (turnHolds(turnStartedAt, nowS)) return   // hold it: the agent may read it now; the next look after re-checks
   if (!dueToWake(pending.some(isUrgent), pendingFirst, pendingLast, nowS)) return
   // The ceiling (Pharos): past it, one note, then the news is set aside until the hour has room again.
   const timesKey = await key($, 'wakeTimes')
@@ -585,11 +591,11 @@ async function tick($: any) {
 
 export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
-    turnRunning = turnRunningAfter(turnRunning, 'turn.start', (e as any).agentId)
+    turnStartedAt = turnStartedAfter(turnStartedAt, 'turn.start', (e as any).agentId, (await $.clock.now()) / 1000)
     return next(e)
   })
   on('turn.complete', async ($, e, next) => {
-    turnRunning = turnRunningAfter(turnRunning, 'turn.complete', (e as any).agentId)
+    turnStartedAt = turnStartedAfter(turnStartedAt, 'turn.complete', (e as any).agentId, (await $.clock.now()) / 1000)
     return next(e)
   })
   on('session.start', async ($, e, next) => {
