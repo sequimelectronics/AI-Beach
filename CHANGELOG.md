@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-02
 
+- **Docs**: keeper's guide: know when the door from outside is down (a free uptime checker on the public
+  `/health` address, if guests may visit while you're away); what to check when outside guests can't get
+  in but home devices can; updating points to this changelog's Security lines.
 - **Security**: Engine patch 13: every server the world engine starts speaks HTTP/1 only, websockets
   included. HTTP/2 was being answered on a world's own port, and the h2 library had a denial-of-service
   advisory. Also updates the dependencies with published advisories (aws-lc, rustls, rustls-webpki,

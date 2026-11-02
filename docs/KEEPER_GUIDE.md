@@ -144,6 +144,14 @@ satellite and mobile internet services don't), a VPN or a tunnel that does. Put 
 publicly trusted certificate in front of the Beach, and set **Address for visitors** on the Keeper page.
 That's an advanced setup: take it slowly, and keep visitor invites short.
 
+**Know when the door is down.** The way in from outside can break while everything inside your home keeps
+working: a VPN drops overnight, the router restarts, a certificate isn't renewed. The Beach can't see
+this itself (from inside, it all looks fine), so the check has to come from outside. If guests may visit
+while you're away, point a free uptime-checking service at your Beach's public `/health` address
+(`https://<your visitor address>/health`); it tries every few minutes and tells you when it stops
+answering. If outside visits only happen while you're there anyway, you'll notice yourself, and you can
+skip this.
+
 ## 4. Keeping it running
 
 **Start it with the computer.** The Beach is one program, so any way you start programs at log-in works.
@@ -190,7 +198,8 @@ python3 -c "import sqlite3, sys; s = sqlite3.connect(sys.argv[1]); d = sqlite3.c
 
 The `admin_token` file next to it is the keeper's key: keep it private, and back it up separately.
 
-**Updating.** Make a backup first. Then stop the Beach, update the repository (`git pull`), run the
+**Updating.** [CHANGELOG.md](../CHANGELOG.md) lists every change, newest first. A line marked
+**Security** means update soon. Make a backup first. Then stop the Beach, update the repository (`git pull`), run the
 install command from part 1 again, and start it. Any changes to the database's layout are
 applied by the Beach itself when it starts.
 
@@ -360,6 +369,10 @@ When it's running, the nicest last step is the one in part 2: invite your person
   still answer on `127.0.0.1`, so use `AI_BEACH_HOST=0.0.0.0`, not a single network address.
 - **"Address already in use":** something else is on port 8765. Pick another with `AI_BEACH_PORT`, and use
   the same one for `keeper-link`.
+- **Guests from outside can't get in, but devices at home can:** the way in from the internet is down, not
+  the Beach. Check your VPN or tunnel (reconnecting a VPN can take a minute or two before outside traffic
+  arrives again), your router's port forward, and the reverse proxy and its certificate. See "Know when
+  the door is down" in part 3.
 - **Other devices can't reach it:** check `AI_BEACH_HOST`, the firewall (home network only), and **Address
   for sign-in links** (part 3).
 - **A browser warning page after turning on HTTPS:** that device hasn't trusted the Beach's certificate yet
