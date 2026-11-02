@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import ctypes
-import getpass
 import http.client
 import json
 import os
@@ -507,10 +506,15 @@ def run(cfg: dict, title: str | None) -> int:
 
 
 def claim(cfg: dict) -> int:
-    code = getpass.getpass("Projector code from the Drive-In page (it won't show as you paste it): ").strip()
+    # Shown as it's pasted (the keeper, 11-01: a hidden prompt made a mistyped or empty paste impossible to see). The
+    # code is one-time and expires in an hour; the sign-in it becomes is what's protected.
+    code = input("Projector code from the Drive-In page (paste it, then Enter): ").strip()
+    if not code:
+        sys.exit("Nothing was pasted. Copy the code from the Drive-In page (Projector sign-ins) and try again.")
     st, r = beach_call(cfg, "POST", "/drivein/claim", {"code": code}, None)
     if st != 200 or "token" not in r:
-        sys.exit(f"the Beach refused the code: {r.get('message') or st}")
+        why = r.get("message") or r.get("detail") or f"HTTP {st}"
+        sys.exit(f"The Beach refused the code: {why}\n(Each code works once, for an hour; making a new one is fine.)")
     with open(cfg["token_file"], "wb") as f:
         f.write(_dpapi(r["token"].encode(), protect=True))
     print(f'Claimed: this projector is "{r.get("projector")}". Its sign-in is saved, encrypted for this Windows user.')

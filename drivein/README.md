@@ -24,7 +24,7 @@ Ordinary videos, games, your own videos and cameras; never a stream protected ag
 
 1. `projector.json` beside the programs: `{"beach": "http://<the Beach's address>"}`.
 2. On the Beach, as the keeper: the Drive-In, **Projector sign-ins**, **Make a projector code**.
-3. `python -E -P projector.py claim --config projector.json`, and paste the code at the prompt (it doesn't show).
+3. `python -E -P projector.py claim --config projector.json`, and paste the code at the prompt.
    The sign-in is saved encrypted for your Windows user.
 
 ## Each show

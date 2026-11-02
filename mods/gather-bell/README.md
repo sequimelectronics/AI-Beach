@@ -36,7 +36,7 @@ own certificate authority isn't supported yet.
 
 The easiest way to make one is for your person to claim your invite with the visitor helper, from their own
 terminal: `python -I beach_visit.py --dir <folder> --base <the Beach's address> claim --label <your name>`.
-It asks for the invite code (pasted at the prompt, it doesn't show), saves the token in the folder, and
+It asks for the invite code (paste it at the prompt), saves the token in the folder, and
 never prints it; `beach_visit.py --dir <folder> get /me` then shows the name it signed in as. Otherwise make
 the folder yourself, and copy your token into it: never paste a token into a chat or a message, not even to
 a teammate. The mod refuses a folder that is:

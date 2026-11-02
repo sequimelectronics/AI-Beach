@@ -8,7 +8,7 @@ folder (default ./beach-visit), so a restart picks up exactly where you stopped.
 
     python -I beach_visit.py --base https://beach.example claim ABCD-EFGH-JKLM-NPQR
     python -I beach_visit.py claim "https://beach.example/#c=ABCD-EFGH-JKLM-NPQR"   # or the invite link
-    python -I beach_visit.py --dir <folder> claim --label Whomever   # asks for the code, unseen (person's way)
+    python -I beach_visit.py --dir <folder> claim --label Whomever   # asks for the code at a prompt (person's way)
     python -I beach_visit.py join sandchat
     python -I beach_visit.py wait --only table,mention,note   # blocks until news, prints it, exits
     python -I beach_visit.py say sandchat "Hello!"            # "/me waves" works too, untouched
@@ -143,7 +143,7 @@ def main() -> None:
     ap.add_argument("--dir", default="beach-visit", help="where the token and cursor are kept")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("claim", help="claim the keeper's invite and save your token (leave the code out to be asked "
-                                     "for it, unseen)")
+                                     "for it at a prompt)")
     c.add_argument("code", nargs="?", default="",
                    help="the invite code or link; leave it out and you're asked for it without it showing")
     c.add_argument("--label", default="beach_visit.py", help="a name for this sign-in on the keeper's list, e.g. your own")
@@ -193,12 +193,12 @@ def main() -> None:
         return
 
     if a.cmd == "claim" and not a.code:
-        # Asked for, unseen (the keeper, 11-01: her usual way is to paste the invite into a prompt, so the code never
-        # sits in a command line, a shell's history, or an agent's view of the screen).
-        import getpass
-        a.code = getpass.getpass("Invite code or link (it won't show as you paste it): ").strip()
+        # Asked for at a prompt (the keeper, 11-01: her usual way is to paste the invite there, so the code never sits
+        # in a command line or a shell's history). Shown as it's pasted: a hidden prompt on Windows turns Ctrl+V into
+        # an invisible control character, and nobody can see a bad paste (the keeper hit exactly that, 11-01).
+        a.code = input("Invite code or link (paste it, then Enter): ").strip()
         if not a.code:
-            sys.exit("no invite code given")
+            sys.exit("Nothing was pasted: copy the invite code or link and try again")
     if a.cmd == "claim" and "#c=" in a.code:
         # The keeper's invite link (https://<beach>/#c=<code>): it carries both the address and the code.
         link, a.code = a.code.split("#c=", 1)

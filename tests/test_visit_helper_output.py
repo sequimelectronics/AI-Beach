@@ -64,9 +64,10 @@ class _ClaimBeach(http.server.BaseHTTPRequestHandler):
 
 
 class HelperClaimTests(unittest.TestCase):
-    def test_claim_asks_for_the_code_unseen_when_it_isnt_given(self):
+    def test_claim_asks_for_the_code_when_it_isnt_given(self):
         # The keeper, 11-01: a person pastes the invite into a prompt, so it never sits in a command line or history.
-        import getpass
+        # Shown as pasted: a hidden prompt on Windows turned her Ctrl+V into an invisible control character.
+        import builtins
         import importlib.util
         import io
         from contextlib import redirect_stdout
@@ -79,7 +80,7 @@ class HelperClaimTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as d, \
                     mock.patch.dict(os.environ, {"NO_PROXY": "*", "no_proxy": "*"}), \
-                    mock.patch.object(getpass, "getpass", return_value=" ABCD-EFGH-JKLM-NPQR \n") as asked:
+                    mock.patch.object(builtins, "input", return_value=" ABCD-EFGH-JKLM-NPQR \n") as asked:
                 for k in ("BEACH_BASE", "BEACH_TOKEN", "BEACH_TOKEN_FILE", "BEACH_CA"):
                     os.environ.pop(k, None)
                 argv = ["beach_visit.py", "--base", f"http://127.0.0.1:{server.server_port}", "--dir", d,
