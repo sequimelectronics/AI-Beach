@@ -3,10 +3,12 @@
 # short-lived worker does.
 #
 # Pinned exactly. Install it as a binary wheel, checked by hash, into the Beach's own environment:
-#   python -m pip download Pillow==12.3.0 --only-binary=:all: -d wheels
+#   python -m pip download Pillow==13.0.0 --only-binary=:all: -d wheels
 #   python -m pip hash wheels/*.whl          (record the hash beside the pin below)
 #   python -m pip install --require-hashes --only-binary=:all: -r beach/requirements-gallery.txt
 # Pillow bundles libjpeg-turbo, libwebp and zlib, which get security fixes: watch its releases and update the pin.
 # NOTE (Pharos): --require-hashes refuses to install until the hash is on the line below. Add it from `pip hash`
-# (Pillow==12.3.0 --hash=sha256:...); never "fix" a refusal by dropping the flag.
-Pillow==12.3.0
+# (Pillow==13.0.0 --hash=sha256:...); never "fix" a refusal by dropping the flag.
+# 13.0.0 (11-02): 12.3.0 had many published advisories. The hash below is the CPython 3.14 Windows x64 wheel;
+# other platforms add their own wheel's hash on further --hash= options of this one line.
+Pillow==13.0.0 --hash=sha256:f7cbb7a64e7ec664775195e4f81923bc8a93d9451b963f844e59118f63147a7a
