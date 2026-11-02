@@ -533,7 +533,7 @@ def main() -> int:
         return claim(cfg)
     if a.cmd == "list":
         for p in sounding_programs():
-            flag = "  (never offered)" if p["name"].lower() in DENY else ""
+            flag = "  (never offered)" if p["name"].lower() in cfg["_deny"] or denied_in_tree(p["pid"], cfg["_deny"]) else ""
             print(f"{p['name']} (process {p['pid']}): {' | '.join(p['titles']) or 'no window title'}{flag}")
         return 0
     return run(cfg, a.title)
