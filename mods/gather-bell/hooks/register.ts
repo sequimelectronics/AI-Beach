@@ -200,7 +200,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.7'
+export const BUILD = '0.2.8'
 
 
 export function recordPath(home: string, sessionId: string): string | null {

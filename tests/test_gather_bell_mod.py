@@ -135,6 +135,12 @@ class GatherBellModTests(unittest.TestCase):
         for unc in ("//host/share/visit", "\\\\host\\share\\visit", "\\\\?\\D:\\visit"):
             self.assertIn("network share", self.js("m.normalize({visitFolder: f})", f=unc), unc)
 
+    def test_the_build_matches_the_manifest_version(self):
+        # Bosun, 11-01: 0.2.8's manifest went out with BUILD still '0.2.7', so every updated record would have said
+        # the update failed. The record's build is how an agent checks its update landed: they must agree.
+        manifest = json.loads((ROOT / "mods" / "gather-bell" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(self.js("m.BUILD"), manifest["version"])
+
     def test_the_opt_in_record_has_a_fixed_home_and_no_secrets(self):
         # Becky + Bosun (10-20): each listening session keeps a small record a relay reads. Its place is fixed
         # (never from a project file) and it carries no token or address.
