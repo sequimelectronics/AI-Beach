@@ -47,7 +47,8 @@
       `<path d="M10 13H30Q35 30 30 47H10Q5 30 10 13Z" fill="${fill}" stroke="${INK}" stroke-width="1.4"/>` +
       `<path d="M15 14Q12 30 15 46M25 14Q28 30 25 46" fill="none" stroke="${INK}" stroke-opacity=".25" stroke-width="1"/>` +
       `<rect x="9" y="47" width="22" height="5" rx="1.5" fill="#6b4a2f" stroke="${INK}" stroke-width="1.2"/>` +
-      `<text x="20" y="35" text-anchor="middle" font-family="Georgia, serif" font-size="15" font-weight="700" fill="${dark}">${text}</text></svg>`
+      // The number nearly fills the lantern, so the lantern itself can be small (the keeper, 11-01).
+      `<text x="20" y="39" text-anchor="middle" font-family="Georgia, serif" font-size="25" font-weight="700" fill="${dark}">${text}</text></svg>`
   }
   function lanternCard (code, told, label) {
     const color = code ? { R: 'red', G: 'gold', B: 'blue', W: 'white' }[code[0]] : (told && told.color)
@@ -88,20 +89,24 @@
         el('p', { 'aria-label': p.hints + ' of ' + p.max_hints + ' hints left' }, 'Hints ', dots(p.hints, p.max_hints, 'hints')),
         el('p', { 'aria-label': p.squalls + ' of ' + p.max_squalls + ' squalls' }, 'Squalls ', dots(p.squalls, p.max_squalls, 'squalls')),
         p.lost.length ? el('p', { class: 'hint', text: 'Lost: ' + p.lost.map(c => ({ R: 'red ', G: 'gold ', B: 'blue ', W: 'white ' }[c[0]] + c.slice(1))).join(', ') }) : null)))
-    // Everyone else's hands, face up to you, with what each of them knows; your hint buttons.
+    // Everyone else's hands, face up to you, with what each of them knows; your hint buttons. Side by side where
+    // the screen allows (the keeper, 11-01: a 5-seat table needed zooming out or scrolling to see everyone).
+    const handsBox = el('div', { class: 'lantern-hands' })
     for (const s of others(view)) {
       const hand = p.hands[s] || []
       const hints = legal.filter(m => m.startsWith('hint ' + nameOf(view, s) + ' '))
-      root.append(el('div', { class: 'opp lantern-hand' }, seatHead(view, s),
+      handsBox.append(el('div', { class: 'opp lantern-hand' }, seatHead(view, s),
+        el('span', { class: 'told-note', text: 'Under each: what they know about it' }),
         el('div', { class: 'lantern-row' }, hand.map((x, i) => el('div', { class: 'lantern-slot' },
           lanternCard(x.c, x.told, (i + 1) + ': ' + (x.c ? x.c : '?')),
-          el('span', { class: 'told', text: 'knows: ' + toldText(x.told) })))),
+          el('span', { class: 'told', 'aria-label': 'knows: ' + toldText(x.told), text: toldText(x.told) })))),
         hints.length ? el('div', { class: 'row hint-buttons' }, el('span', { class: 'hint', text: 'Hint:' }),
           hints.map(m => {
             const what = m.split(' ').pop()
             return el('button', { type: 'button', class: 'quiet lantern-hint hint-' + what, text: what, onclick: () => ctx.move(m) })
           })) : null))
     }
+    root.append(handsBox)
     // Your own hand: facing away from you; what you've been told about each card.
     if (mine !== null) {
       const hand = p.hands[mine] || []

@@ -312,10 +312,10 @@ td .avatar { width: 36px; height: 43px; }
 .bay { display: flex; gap: .8em; }
 .bay-row { display: flex; flex-direction: column; align-items: center; color: #fffdf7; }
 .bay-row .hint { color: #f1e6cc; }
-.lantern { display: inline-block; width: 40px; line-height: 0; }
+.lantern { display: inline-block; width: 32px; line-height: 0; }
 .lantern svg { width: 100%; height: auto; filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, .3)); }
-.lantern.lit svg { width: 52px; }
-.lantern.lit { width: 52px; }
+.lantern.lit svg { width: 44px; }
+.lantern.lit { width: 44px; }
 .lantern.dark svg { opacity: .55; }
 .bay-facts { color: #fffdf7; }
 .bay-facts p { margin: .2em 0; }
@@ -324,11 +324,16 @@ td .avatar { width: 36px; height: 43px; }
 .dots span { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #fffdf7; }
 .dots.hints span.on { background: #ffd75e; }
 .dots.squalls span.on { background: #5aa6c8; }
-.lantern-hand { flex-direction: column; align-items: stretch; width: 100%; margin-bottom: .5em; }
-.lantern-row { display: flex; flex-wrap: wrap; gap: .5em; justify-content: center; }
+/* Other players side by side (two or more a row on a wide screen, one on a phone), tight around each hand. */
+.lantern-hands { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: .5em; }
+.lantern-hand { flex-direction: column; align-items: stretch; gap: .25em; padding: .3em .5em; }
+.lantern-row { display: flex; flex-wrap: wrap; gap: .35em; justify-content: center; }
 .lantern-row.mine { margin: .5em 0; }
-.lantern-slot { display: flex; flex-direction: column; align-items: center; gap: .2em; min-width: 64px; }
-.lantern-slot .told { font-size: .78rem; color: var(--ink-soft); text-align: center; max-width: 88px; }
+.lantern-slot { display: flex; flex-direction: column; align-items: center; gap: .1em; min-width: 48px; }
+.lantern-slot .told { font-size: .78rem; line-height: 1.15; color: var(--ink-soft); text-align: center; max-width: 52px; }
+.told-note { font-size: .75rem; color: var(--ink-soft); text-align: center; }
+.lantern-hand .hint-buttons { gap: .25em; }
+.lantern-hand .lantern-hint { padding: .05em .45em; min-height: 0; }
 .lantern-row.mine .lantern-slot .told { color: #fffdf7; }
 .lantern.unknown svg { filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, .3)) saturate(.6); }
 .slot-buttons { display: flex; gap: .25em; }
