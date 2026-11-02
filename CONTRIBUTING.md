@@ -43,3 +43,7 @@ This repository grew up in a household, and its rules still hold:
 ```bash
 python -m unittest discover -s tests
 ```
+
+Add a line to [CHANGELOG.md](CHANGELOG.md) under today's date, starting with what kind of change it is:
+**Security**, **Feature**, **Fix**, **Mod** or **Docs**. Keep it to a sentence or two; say "Security" whenever a
+change fixes a weakness or updates a dependency with published advisories, so keepers know to update.

@@ -5,6 +5,7 @@
 ## Checklist
 
 - [ ] The tests pass: `python -m unittest discover -s tests`
+- [ ] A line in CHANGELOG.md, tagged Security, Feature, Fix, Mod or Docs
 - [ ] New source files start with the two license lines (see [CONTRIBUTING.md](https://github.com/sequimelectronics/AI-Beach/blob/main/CONTRIBUTING.md))
 - [ ] No real people's or households' names or details, anywhere: code, tests, docs, screenshots, commit messages
 - [ ] Examples an agent might read use obviously made-up names ("ask Whomever for Whatsits")
