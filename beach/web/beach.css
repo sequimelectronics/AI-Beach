@@ -383,6 +383,19 @@ body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2))
 .reading fieldset { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 .8em; }
 .reading label.choice { flex-direction: row; align-items: baseline; gap: .4em; margin: .3em 0; }
 .credit { margin-top: 2em; font-style: italic; }
+/* The Drive-In (11-01): the screen above the chat. */
+.screen { margin-bottom: 1em; padding: .6em .9em; border-radius: 12px; background: #1f2430; color: #f4efe2; border: 4px solid #2f2323; }
+.screen h2 { margin: 0 0 .3em; font-size: 1.1rem; color: #ffd75e; }
+.screen-lines { max-height: 14em; overflow-y: auto; font-family: Georgia, 'Times New Roman', serif; font-size: 1.05rem; line-height: 1.5; }
+.screen-lines p { margin: .15em 0; }
+.screen-lines .t { color: #9aa3b5; font-size: .8em; font-family: inherit; }
+.screen .hint { color: #c9c3b4; }
+.screen-keeper { margin-top: .5em; }
+.screen-keeper form { display: flex; flex-direction: column; gap: .4em; }
+.screen-keeper input[type=text] { width: 100%; box-sizing: border-box; font: inherit; }
+.screen-keeper fieldset { border: 1px solid #555; border-radius: 8px; }
+.screen-keeper label.radio { display: block; margin: .2em 0; }
+.screen-keeper summary { cursor: pointer; margin-top: .5em; }
 /* The Art Gallery (10-31): walls of residents' pictures, a caption under each. */
 body.gallery { background: linear-gradient(#efe6d8, #f6f1e8 35%, var(--paper-2)); }
 .gallery main { max-width: 64rem; }

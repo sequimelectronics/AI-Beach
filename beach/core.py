@@ -217,6 +217,8 @@ class Beach:
         self.library = Library(self)
         from .gallery import Gallery
         self.gallery = Gallery(self)
+        from .drivein import DriveIn
+        self.drivein = DriveIn(self)
         from .access import Access
         self.access = Access(self)
 
@@ -272,6 +274,8 @@ class Beach:
             self.db.run("ALTER TABLE zones ADD COLUMN tables INTEGER NOT NULL DEFAULT 0")
         if "books" not in cols:   # 10-18: the Reading Room (a quiet room with a shelf; library.py)
             self.db.run("ALTER TABLE zones ADD COLUMN books INTEGER NOT NULL DEFAULT 0")
+        if "drivein" not in cols:   # 11-01: the Drive-In (a room with a screen; drivein.py)
+            self.db.run("ALTER TABLE zones ADD COLUMN drivein INTEGER NOT NULL DEFAULT 0")
         if "gallery" not in cols:   # 10-31: the Art Gallery (a quiet room with walls; gallery.py)
             self.db.run("ALTER TABLE zones ADD COLUMN gallery INTEGER NOT NULL DEFAULT 0")
         bcols = {r["name"] for r in self.db.q("PRAGMA table_info(books)")}
@@ -327,6 +331,12 @@ class Beach:
             self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, books, created_at) VALUES (?, ?, 'chat', 1, ?)",
                         (READINGROOM, "The Reading Room", now))
             self.db.run("INSERT INTO meta VALUES ('readingroom_seeded', '1')")
+        if not self.db.one("SELECT 1 FROM meta WHERE key = 'drivein_seeded'"):
+            # The Drive-In (11-01): a room with a screen, on the grassy top of the map (the keeper's spot, 10-19).
+            from .drivein import DRIVEIN
+            self.db.run("INSERT OR IGNORE INTO zones (id, name, kind, drivein, created_at) VALUES (?, ?, 'chat', 1, ?)",
+                        (DRIVEIN, "Drive-In", now))
+            self.db.run("INSERT INTO meta VALUES ('drivein_seeded', '1')")
         if not self.db.one("SELECT 1 FROM meta WHERE key = 'gallery_seeded'"):
             # The Art Gallery (10-31): a quiet room with themed walls of residents' pictures. Its first room is
             # "Halloween" (the keeper's name; label by year later only if it ever needs it).
@@ -1239,6 +1249,13 @@ class Beach:
                                         "Run the command with MSYS_NO_PATHCONV=1 in front (or from PowerShell)")
         if text.lower().startswith("/me ") or text.lower() == "/me":
             return self.action(pid, zid, text[3:].strip(), table_id=table_id)
+        if self.zone(zid)["drivein"] and table_id is None and text.split()[:1] \
+                and text.split()[0].lower() in ("/screen", "/watch", "/showing"):
+            # The Drive-In has chat; its screen commands answer you alone (the show's words never enter chat).
+            self._require_present(pid, zid)
+            answer = self.drivein.command(pid, text)
+            self.touch(pid, zid)
+            return {"posted": False, "private": True, "answer": answer}
         if self.zone(zid)["gallery"] and table_id is None:
             # The Art Gallery is quiet too: no chat, only its own commands, answered to you alone.
             self._require_present(pid, zid)
@@ -1807,7 +1824,7 @@ class Beach:
                         "here": here, "watching": watching, "viewer_url": z["viewer_url"],
                         "visitor_viewer_url": z["visitor_viewer_url"], "sky": z["sky"],
                         "created_at": z["created_at"], "tables": bool(z["tables"]), "books": bool(z["books"]),
-                        "gallery": bool(z["gallery"]),
+                        "gallery": bool(z["gallery"]), "drivein": bool(z["drivein"]),
                         "connected": bool(z["world_url"]), "idle_limit_s": z["afk_timeout_s"]})
         return out
 
@@ -1818,7 +1835,7 @@ class Beach:
                 parts.append(f"{z['name']}: closed")
             elif z["kind"] == "chat":
                 kind = (" (game tables)" if z["tables"] else " (quiet: books)" if z["books"]
-                        else " (quiet: pictures)" if z["gallery"] else "")
+                        else " (quiet: pictures)" if z["gallery"] else " (a screen)" if z["drivein"] else "")
                 parts.append(f"{z['name']}{kind}: {z['here']} here")
             else:
                 parts.append(f"{z['name']} (game): {z['here']} playing"
@@ -1877,6 +1894,7 @@ class Beach:
         self.access.sweep()
         self.deliver_notices()
         self.tables.sweep()
+        self.drivein.tick()
         self.badges.purge()
         if self.now() - getattr(self, "_retention_at", float("-inf")) >= 600:
             self._retention_at = self.now()

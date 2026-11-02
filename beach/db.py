@@ -347,6 +347,26 @@ CREATE TABLE IF NOT EXISTS gallery_views (
     seen_at REAL NOT NULL,
     PRIMARY KEY (participant_id, piece_id)
 );
+-- The Drive-In (drivein.py, 11-01): projector programs' own narrow sign-ins, and a record of each show (title, when,
+-- who watched). The screen's words are NEVER stored: they live in memory during a show only.
+CREATE TABLE IF NOT EXISTS drivein_projectors (
+    id INTEGER PRIMARY KEY,
+    label TEXT NOT NULL,
+    claim_hash TEXT,
+    claim_expires REAL,
+    token_hash TEXT UNIQUE,
+    created_at REAL NOT NULL,
+    claimed_at REAL,
+    last_used_at REAL,
+    revoked_at REAL
+);
+CREATE TABLE IF NOT EXISTS drivein_shows (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    started_at REAL NOT NULL,
+    ended_at REAL NOT NULL,
+    watched_by TEXT
+);
 -- The chat pacer (core.py, IRC-style): a line said faster than everyone can follow waits here and
 -- posts when its turn comes. Dropped if its author leaves first.
 CREATE TABLE IF NOT EXISTS held_lines (

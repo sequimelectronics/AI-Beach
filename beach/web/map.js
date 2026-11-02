@@ -17,7 +17,9 @@
   // Built-in rooms with a spot of their own (the keeper, 10-19: a boardwalk belongs on the shore, the
   // Reading Room can sit inland, and 11-01: the Art Gallery beside it). Other zones fill the free spots in the
   // order they were created.
-  const FIXED = { boardwalk: 4, readingroom: 1, gallery: 8 }
+  // 11-01: the Drive-In on the grassy top (the keeper, 10-19): spot 5 on the wide map, 6 held upright ([wide, upright]).
+  const FIXED = { boardwalk: 4, readingroom: 1, gallery: 8, drivein: [5, 6] }
+  const fixedSpot = id => Array.isArray(FIXED[id]) ? FIXED[id][PORTRAIT.matches ? 1 : 0] : FIXED[id]
   const PORTRAIT = window.matchMedia('(orientation: portrait) and (max-width: 820px)')
   const slots = () => PORTRAIT.matches ? SLOTS_PORTRAIT : SLOTS
   const SKY_TINT = {
@@ -29,6 +31,8 @@
     night: 'rgba(15, 25, 70, .42)'
   }
   const ICON = {
+    // The Drive-In: a big screen on two posts, with a speaker pole in front.
+    drivein: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 15V21M18 15V21" stroke="#2f2323" stroke-width="1.6"/><rect x="2.5" y="3" width="19" height="12" rx="1" fill="#f4efe2" stroke="#2f2323"/><rect x="4.5" y="5" width="15" height="8" fill="#3f7fc4"/><circle cx="16.5" cy="7.5" r="1.4" fill="#ffd75e"/><path d="M4.5 13L9 9L12 11.5L14.5 10L19.5 13Z" fill="#5a9a5a"/><path d="M2 21.5H22" stroke="#7a4b2a" stroke-width="1.6" stroke-linecap="round"/></svg>',
     // The Art Gallery: a framed picture (a sun over a hill) hanging from a nail.
     gallery: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2.5L6.5 6M12 2.5L17.5 6" stroke="#2f2323" stroke-width="1.2" fill="none"/><rect x="3" y="6" width="18" height="14" rx="1" fill="#c98a3c" stroke="#2f2323"/><rect x="5.5" y="8.5" width="13" height="9" fill="#bfe3f2"/><circle cx="15" cy="11" r="1.6" fill="#f2c14e"/><path d="M5.5 17.5L10 12.5L13.5 16L15.5 14.5L18.5 17.5Z" fill="#5a9a5a"/></svg>',
     // The Reading Room: three books on a shelf, one leaning.
@@ -123,7 +127,7 @@
       'aria-disabled': z.open ? null : 'true',
       onclick: () => go(z)
     },
-    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : (z.books ? 'books' : (z.gallery ? 'gallery' : z.kind))] || ICON.chat),
+    el('span', { class: 'zone-name' }, svgNode(ICON[z.tables ? 'tables' : (z.books ? 'books' : (z.gallery ? 'gallery' : (z.drivein ? 'drivein' : z.kind)))] || ICON.chat),
       ...nameLines(z.name).flatMap((line, i) => i ? [el('br'), line] : [line])),
     el('span', { class: 'count', text: countText(z) }),
     z.you ? el('span', { class: 'you-line' }, Beach.pin(z.you), T.t('you_' + z.you)) : null)
@@ -198,7 +202,7 @@
     if (img.getAttribute('src') !== art) img.setAttribute('src', art)
     const n = slots().length
     const spot = new Map()
-    for (const z of zones) if (FIXED[z.id] !== undefined && FIXED[z.id] < n) spot.set(z.id, FIXED[z.id])
+    for (const z of zones) if (fixedSpot(z.id) !== undefined && fixedSpot(z.id) < n) spot.set(z.id, fixedSpot(z.id))
     const taken = new Set(spot.values())
     let next = 0
     for (const z of zones) {

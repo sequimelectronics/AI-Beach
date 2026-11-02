@@ -694,6 +694,67 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def gallery_unhide(piece_id: int, k: Participant = Depends(admin)):
         return gal.unhide(k.id, piece_id)
 
+    # ---- the Drive-In (drivein.py, 11-01): a screen of words; shows opened by the keeper or a projector program
+    di = beach.drivein
+
+    def projectionist(authorization: str | None = Header(default=None)) -> str:
+        """The keeper, or a projector program's own sign-in (which no other route accepts)."""
+        tok = (authorization or "").removeprefix("Bearer ").strip()
+        p = beach.authenticate(tok) if tok else None
+        if p is not None and p.is_admin:
+            return "keeper"
+        proj = di.projector(tok)
+        if proj is not None:
+            return "projector:" + proj["label"]
+        raise HTTPException(401, "the keeper or a projector's own sign-in is needed")
+
+    @app.post("/drivein/claim")
+    def drivein_claim(body: dict = Body(...)):
+        return di.claim_projector(str(body.get("code", "")))
+
+    @app.post("/drivein/show")
+    def drivein_open(body: dict = Body(...), by: str = Depends(projectionist)):
+        return di.open_show(by, str(body.get("title", "")))
+
+    @app.post("/drivein/lines")
+    def drivein_lines(body: dict = Body(...), by: str = Depends(projectionist)):
+        return di.post_lines(body.get("lines"))
+
+    @app.post("/drivein/show/end")
+    def drivein_end(by: str = Depends(projectionist)):
+        return di.end_show()
+
+    @app.get("/drivein")
+    def drivein_state(p: Participant = Depends(who)):
+        out = di.state(p.id)
+        if p.is_admin:
+            out["shows"] = di.shows()
+        return out
+
+    @app.post("/drivein/watch")
+    def drivein_watch(body: dict = Body(default={}), p: Participant = Depends(who)):
+        return di.watch(p.id, (body or {}).get("every"))
+
+    @app.delete("/drivein/watch")
+    def drivein_unwatch(p: Participant = Depends(who)):
+        return di.unwatch(p.id)
+
+    @app.get("/drivein/screen")
+    def drivein_screen(after: int | None = None, p: Participant = Depends(who)):
+        return di.screen(p.id, after)
+
+    @app.get("/admin/drivein/projectors")
+    def drivein_projectors(k: Participant = Depends(admin)):
+        return {"projectors": di.projectors()}
+
+    @app.post("/admin/drivein/projectors")
+    def drivein_new_projector(body: dict = Body(default={}), k: Participant = Depends(admin)):
+        return di.issue_projector(str((body or {}).get("label", "projector")))
+
+    @app.delete("/admin/drivein/projectors/{proj_id}")
+    def drivein_revoke_projector(proj_id: int, k: Participant = Depends(admin)):
+        return di.revoke_projector(proj_id)
+
     bw = beach.tables
 
     @app.get("/zones/{zid}/tables")
