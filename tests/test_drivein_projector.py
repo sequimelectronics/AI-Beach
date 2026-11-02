@@ -80,6 +80,16 @@ class ProjectorTests(unittest.TestCase):
         self.assertEqual(picked["name"], "vlc.exe")                     # Discord never listed, so VLC is number 1
         self.assertNotIn("yes/no", PROJ.read_text(encoding="utf-8"))
 
+    def test_the_helpers_messages_are_always_read_and_kept_in_memory_only(self):
+        # Pharos (11-01): a stderr pipe nobody reads fills after a few warnings and freezes the helper mid-show.
+        src = PROJ.read_text(encoding="utf-8")
+        self.assertIn("iter(proc.stderr.readline", src)
+        self.assertIn("deque(maxlen=20)", src)
+        start = src.index("def start_helper")
+        import re
+        body = src[start:src.index("def run(", start)]
+        self.assertIsNone(re.search(r"(?<![A-Za-z])open\(", body))           # nothing written to a file (Popen is fine)
+
     def test_local_names_join_the_deny_list_from_the_config(self):
         import json
         import tempfile

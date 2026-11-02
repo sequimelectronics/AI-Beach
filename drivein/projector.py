@@ -421,6 +421,7 @@ def denied_in_tree(pid: int, deny: set[str]) -> list[str]:
 
 
 BROWSERS = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
+HELPER = None    # the speech helper this projector started (None: one was already running)
 
 
 def open_programs() -> list[dict]:
@@ -507,13 +508,25 @@ def start_helper(cfg: dict):
                              "--port", str(cfg["whisper_port"])],
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
                             creationflags=0x08000000)       # CREATE_NO_WINDOW: no extra window to juggle
+    # Its messages are read all the time, into memory only (the last 20 lines; nothing is written anywhere): a pipe
+    # nobody reads fills after a few warnings, and the helper would freeze mid-show (Pharos, 11-01).
+    from collections import deque
+    proc.last_words = deque(maxlen=20)
+
+    def drain():
+        for raw in iter(proc.stderr.readline, b""):
+            proc.last_words.append(raw.decode(errors="replace").rstrip())
+
+    threading.Thread(target=drain, name="drivein-helper-messages", daemon=True).start()
     print("Starting the speech helper (the first time takes a moment)...", end="", flush=True)
     for _ in range(180):
         if proc.poll() is not None:
-            err = (proc.stderr.read() or b"").decode(errors="replace").strip().splitlines()[-3:]
-            sys.exit("\nThe speech helper didn't start:\n" + "\n".join(err))
+            time.sleep(0.2)                                  # let the reader catch the last lines
+            sys.exit("\nThe speech helper didn't start:\n" + "\n".join(list(proc.last_words)[-3:]))
         if helper_up(cfg):
             print(" ready.")
+            global HELPER
+            HELPER = proc
             return proc
         time.sleep(1)
     proc.terminate()
@@ -590,7 +603,13 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
             if cut:
                 piece, buf = buf[:cut], buf[cut:]
                 if rms(piece) >= QUIET_RMS / 3:
-                    lines = transcribe(cfg, piece)
+                    try:
+                        lines = transcribe(cfg, piece)
+                    except (OSError, RuntimeError) as e:
+                        print(f"The speech helper stopped answering ({e}): capture stopped.")
+                        if HELPER is not None and HELPER.poll() is not None:
+                            print("Its last words:\n  " + "\n  ".join(list(HELPER.last_words)[-5:]))
+                        break
                     if lines:
                         last_speech = time.monotonic()
                         st, r = beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
