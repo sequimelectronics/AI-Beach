@@ -397,6 +397,9 @@ body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2))
 .screen-keeper label.radio { display: block; margin: .2em 0; }
 .screen-keeper summary { cursor: pointer; margin-top: .5em; }
 .projector-code { margin-top: .5em; }
+.screen-keeper .howto { margin-bottom: .6em; }
+.screen-keeper .howto ol { margin: .3em 0 .3em 1.4em; padding: 0; }
+.screen-keeper .howto li { margin: .15em 0; }
 .projector-code code { background: #0f131b; color: #f4efe2; padding: .15em .4em; border-radius: 6px; overflow-wrap: anywhere; }
 .projector-code .big-code { font-size: 1.2rem; letter-spacing: .05em; }
 .screen-keeper .row { display: flex; flex-wrap: wrap; align-items: center; gap: .4em; }

@@ -22,21 +22,24 @@ Ordinary videos, games, your own videos and cameras; never a stream protected ag
 
 ## Once
 
-1. `projector.json` beside the programs: `{"beach": "http://<the Beach's address>"}`.
+1. `projector.json` beside the programs:
+   `{"beach": "http://<the Beach's address>", "model": "<the faster-whisper model folder>"}`
+   (and `"deny_also": [...]` for any program of yours that must never be captured).
 2. On the Beach, as the keeper: the Drive-In, **Projector sign-ins**, **Make a projector code**.
 3. `python -E -P projector.py claim --config projector.json`, and paste the code at the prompt.
    The sign-in is saved encrypted for your Windows user.
+4. A desktop shortcut to `python -E -P projector.py run --config projector.json` makes each show a double-click.
 
 ## Each show
 
-1. Start the speech-to-text helper (keep it running during the show):
-   `python -E -P whisper_service.py --model <model folder> --beach-origin http://<the Beach's address>`
-2. On the Beach, in the Drive-In: **Start a show** with a title.
-3. Play the show, then: `python -E -P projector.py run --config projector.json`. It lists what's making sound;
-   pick the show. The console says ON AIR while it listens; Ctrl+C stops it, and it offers to end the show.
+1. Open your video or game, and pause it.
+2. Start the projector (the shortcut). It starts the speech helper by itself.
+3. Type the show's title, then the number of your app. It opens the show on the Beach and starts listening.
+4. Press Play, and go talk. Close the projector's window (or Ctrl+C) to end the show.
 
-A browser plays every tab through one process. Show from a browser window used only for the Drive-In (a separate
-profile), never the one with a call open in another tab. Calls and chat programs are never offered.
+Picking the app is the choice to capture its sound: there's no second question. Calls, chat programs and anything
+running one are never listed. A browser plays every tab through one process, so show from a browser window used only
+for the Drive-In, never the one with a call open in another tab.
 
 (`-E -P` keeps Python from reading settings from the environment or modules from the current folder, while still
 using libraries installed for your user.)

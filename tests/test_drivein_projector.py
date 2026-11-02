@@ -67,6 +67,19 @@ class ProjectorTests(unittest.TestCase):
         picked = projector.pick([{"pid": os.getpid(), "name": "harmless.exe", "created": 0, "titles": []}], {me})
         self.assertIsNone(picked)                                                # refused before any question
 
+    def test_picking_the_app_is_the_only_question(self):
+        # The keeper, 11-01: "don't ask them to capture the audio, we already picked it". One question, a number.
+        import builtins
+        from unittest import mock
+        import projector
+        apps = [{"pid": 999_999_991, "name": "vlc.exe", "created": 0, "titles": ["zombies.mp4"], "playing": False},
+                {"pid": 999_999_992, "name": "Discord.exe", "created": 0, "titles": ["a call"], "playing": True}]
+        with mock.patch.object(builtins, "input", return_value="1") as asked:
+            picked = projector.pick(apps, projector.DENY)
+        self.assertEqual(asked.call_count, 1)
+        self.assertEqual(picked["name"], "vlc.exe")                     # Discord never listed, so VLC is number 1
+        self.assertNotIn("yes/no", PROJ.read_text(encoding="utf-8"))
+
     def test_local_names_join_the_deny_list_from_the_config(self):
         import json
         import tempfile

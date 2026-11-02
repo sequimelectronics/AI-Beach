@@ -71,6 +71,16 @@
     const tab = el('input', { type: 'radio', name: 'source', value: 'tab', disabled: true })
     const prog = el('input', { type: 'radio', name: 'source', value: 'program', checked: true })
     ui.keeper.replaceChildren(
+      // The keeper's routine (11-01), as short as it goes: the projector does the rest (the helper, the show's
+      // title, ending it when its window closes).
+      el('details', { class: 'howto', open: true },
+        el('summary', { text: 'How to project a show' }),
+        el('ol', {},
+          el('li', { text: 'Open your video or game, and pause it.' }),
+          el('li', { text: 'Double-click Drive-In Projector on your desktop.' }),
+          el('li', { text: 'Type the title, then the number of your app.' }),
+          el('li', { text: 'Press Play, and come talk. Close the projector\'s window to end the show.' })),
+        el('p', { class: 'hint', text: 'Showing from a browser? Use a browser window just for the Drive-In: a browser plays all its tabs together.' })),
       el('form', {
         class: 'start-show',
         onsubmit: async (ev) => {
@@ -82,9 +92,9 @@
           } catch (e) { toast(e.message) }
         }
       },
-      el('label', { for: 'show-title' }, 'Start a show', name),
+      el('label', { for: 'show-title' }, 'Or start a show from here (the projector can also do it)', name),
       el('fieldset', {}, el('legend', { text: 'What are you showing?' }),
-        el('label', { class: 'radio' }, prog, ' Another program (a game, a player): start the Drive-In Projector from its desktop shortcut'),
+        el('label', { class: 'radio' }, prog, ' An app (a game, a player): then run the Drive-In Projector'),
         el('label', { class: 'radio' }, tab, ' A browser tab (coming next)')),
       el('button', { type: 'submit', class: 'primary', text: 'Start the show' })),
       projectors())

@@ -2,20 +2,23 @@
 # Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
 """The Drive-In projector: one program's sound, turned into words, sent to the Drive-In's screen.
 
-Windows 10 (2004) or later. On the keeper's own computer, beside the local speech-to-text helper (whisper_service.py):
+Windows 10 (2004) or later, on the keeper's own computer. The keeper's routine (11-01): open the show and pause it,
+start this, type the title, pick the app, press Play, go and talk. It starts the local speech-to-text helper
+(whisper_service.py) by itself, opens the show on the Beach, and ends it when its window closes.
 
     python -E -P projector.py claim --config <projector.json>     # once: the code from the Drive-In page
-    python -E -P projector.py run --config <projector.json> [--title "What's on"]
+    python -E -P projector.py run --config <projector.json>
 
 What it captures (Pharos, 11-01), fail closed:
 - ONE chosen program's sound and its child processes (Windows' per-process loopback), and nothing else. There is no
   code here for the whole computer's sound or for a microphone, so there is nothing to fall back to: if the chosen
-  program can't be captured, the show doesn't start.
-- The list shows only programs making sound right now, with their window titles; calls and chat programs are refused
-  (DENY). A browser plays every tab through one process, so show from a browser used only for the Drive-In (its own
-  profile), never the one with a call open in another tab.
-- When the program closes, capture stops: pick again. The console says ON AIR while it captures; Ctrl+C stops it.
-  After IDLE_STOP_S with no speech it stops by itself.
+  program can't be captured, the show doesn't start. Capture can start while the show is paused, so the first words
+  are heard.
+- The list shows open apps (those playing marked); calls, chat programs and anything running one are never listed
+  (DENY, the whole tree). Picking the app is the choice to capture it: there's no second question. A browser plays
+  every tab through one process, so show from a browser window used only for the Drive-In.
+- When the program closes, capture stops. The console says ON AIR while it captures; closing it or Ctrl+C ends the
+  show. After IDLE_STOP_S with no speech it stops by itself.
 
 Where the words go: the local helper only (127.0.0.1), then the one Beach in the config, with the projector's own
 narrow sign-in (it can open a show, send its words and end it, nothing else). The sign-in is kept encrypted for this
@@ -417,62 +420,158 @@ def denied_in_tree(pid: int, deny: set[str]) -> list[str]:
     return out
 
 
+BROWSERS = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
+
+
+def open_programs() -> list[dict]:
+    """Programs with a visible, titled window: the show can be picked while it's paused, before it makes any sound
+    (capture starts on a silent program and hears it from the first word). Those playing right now are marked."""
+    import psutil
+    user32 = ctypes.windll.user32
+    found: dict[int, dict] = {}
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def each(hwnd, _):
+        if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, byref(pid))
+            if pid.value and pid.value not in found:
+                try:
+                    proc = psutil.Process(pid.value)
+                    found[pid.value] = {"pid": pid.value, "name": proc.name(), "created": proc.create_time()}
+                except psutil.Error:
+                    pass
+        return True
+
+    user32.EnumWindows(each, 0)
+    playing = {p["pid"] for p in sounding_programs()}
+    out = []
+    for pid, p in found.items():
+        p["titles"] = window_titles({pid})
+        p["playing"] = pid in playing or any(c in playing for c in _children(pid))
+        out.append(p)
+    return sorted(out, key=lambda p: (not p["playing"], p["name"].lower()))
+
+
+def _children(pid: int) -> list[int]:
+    import psutil
+    try:
+        return [c.pid for c in psutil.Process(pid).children(recursive=True)]
+    except psutil.Error:
+        return []
+
+
 def pick(programs: list[dict], deny: set[str] = DENY) -> dict | None:
-    allowed, refused = [], []
-    for p in programs:
-        bad = [p["name"]] if p["name"].lower() in deny else denied_in_tree(p["pid"], deny)
-        (refused if bad else allowed).append({**p, "why": bad})
-    for p in refused:
-        print(f"  (not offered: {p['name']}: it is, or runs, {', '.join(sorted(set(p['why'])))}, which is never captured)")
+    """One question: which app is the show. Picking it IS choosing to capture its sound (the keeper, 11-01: a second
+    "capture it?" cost her a whole playthrough). Calls, chat programs and anything running them are never listed."""
+    allowed = [p for p in programs
+               if p["name"].lower() not in deny and not denied_in_tree(p["pid"], deny)]
     if not allowed:
-        print("Nothing is playing sound right now. Start the video or game, then run this again.")
+        print("No app to show is open. Open your video or game first, then start the projector again.")
         return None
     for i, p in enumerate(allowed, 1):
-        print(f"  {i}. {p['name']} (process {p['pid']}): " + (" | ".join(p["titles"]) or "no window title"))
-    choice = input("Which one is the show? (number, or Enter to cancel): ").strip()
+        mark = "  (playing now)" if p.get("playing") else ""
+        print(f"  {i}. {p['name']}: " + (" | ".join(p["titles"]) or "no window title") + mark)
+    choice = input("Which app is the show? (its number): ").strip()
     if not choice.isdigit() or not 1 <= int(choice) <= len(allowed):
+        print("No app picked.")
         return None
     p = allowed[int(choice) - 1]
-    if p["name"].lower() in ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe"):
-        print("A browser plays EVERY tab through one process: this should be a browser window used only for the "
-              "Drive-In (its own profile), with no call or other sound in another tab.")
-        if input("Is it? (yes/no): ").strip().lower() != "yes":
-            return None
-    if input(f"Capture {p['name']}: {' | '.join(p['titles']) or 'no title'}? (yes/no): ").strip().lower() != "yes":
-        return None
+    if p["name"].lower() in BROWSERS:
+        print("(A browser plays every tab through one program: keep calls and other sound out of its other tabs.)")
     return p
 
 
+def helper_up(cfg: dict) -> bool:
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", int(cfg["whisper_port"]), timeout=2)
+        conn.request("GET", "/health")
+        return conn.getresponse().status == 200
+    except OSError:
+        return False
+
+
+def start_helper(cfg: dict):
+    """Start the local speech-to-text helper if it isn't running, and wait until it answers. Returns the process we
+    started (to stop at the end), or None if one was already running."""
+    if helper_up(cfg):
+        return None
+    model = cfg.get("model")
+    if not model or not os.path.isdir(model):
+        sys.exit('set "model" in the config to a faster-whisper model folder (e.g. E:\\\\DriveIn\\\\models\\\\...)')
+    import subprocess
+    u = cfg["_beach"]
+    origin = f"{u.scheme}://{u.netloc}"
+    service = os.path.join(os.path.dirname(os.path.abspath(__file__)), "whisper_service.py")
+    proc = subprocess.Popen([sys.executable, "-E", "-P", service, "--model", model, "--beach-origin", origin,
+                             "--port", str(cfg["whisper_port"])],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
+                            creationflags=0x08000000)       # CREATE_NO_WINDOW: no extra window to juggle
+    print("Starting the speech helper (the first time takes a moment)...", end="", flush=True)
+    for _ in range(180):
+        if proc.poll() is not None:
+            err = (proc.stderr.read() or b"").decode(errors="replace").strip().splitlines()[-3:]
+            sys.exit("\nThe speech helper didn't start:\n" + "\n".join(err))
+        if helper_up(cfg):
+            print(" ready.")
+            return proc
+        time.sleep(1)
+    proc.terminate()
+    sys.exit("\nThe speech helper took too long to start.")
+
+
 def run(cfg: dict, title: str | None) -> int:
+    """The keeper's routine (11-01): open the show paused, start this, type the title, pick the app, press Play.
+    The helper starts by itself; the show opens on the Beach by itself; closing this window ends it."""
     token = read_token(cfg)
     deny = cfg["_deny"]
-    # Many programs (Blender, for one) only appear to Windows while they're actually playing sound: wait for the
-    # show to start rather than giving up (the keeper, 11-01: Blender, paused, wasn't in the list).
-    programs = [p for p in sounding_programs() if p["name"].lower() not in deny]
-    if not programs:
-        print("Nothing is making sound yet. Press Play on your show; waiting for it (Ctrl+C to stop)...")
-        try:
-            while not programs:
-                time.sleep(2)
-                programs = [p for p in sounding_programs() if p["name"].lower() not in deny]
-        except KeyboardInterrupt:
-            print("No show started.")
+    helper = start_helper(cfg)
+    try:
+        title = title or input("Title of the show: ").strip()
+        if not title:
+            print("No title, no show.")
             return 1
-    choice = pick(sounding_programs(), deny)
-    if not choice:
-        print("No show started.")
-        return 1
-    if denied_in_tree(choice["pid"], deny):   # it started something while you were choosing
-        print("That program now runs something that is never captured. No show started.")
-        return 1
-    cap = ProcessCapture(choice["pid"], choice["name"], choice["created"])
-    if title:
+        choice = pick(open_programs(), deny)
+        if not choice:
+            return 1
+        if denied_in_tree(choice["pid"], deny):   # it started something while you were choosing
+            print("That app now runs something that is never captured. No show started.")
+            return 1
+        cap = ProcessCapture(choice["pid"], choice["name"], choice["created"])
         st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
-        if st not in (200, 409):
+        if st == 409:
+            print("(A show was already open on the Beach: its screen gets these words.)")
+        elif st != 200:
             cap.close()
-            sys.exit(f"the Beach refused: {r.get('message') or st}")
+            print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
+            return 1
+        return _on_air(cfg, token, deny, choice, cap)
+    finally:
+        if helper is not None:
+            helper.terminate()
+
+
+def _end_on_close(cfg: dict, token: str) -> None:
+    """Closing the projector's window ends the show on the Beach (Windows gives a few seconds to do it)."""
+    handler_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+    def on_event(event):
+        if event in (2, 5, 6):          # CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT
+            try:
+                beach_call(cfg, "POST", "/drivein/show/end", None, token)
+            except OSError:
+                pass
+        return False
+
+    _end_on_close.keep = handler_type(on_event)    # keep a reference, or Windows calls freed memory
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(_end_on_close.keep, True)
+
+
+def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCapture") -> int:
+    _end_on_close(cfg, token)
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector")
-    print(f"\n*** ON AIR: capturing {choice['name']} (process {choice['pid']}) and nothing else. Ctrl+C stops. ***\n")
+    print(f"\n*** ON AIR: listening to {choice['name']} only. Press Play whenever you're ready. ***")
+    print("    Close this window (or Ctrl+C) to end the show.\n")
     buf, last_speech, tree_at = b"", time.monotonic(), time.monotonic()
     try:
         while True:
@@ -496,7 +595,8 @@ def run(cfg: dict, title: str | None) -> int:
                         last_speech = time.monotonic()
                         st, r = beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
                         if st == 409:
-                            print("Nothing is showing on the Beach: start the show on the Drive-In page (or --title).")
+                            print("The show was ended on the Beach: stopping.")
+                            break
                         elif st != 200:
                             print(f"The Beach refused the lines: {r.get('message') or st}")
                         else:
@@ -511,9 +611,21 @@ def run(cfg: dict, title: str | None) -> int:
     finally:
         cap.close()
         ctypes.windll.kernel32.SetConsoleTitleW("Drive-In projector")
-    if input("End the show on the Beach too? (yes/no): ").strip().lower() == "yes":
-        st, r = beach_call(cfg, "POST", "/drivein/show/end", None, token)
-        print("The show has ended." if st == 200 else f"(the Beach said: {r.get('message') or st})")
+    # The last words still held (up to a piece's length) go out before the show ends; found in rehearsal (11-01): a
+    # show stopped mid-piece lost its final line.
+    buf += cap.take()
+    if buf and rms(buf) >= QUIET_RMS / 3:
+        try:
+            lines = transcribe(cfg, buf[: 29 * RATE * 2])
+            if lines:
+                beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
+                for ln in lines:
+                    print("  >", ln)
+        except (OSError, RuntimeError):
+            pass
+    st, r = beach_call(cfg, "POST", "/drivein/show/end", None, token)
+    print("The show has ended. Thanks for projecting!" if st in (200, 409) else
+          f"(the Beach said: {r.get('message') or st})")
     return 0
 
 
