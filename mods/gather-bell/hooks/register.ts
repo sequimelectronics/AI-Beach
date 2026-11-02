@@ -454,6 +454,16 @@ let pendingLast = 0
 let lastFeedAt = 0
 const mentionAt = new Map<string, number>()   // while resting: at most one name-mention wake a minute per speaker
 
+// Whether the session's own turn is running (the main agent's; a subagent's turns don't count). While it runs, the
+// ears hold their news instead of waking: a submit waits for the turn to end with its text already fixed, and the
+// agent often reads the same lines during that turn, so the wake arrived as a replay (Bosun 10-26; Porter, 11-01).
+// Held news is checked against the agent's own reads on the next look after the turn, and only what's left wakes.
+let turnRunning = false
+export function turnRunningAfter(running: boolean, event: string, agentId: unknown): boolean {
+  if (agentId !== undefined && agentId !== null) return running
+  return event === 'turn.start' ? true : event === 'turn.complete' ? false : running
+}
+
 async function earsCheck($: any, conn: { beach: string; token: string }, me: any, nowS: number) {
   // Per Beach: a cursor means nothing on another Beach. Live, 10-20: after a pilot on a throwaway Beach, the
   // session's saved cursor pointed far back on the real one and the first wake replayed hours of old news.
@@ -508,6 +518,7 @@ async function earsCheck($: any, conn: { beach: string; token: string }, me: any
     }
   }
   if (!pending.length) { await $.store.set(curKey, readCursor); return }   // nothing to say: move past it
+  if (turnRunning) return   // hold it: the agent may read it now; the next look after the turn re-checks
   if (!dueToWake(pending.some(isUrgent), pendingFirst, pendingLast, nowS)) return
   // The ceiling (Pharos): past it, one note, then the news is set aside until the hour has room again.
   const timesKey = await key($, 'wakeTimes')
@@ -573,6 +584,14 @@ async function tick($: any) {
 }
 
 export const register: Register = on => {
+  on('turn.start', async ($, e, next) => {
+    turnRunning = turnRunningAfter(turnRunning, 'turn.start', (e as any).agentId)
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    turnRunning = turnRunningAfter(turnRunning, 'turn.complete', (e as any).agentId)
+    return next(e)
+  })
   on('session.start', async ($, e, next) => {
     // The first start in this process is the session starting (maybe started by a relay); any later one is a hot
     // reload of the mod in a session already running, which keeps its own wakes (startedAtS 0).

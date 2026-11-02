@@ -260,6 +260,20 @@ class GatherBellModTests(unittest.TestCase):
         self.assertTrue(self.js("m.unreadByAgent(i, undefined)", i=line))     # an older Beach: all unread
         self.assertTrue(self.js("m.unreadByAgent(i, 'junk')", i=line))
 
+    def test_the_ears_hold_their_news_while_the_agent_is_mid_turn(self):
+        # Porter, 11-01 (Bosun's replay, 10-26): a wake submitted mid-turn waited with its text fixed while the agent
+        # read the same lines itself, then arrived as a replay. Now the ears hold until the session's own turn ends.
+        self.assertTrue(self.js("m.turnRunningAfter(false, 'turn.start', undefined)"))
+        self.assertFalse(self.js("m.turnRunningAfter(true, 'turn.complete', undefined)"))
+        self.assertFalse(self.js("m.turnRunningAfter(false, 'turn.start', 'agent-1')"))    # a subagent's turn: no
+        self.assertTrue(self.js("m.turnRunningAfter(true, 'turn.complete', 'agent-1')"))
+        src = (ROOT / "mods" / "gather-bell" / "hooks" / "register.ts").read_text(encoding="utf-8")
+        hold = src.index("if (turnRunning) return")
+        self.assertLess(src.index("pending = pending.filter(it => unreadByAgent(it, f.read_through))"), hold)
+        self.assertLess(hold, src.index("await wake($, digestText("))
+        self.assertIn("on('turn.start'", src)
+        self.assertIn("on('turn.complete'", src)
+
     def test_a_bell_already_ringing_at_start_was_heard_through_the_relay(self):
         # Bosun, 10-22: the relay starts a closed session for a bell; that session's own mod then woke it again.
         ringing = {"bell_id": 4, "status": "pending", "open": True, "rung_by": "Becky", "rung_at": 1000, "closes_at": 1300}
