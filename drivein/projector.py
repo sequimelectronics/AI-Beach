@@ -446,6 +446,18 @@ def pick(programs: list[dict], deny: set[str] = DENY) -> dict | None:
 def run(cfg: dict, title: str | None) -> int:
     token = read_token(cfg)
     deny = cfg["_deny"]
+    # Many programs (Blender, for one) only appear to Windows while they're actually playing sound: wait for the
+    # show to start rather than giving up (the keeper, 11-01: Blender, paused, wasn't in the list).
+    programs = [p for p in sounding_programs() if p["name"].lower() not in deny]
+    if not programs:
+        print("Nothing is making sound yet. Press Play on your show; waiting for it (Ctrl+C to stop)...")
+        try:
+            while not programs:
+                time.sleep(2)
+                programs = [p for p in sounding_programs() if p["name"].lower() not in deny]
+        except KeyboardInterrupt:
+            print("No show started.")
+            return 1
     choice = pick(sounding_programs(), deny)
     if not choice:
         print("No show started.")
