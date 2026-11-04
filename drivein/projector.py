@@ -28,6 +28,7 @@ Windows user (DPAPI). The sound itself never leaves the computer and is never sa
 from __future__ import annotations
 
 import argparse
+import collections
 import ctypes
 import http.client
 import json
@@ -904,7 +905,8 @@ def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues
                 print("  >", ln)
         return code != 409
 
-    loop = start_picture_loop(cfg, token, pics, window_grabber(choice["pid"]), send_seen) if pics else None
+    heard = collections.deque(maxlen=8)          # the captions just shown: the pictures' story so far
+    loop = start_picture_loop(cfg, token, pics, window_grabber(choice["pid"]), send_seen, heard) if pics else None
     try:
         while True:
             if not psutil.pid_exists(choice["pid"]):
@@ -932,6 +934,7 @@ def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues
                 else:
                     for ln in due:
                         print("  >", ln)
+                    heard.extend(due)
             if index >= len(cues) and st["state"] != "playing":
                 print("The captions are done: the show ends.")
                 break
@@ -1008,10 +1011,12 @@ def make_pictures(cfg: dict):
         return None
 
 
-def start_picture_loop(cfg: dict, token: str, describer_, grab, send):
+def start_picture_loop(cfg: dict, token: str, describer_, grab, send, heard=None):
     if describer_ is None:
         return None
     _, _, seeing = _picture_modules()
+    heard_lines = heard if heard is not None else []
+    story = bool(cfg["vision"].get("story_so_far", True))     # off: each picture described on its own, as at first
 
     def wants() -> bool:
         st, r = beach_call(cfg, "GET", "/drivein/projector/wants", None, token)
@@ -1021,7 +1026,8 @@ def start_picture_loop(cfg: dict, token: str, describer_, grab, send):
     loop = seeing.PictureLoop(grab=grab, describer=describer_, send=send, wants=wants,
                               allowed_words=words if isinstance(words, list) else [words],
                               short_every=int(cfg["vision"].get("short_every_s", seeing.SHORT_EVERY_S)),
-                              long_every=int(cfg["vision"].get("long_every_s", seeing.LONG_EVERY_S)))
+                              long_every=int(cfg["vision"].get("long_every_s", seeing.LONG_EVERY_S)),
+                              heard=lambda: list(heard_lines), story=story)
     loop.start()
     return loop
 
@@ -1146,6 +1152,7 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
         print("    (Waiting for you to share the tab in the browser page.)")
     buf, last_speech, tree_at = b"", time.monotonic(), time.monotonic()
     held, held_at, beach_ended = None, 0.0, False
+    heard = collections.deque(maxlen=8)          # the show's recent spoken lines: the pictures' story so far
 
     def send(lines: list[str]) -> bool:
         """Put lines on the screen; False when the show has been ended on the Beach."""
@@ -1160,9 +1167,10 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
         else:
             for ln in lines:
                 print("  >", ln)
+            heard.extend(ln for ln in lines if not ln.startswith("(seen) "))
         return True
 
-    loop = start_picture_loop(cfg, token, pics, grab, send) if grab else None
+    loop = start_picture_loop(cfg, token, pics, grab, send, heard) if grab else None
     try:
         while True:
             if not cap.alive():

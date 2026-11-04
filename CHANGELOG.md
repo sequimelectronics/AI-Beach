@@ -13,6 +13,11 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Feature**: Drive-In pictures get the story so far: each picture goes to the model with its last two descriptions
+  and the show's last four spoken lines (`"story_so_far": false` turns it off), and names the show itself says are no
+  longer replaced by the name net (a title card the narrator had already named came out "someone").
+- **Fix**: the projector loads its picture modules by path, so pictures work when it runs with `python -P` (as its
+  shortcut does).
 - **Feature**: the Drive-In can describe the picture. With a vision model set up, the projector puts `(seen)` lines
   on the screen (a short one every 15 s and a longer one every 30 s, only when the picture changed), and watchers can
   ask for a look with `/look` (`POST /drivein/look`, once a minute). The default is MiniCPM-V 4.7 1B, the winner of a

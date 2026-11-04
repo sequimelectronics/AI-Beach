@@ -44,8 +44,12 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
   magic act gets many. A black or blank picture is skipped. A `/look` request gets a longer line at once.
 - **The describer** is the swap point: one picture in, one plain line out. It lives in
   [`describer.py`](describer.py), and the rest of the projector doesn't care which model is behind it.
+- **The story so far.** A single picture can't show what's going on (in a magic act, two people dancing by a "large
+  object" were really walking into a giant fan). So each picture goes to the model with its last two descriptions and
+  the show's last four spoken lines, marked as context only. `"story_so_far": false` turns that off.
 - **The name net.** Every description, from any model, goes through `scrub()`, which replaces what looks like a
-  person's name with "someone". Words in your `"words"` list (names the show itself uses) are left alone.
+  person's name with "someone". Names the show itself supplies are left alone: those in your `"words"` list, and
+  any name in the show's recent spoken lines (so a title card the narrator has already named stays readable).
 
 ## The default setup
 
@@ -127,7 +131,9 @@ runs it once per picture, **without a shell**:
 
 The contract:
 
-- **In:** the picture as JPEG bytes on standard input, and one last argument: `short` or `long`.
+- **In:** the picture as JPEG bytes on standard input, and one last argument: `short` or `long`. The story so far
+  (recent lines, plain text, up to 800 characters) is in the environment variable `DRIVEIN_CONTEXT`, to use or
+  ignore.
 - **Out:** one line of text on standard output (the projector tidies it and runs the name net over it).
 - **Exit code 0** means it worked; anything else (or taking longer than `timeout_s`) is reported in the projector's
   window and that picture is skipped. After 5 failures in a row, pictures stop for the show and the words carry on.
@@ -164,6 +170,7 @@ All under `"vision"` in `projector.json`.
 | `prompts` | llama-server, openai | built in | `{"short": "...", "long": "..."}`: replace either prompt |
 | `timeout_s` | all | `60` | How long one description may take |
 | `short_every_s`, `long_every_s` | all | `15`, `30` | The pace |
+| `story_so_far` | all | `true` | Send recent lines with each picture as context |
 | `off` | all | `false` | `true` turns pictures off without deleting the section |
 
 ## Tips from the bake-off
@@ -198,7 +205,13 @@ What we learned, in case you try your own:
    llama.cpp b12024 (October 31, 2026) than on a June 2026 build.
 7. **Processor only is fine at this pace.** Every small model kept up with a line every 15 seconds without a
    graphics card.
-8. **A model with no prompt (like Florence-2) needs the name net most.** Its short caption is all lower case, which
+8. **Watching a whole act (the first picture show):** each picture alone missed the point of the act, so the story
+   so far now goes along. A small model can still flip details between pictures (a man became a woman in one test);
+   short lines and the spoken words around them keep that in proportion.
+9. **Run the player full screen.** In a window, the picture includes the player's buttons, and the model may
+   describe them ("playback controls visible"). On two monitors, keep the player full screen on one and the chat on
+   the other, so typing doesn't pause it.
+10. **A model with no prompt (like Florence-2) needs the name net most.** Its short caption is all lower case, which
    the net can't recognize as a name: use its detailed caption, or rewrite its output with an instruction model.
 
 ## Privacy and safety

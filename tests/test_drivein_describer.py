@@ -168,22 +168,26 @@ class PictureLoopTests(unittest.TestCase):
         self.asked = [False]
         self.sent: list[str] = []
         self.calls: list[str] = []
+        self.contexts: list[str] = []
+        self.spoken: list[str] = []
         loop_self = self
 
         class Fake:
             fail = 0
 
-            def describe(self, jpeg, detail):
+            def describe(self, jpeg, detail, context=""):
                 if Fake.fail:
                     Fake.fail -= 1
                     raise describer.DescriberError("no model")
                 loop_self.calls.append(detail)
+                loop_self.contexts.append(context)
                 return "Michael Jackson waves." if detail == "long" else "A man waves."
 
         self.Fake = Fake
         self.loop = seeing.PictureLoop(grab=lambda: self.picture, describer=Fake(),
                                        send=lambda lines: self.sent.extend(lines) or True,
-                                       wants=lambda: self.asked[0], clock=lambda: self.now[0], say=lambda m: None)
+                                       wants=lambda: self.asked[0], clock=lambda: self.now[0], say=lambda m: None,
+                                       heard=lambda: self.spoken)
 
     def scene(self, n):
         img = self.Image.new("RGB", (640, 360), (20 * n % 255, 40, 90))
@@ -209,6 +213,31 @@ class PictureLoopTests(unittest.TestCase):
         self.picture = self.scene(4)
         self.assertEqual(L.step(), "(seen) someone waves.")             # 31 s since the last long: long again
         self.assertEqual(self.calls, ["long", "short", "long", "long"])
+
+    def test_the_story_so_far_and_names_the_show_says(self):
+        # The keeper (11-03): "the poor thing would have to have a running narrative"; and the title card's name
+        # (said aloud by the show's narrator) was turned into "someone".
+        L = self.loop
+        self.assertEqual(L.step(), "(seen) someone waves.")         # nobody said the name: still scrubbed
+        self.assertEqual(self.contexts[-1], "")                     # nothing before the first picture
+        self.spoken.extend(["Tonight, Michael Jackson will vanish.", "I call this the fan."])
+        self.now[0] = 31
+        self.picture = self.scene(2)
+        self.assertEqual(L.step(), "(seen) Michael Jackson waves.")  # the show said it: it stays
+        ctx = self.contexts[-1]
+        self.assertIn("(seen) someone waves.", ctx)                 # its own last description
+        self.assertIn("I call this the fan.", ctx)                  # and what was just said
+
+    def test_context_helpers(self):
+        self.assertEqual(describer.names_in(["Tonight, Whatsit Doohicky is making me disappear.",
+                                             "The Magic of Whatsit Doohicky", "A man waves."]),
+                         {"Whatsit Doohicky"})
+        p = describer.with_context("Describe it.", "(seen) A fan.\nAnd now the fan spins.")
+        self.assertTrue(p.startswith("Describe it."))
+        self.assertIn("for context only", p)
+        self.assertIn("And now the fan spins.", p)
+        self.assertEqual(describer.with_context("Describe it.", "  "), "Describe it.")
+        self.assertLessEqual(len(describer.with_context("x", "y" * 5000)), describer.CONTEXT_MAX + 200)
 
     def test_blank_pictures_and_a_broken_model(self):
         L = self.loop

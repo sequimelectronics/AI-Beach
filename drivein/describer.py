@@ -112,6 +112,34 @@ def scrub(text: str, allowed: set[str] | frozenset = frozenset()) -> str:
     return _CAP_RUN.sub(swap, text)
 
 
+def names_in(lines) -> set[str]:
+    """Name-shaped runs in the show's own words ("Tonight, Firstname Lastname will..."): names the SHOW supplies, which
+    scrub() then lets through (the keeper, 11-03: the title card said a name the narration had said aloud, and the net
+    turned it into "someone"). Names a model guesses from a face are still caught."""
+    found: set[str] = set()
+    for line in lines:
+        for m in _CAP_RUN.finditer(str(line)):
+            words = re.split(r"[ -]", m.group(1))
+            if words[0].lower() in _NOT_NAMES:          # "The Magic" -> keep looking inside the run
+                words = words[1:]
+            if len(words) >= 2 and not all(w.lower() in _NOT_NAMES for w in words):   # a name = 2+ capitalized words
+                found.add(" ".join(words))
+    return found
+
+
+CONTEXT_MAX = 800     # characters of "what happened just before" handed to the model with each picture
+
+
+def with_context(prompt: str, context: str) -> str:
+    """The prompt plus the story so far (the keeper, 11-03: "the poor thing would have to have a running narrative to make
+    sense of this": each picture alone never showed that the act was two people walking into a giant fan)."""
+    context = (context or "").strip()[-CONTEXT_MAX:]
+    if not context:
+        return prompt
+    return (prompt + "\n\nWhat happened just before, for context only (describe what you see in THIS picture; "
+            "don't repeat these lines):\n" + context)
+
+
 # --------------------------------------------------------------------------------------------- the three ways
 
 def _host_is_local(host: str) -> bool:
@@ -138,11 +166,11 @@ class OpenAIDescriber:
         self.prompts = {**DEFAULT_PROMPTS, **(prompts or {})}
         self.extra = extra or {}
 
-    def describe(self, jpeg: bytes, detail: str = "short") -> str:
+    def describe(self, jpeg: bytes, detail: str = "short", context: str = "") -> str:
         body = {
             "messages": [{"role": "user", "content": [
                 {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}},
-                {"type": "text", "text": self.prompts[detail]}]}],
+                {"type": "text", "text": with_context(self.prompts[detail], context)}]}],
             "max_tokens": 150, "temperature": 0.2,
             # Many servers pass this to the model's chat template: "answer, don't reason first" for thinking models.
             "chat_template_kwargs": {"enable_thinking": False},
@@ -226,6 +254,7 @@ class LlamaServerDescriber(OpenAIDescriber):
 
 class CommandDescriber:
     """Your own program: JPEG on stdin, the detail ("short" or "long") as its last argument, one line on stdout.
+    The story so far (recent lines, plain text) is in the environment variable DRIVEIN_CONTEXT, to use or ignore.
     No shell is used; the program is a list of arguments, and it gets the timeout to answer."""
 
     def __init__(self, argv: list, timeout: float = DEFAULT_TIMEOUT_S):
@@ -236,11 +265,12 @@ class CommandDescriber:
         self.argv = argv
         self.timeout = timeout
 
-    def describe(self, jpeg: bytes, detail: str = "short") -> str:
+    def describe(self, jpeg: bytes, detail: str = "short", context: str = "") -> str:
         flags = 0x08000000 if os.name == "nt" else 0
+        env = {**os.environ, "DRIVEIN_CONTEXT": (context or "")[-CONTEXT_MAX:]}
         try:
             r = subprocess.run(self.argv + [detail], input=jpeg, capture_output=True, timeout=self.timeout,
-                               creationflags=flags)
+                               creationflags=flags, env=env)
         except subprocess.TimeoutExpired as e:
             raise DescriberError(f"your describe command took longer than {self.timeout} s") from e
         except OSError as e:

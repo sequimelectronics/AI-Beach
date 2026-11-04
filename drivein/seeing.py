@@ -9,7 +9,8 @@ with /look. Lines go to the screen as "(seen) ...". Pictures are kept in memory 
 Everything model-specific lives in describer.py; this loop only needs four things handed to it, so it works the same
 for a program window, a shared browser tab, or anything else that can produce a picture:
     grab()          -> a PIL image of the show right now, or None
-    describe(jpeg, detail) -> one line (any describer from describer.make_describer)
+    describe(jpeg, detail, context) -> one line (any describer from describer.make_describer)
+    heard()         -> the show's recent spoken lines (optional: the story so far + names the show says)
     send(lines)     -> put lines on the screen; False when the show has ended
     wants()         -> True when a watcher asked for a look (the Beach's GET /drivein/projector/wants)
 """
@@ -26,13 +27,21 @@ SHORT_EVERY_S = 15
 LONG_EVERY_S = 30
 POLL_S = 3
 GIVE_UP_AFTER = 5           # describer failures in a row before pictures stop for this show (words carry on)
+HEARD_LINES = 4             # the show's last spoken lines handed over with each picture
+SEEN_LINES = 2              # this loop's own last descriptions handed over too
 
 
 class PictureLoop(threading.Thread):
     def __init__(self, grab, describer, send, wants=None, allowed_words=(), short_every=SHORT_EVERY_S,
-                 long_every=LONG_EVERY_S, poll=POLL_S, say=print, clock=time.monotonic, sleep=None):
+                 long_every=LONG_EVERY_S, poll=POLL_S, say=print, clock=time.monotonic, sleep=None, heard=None,
+                 story=True):
         super().__init__(name="drivein-pictures", daemon=True)
         self.grab, self.describer, self.send, self.wants = grab, describer, send, wants or (lambda: False)
+        # The story so far (the keeper, 11-03): the show's last spoken lines and this loop's own last descriptions go
+        # with each picture, and names the show itself says are let through the name net.
+        self.heard = heard or (lambda: [])
+        self.story = story                    # False: no story so far in the prompt (names the show says still pass)
+        self.recent_seen: list[str] = []
         self.allowed = {w.strip() for w in allowed_words if str(w).strip()}
         self.short_every, self.long_every, self.poll = short_every, long_every, poll
         self.say, self.clock = say, clock
@@ -65,7 +74,12 @@ class PictureLoop(threading.Thread):
             return None                                           # same picture: nothing new to say
         detail = "long" if (asked or due_long) else "short"
         try:
-            line = self.describer.describe(_frames.to_jpeg(img), detail)
+            spoken = [str(s) for s in (self.heard() or [])][-HEARD_LINES:]
+        except Exception:
+            spoken = []
+        context = "\n".join([f"(seen) {s}" for s in self.recent_seen] + spoken) if self.story else ""
+        try:
+            line = self.describer.describe(_frames.to_jpeg(img), detail, context=context)
         except _describer.DescriberError as e:
             self.failures += 1
             self.say(f"(pictures: {e})")
@@ -74,9 +88,10 @@ class PictureLoop(threading.Thread):
                 self.stop()
             return None
         self.failures = 0
-        line = _describer.scrub(line, self.allowed)
+        line = _describer.scrub(line, self.allowed | _describer.names_in(spoken))
         if not line:
             return None
+        self.recent_seen = (self.recent_seen + [line])[-SEEN_LINES:]
         self.last_thumb, self.last_short = t, now
         if detail == "long":
             self.last_long = now
