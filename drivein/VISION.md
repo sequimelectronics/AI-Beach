@@ -232,10 +232,15 @@ What we learned, in case you try your own:
    they wear or how they look") without examples, or use obvious placeholders.
 10. **Use "the person" when there's one.** Without "man" or "woman" in the instructions, the model stopped guessing
    the performer's gender from his hair.
-9. **Run the player full screen.** In a window, the picture includes the player's buttons, and the model may
+11. **Say what you want, not what you don't.** Asked to "mention lighting only if nothing else is happening", a small
+   model mentioned lighting in every single line; given a list of impossible things to watch for, it recited
+   "nothing appears or disappears" over and over. Whatever words your prompt holds, it repeats. "Focus on what people
+   and things are doing" and "describe anything unusual exactly as it looks, even if it seems impossible" worked
+   better (and the second suits sci-fi and fantasy shows too).
+12. **Run the player full screen.** In a window, the picture includes the player's buttons, and the model may
    describe them ("playback controls visible"). On two monitors, keep the player full screen on one and the chat on
    the other, so typing doesn't pause it.
-10. **A model with no prompt (like Florence-2) needs the name net most.** Its short caption is all lower case, which
+13. **A model with no prompt (like Florence-2) needs the name net most.** Its short caption is all lower case, which
    the net can't recognize as a name: use its detailed caption, or rewrite its output with an instruction model.
 
 ### What to expect (start with something easy)
