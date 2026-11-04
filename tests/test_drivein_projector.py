@@ -64,8 +64,16 @@ class ProjectorTests(unittest.TestCase):
         self.assertIn(me, [n.lower() for n in projector.denied_in_tree(os.getpid(), {me})])
         self.assertEqual(projector.denied_in_tree(os.getpid(), {"nothing-like-this.exe"}), [])
         self.assertEqual(projector.denied_in_tree(999_999_999, {me}), [])          # gone: nothing to say
-        picked = projector.pick([{"pid": os.getpid(), "name": "harmless.exe", "created": 0, "titles": []}], {me})
-        self.assertIsNone(picked)                                                # refused before any question
+        import builtins
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+        out = io.StringIO()
+        with mock.patch.object(builtins, "input", return_value="1"), redirect_stdout(out):
+            picked = projector.pick([{"pid": os.getpid(), "name": "harmless.exe", "created": 0, "titles": []}], {me})
+        self.assertIsNone(picked)                                                # never offered: "1" picks nothing
+        self.assertIn("not offered: harmless.exe, because it's running", out.getvalue())   # and the list says why
+        self.assertIn("0. A browser tab", out.getvalue())                        # a tab is always possible
 
     def test_picking_the_app_is_the_only_question(self):
         # The keeper, 11-01: "don't ask them to capture the audio, we already picked it". One question, a number.
@@ -183,6 +191,50 @@ class ProjectorTests(unittest.TestCase):
         body = src[start:src.index("def run(", start)]
         self.assertIn("secrets.token_urlsafe(24)", body)
         self.assertNotIn("input(", body)
+
+    def test_the_tab_page_takes_only_its_own_pages_samples(self):
+        # The in-browser projector (11-03): a page on 127.0.0.1 hands one shared tab's sound to the projector.
+        import http.client
+        from projector import TabCapture
+        tab = TabCapture(0)
+        try:
+            def call(method, path, body=b"", host=None, origin=None, key=None, ctype="application/octet-stream"):
+                c = http.client.HTTPConnection("127.0.0.1", tab.port, timeout=5)
+                h = {"Host": host or tab.host, "Content-Type": ctype}
+                if origin is not False:
+                    h["Origin"] = origin or tab.origin
+                h["X-Key"] = tab.key if key is None else key
+                c.request(method, path, body=body if method == "POST" else None, headers=h)
+                r = c.getresponse()
+                return r.status, r.getheader("Content-Security-Policy") or "", r.read()
+            st, csp, page = call("GET", "/")
+            self.assertEqual(st, 200)
+            self.assertIn(b"Share a tab", page)
+            self.assertIn("default-src 'self'", csp)
+            self.assertEqual(call("GET", "/tabpage.js")[0], 200)
+            self.assertEqual(call("GET", "/../projector.py")[0], 404)                # only its three files
+            self.assertEqual(call("GET", "/", host="evil.example:80")[0], 421)       # no DNS rebinding
+            pcm = b"\x01\x00" * 800
+            self.assertEqual(call("POST", "/pcm", pcm, origin="http://evil.example")[0], 403)
+            self.assertEqual(call("POST", "/pcm", pcm, origin=False)[0], 403)        # no Origin: not its page
+            self.assertEqual(call("POST", "/pcm", pcm, key="guess")[0], 403)
+            self.assertEqual(call("POST", "/pcm", pcm, ctype="text/plain")[0], 415)
+            try:                                    # refused before the body is read: a 413, or the line simply cut
+                self.assertEqual(call("POST", "/pcm", b"\x00" * (300 * 1024))[0], 413)
+            except ConnectionError:
+                pass
+            self.assertEqual(call("POST", "/pcm", pcm)[0], 404)                     # nothing before sharing starts
+            self.assertTrue(tab.alive())                                             # waiting for the share
+            self.assertEqual(call("POST", "/start")[0], 204)
+            self.assertEqual(call("POST", "/pcm", pcm)[0], 204)
+            self.assertEqual(call("POST", "/pcm", pcm)[0], 204)
+            self.assertEqual(tab.take(), pcm * 2)
+            self.assertEqual(tab.take(), b"")
+            self.assertEqual(call("POST", "/stop")[0], 204)
+            self.assertFalse(tab.alive())
+            self.assertEqual(call("POST", "/pcm", pcm)[0], 410)                     # ended: the page stops too
+        finally:
+            tab.close()
 
     def test_the_word_list_reaches_the_helper_as_plain_words(self):
         import json

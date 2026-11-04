@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Feature**: the Drive-In projector can share one browser tab (option 0): it opens its own page on this computer
+  (127.0.0.1), and the browser's tab sharing sends just that tab's sound, so any browser works, extensions and all.
+  The list of apps also says why an app isn't offered.
 - **Docs**: the Drive-In README on showing from a browser (YouTube): words only by ear, a browser window just for the
   Drive-In, why a browser can be missing from the list (an extension running a command-prompt helper; use another
   browser), and the occasional split word.

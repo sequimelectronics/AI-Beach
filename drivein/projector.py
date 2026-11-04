@@ -430,6 +430,124 @@ def denied_in_tree(pid: int, deny: set[str]) -> list[str]:
 
 
 BROWSERS = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
+
+
+# ------------------------------------------------------------------------------------------- a shared browser tab
+# The keeper, 11-03: picking a whole browser captures every tab, and a browser running an extension's command-prompt
+# helper is refused, so YouTube meant a second browser. Instead, the projector serves a small page on THIS computer
+# (127.0.0.1, which browsers treat as secure, so tab sharing works without HTTPS); the browser's own picker shares ONE
+# tab, and the page posts that tab's sound here as raw 16 kHz mono samples. The page holds no Beach sign-in.
+TAB_PORT = 8795
+TAB_WAIT_S = 600             # time to share a tab after the page opens
+TAB_QUIET_S = 20             # no sound from the page this long after sharing = it's gone
+TAB_MAX_POST = 256 * 1024    # bytes per post (the page sends about half a second at a time)
+TAB_MAX_BUFFER = 60 * RATE * 2
+TAB_FILES = {"/": ("tabpage.html", "text/html; charset=utf-8"),
+             "/tabpage.js": ("tabpage.js", "text/javascript; charset=utf-8"),
+             "/tabpage-worklet.js": ("tabpage-worklet.js", "text/javascript; charset=utf-8")}
+
+
+class TabCapture:
+    """Sound from one shared browser tab, through the local page. Same shape as ProcessCapture (take/alive/close).
+    Answers only requests addressed to exactly 127.0.0.1:<port> (no DNS rebinding), posts only from its own page
+    (Origin) carrying this show's random key, raw samples only, capped."""
+
+    def __init__(self, port: int = TAB_PORT):
+        import secrets
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.key = secrets.token_urlsafe(18)
+        self.lock = threading.Lock()
+        self.buf = bytearray()
+        self.started = self.ended = False
+        self.opened = self.last = time.monotonic()
+        here = os.path.dirname(os.path.abspath(__file__))
+        tab = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):        # nothing about the show in a log
+                pass
+
+            def _send(self, status: int, body: bytes = b"", ctype: str = "text/plain; charset=utf-8") -> None:
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; connect-src 'self'; "
+                                 "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                if self.headers.get("Host") != tab.host:
+                    return self._send(421, b"wrong host")
+                f = TAB_FILES.get(self.path)
+                if not f:
+                    return self._send(404, b"not here")
+                with open(os.path.join(here, f[0]), "rb") as fh:
+                    self._send(200, fh.read(), f[1])
+
+            def do_POST(self):
+                import hmac
+                if self.headers.get("Host") != tab.host:
+                    return self._send(421, b"wrong host")
+                if self.headers.get("Origin") != tab.origin:
+                    return self._send(403, b"only the projector's own page")
+                if not hmac.compare_digest(self.headers.get("X-Key", ""), tab.key):
+                    return self._send(403, b"wrong key")
+                if self.headers.get("Content-Type") != "application/octet-stream":
+                    return self._send(415, b"raw samples only")
+                try:
+                    size = int(self.headers.get("Content-Length", "-1"))
+                except ValueError:
+                    size = -1
+                if size < 0 or size > TAB_MAX_POST or size % 2:
+                    return self._send(413, b"too big")
+                body = self.rfile.read(size)
+                with tab.lock:
+                    if tab.ended:
+                        return self._send(410, b"the show has ended")
+                    if self.path == "/start":
+                        tab.started = True
+                    elif self.path == "/stop":
+                        tab.ended = True
+                    elif self.path == "/pcm" and tab.started:
+                        tab.buf += body
+                        del tab.buf[:max(0, len(tab.buf) - TAB_MAX_BUFFER)]
+                    else:
+                        return self._send(404, b"not here")
+                    tab.last = time.monotonic()
+                self._send(204)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        self.port = self.server.server_address[1]          # port 0 (tests): the one the system gave
+        self.host = f"127.0.0.1:{self.port}"
+        self.origin = f"http://127.0.0.1:{self.port}"
+        threading.Thread(target=self.server.serve_forever, name="drivein-tab-page", daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.port}/#k={self.key}"
+
+    def take(self) -> bytes:
+        with self.lock:
+            out = bytes(self.buf)
+            self.buf.clear()
+        return out
+
+    def alive(self) -> bool:
+        now = time.monotonic()
+        with self.lock:
+            if self.ended:
+                return False
+            return now - self.opened < TAB_WAIT_S if not self.started else now - self.last < TAB_QUIET_S
+
+    def close(self) -> None:
+        with self.lock:
+            self.ended = True
+        self.server.shutdown()
+        self.server.server_close()
 HELPER = None    # the speech helper this projector started (None: one was already running)
 
 
@@ -477,19 +595,28 @@ def _children(pid: int) -> list[int]:
 def pick(programs: list[dict], deny: set[str] = DENY) -> dict | None:
     """One question: which app is the show. Picking it IS choosing to capture its sound (the keeper, 11-01: a second
     "capture it?" cost her a whole playthrough). Calls, chat programs and anything running them are never listed."""
-    allowed = [p for p in programs
-               if p["name"].lower() not in deny and not denied_in_tree(p["pid"], deny)]
-    if not allowed:
-        print("No app to show is open. Open your video or game first, then start the projector again.")
-        return None
-    for i, p in enumerate(allowed, 1):
+    allowed, hidden = [], []
+    for p in programs:
+        if p["name"].lower() in deny:
+            continue                                    # calls, chat, shells: never shown, nothing to explain
+        bad = denied_in_tree(p["pid"], deny)
+        (hidden if bad else allowed).append((p, sorted(set(bad))))
+    print("  0. A browser tab: share just one tab from any browser (extensions and all)")
+    for i, (p, _) in enumerate(allowed, 1):
         mark = "  (playing now)" if p.get("playing") else ""
         print(f"  {i}. {p['name']}: " + (" | ".join(p["titles"]) or "no window title") + mark)
-    choice = input("Which app is the show? (its number): ").strip()
+    # Say why an app isn't offered (the keeper, 11-03: Chrome just wasn't there; an extension's helper ran cmd.exe).
+    for p, bad in hidden:
+        why = "a command prompt or shell (often an extension's helper)" if {"cmd.exe", "powershell.exe", "pwsh.exe",
+                                                                           "conhost.exe"} & set(bad) else ", ".join(bad)
+        print(f"     (not offered: {p['name']}, because it's running {why}; for a browser, use 0)")
+    choice = input("Which is the show? (its number): ").strip()
+    if choice == "0":
+        return {"tab": True, "name": "a shared browser tab", "pid": None, "titles": []}
     if not choice.isdigit() or not 1 <= int(choice) <= len(allowed):
-        print("No app picked.")
+        print("Nothing picked.")
         return None
-    p = allowed[int(choice) - 1]
+    p = allowed[int(choice) - 1][0]
     if p["name"].lower() in BROWSERS:
         print("(A browser plays every tab through one program: keep calls and other sound out of its other tabs.)")
     return p
@@ -783,6 +910,23 @@ def run(cfg: dict, title: str | None) -> int:
         choice = pick(open_programs(), deny)
         if not choice:
             return 1
+        if choice.get("tab"):
+            try:
+                cap = TabCapture(int(cfg.get("tab_port", TAB_PORT)))
+            except OSError as e:
+                print(f"Couldn't open the tab page ({e}). Is another projector running?")
+                return 1
+            os.startfile(cap.url)              # the default browser opens the projector's own page
+            print("\nYour browser opened the projector's page. Click 'Share a tab' there and pick your show's tab.")
+            st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
+            if st not in (200, 409):
+                cap.close()
+                print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
+                return 1
+            try:
+                return _on_air(cfg, token, deny, choice, cap)
+            finally:
+                cap.close()
         if denied_in_tree(choice["pid"], deny):   # it started something while you were choosing
             print("That app now runs something that is never captured. No show started.")
             return 1
@@ -849,6 +993,8 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector")
     print(f"\n*** ON AIR: listening to {choice['name']} only. Press Play whenever you're ready. ***")
     print("    Close this window (or Ctrl+C) to end the show.\n")
+    if choice.get("tab"):
+        print("    (Waiting for you to share the tab in the browser page.)")
     buf, last_speech, tree_at = b"", time.monotonic(), time.monotonic()
     held, held_at, beach_ended = None, 0.0, False
 
@@ -870,9 +1016,10 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
     try:
         while True:
             if not cap.alive():
-                print("The program closed: capture stopped. Run again to pick a program.")
+                print("Tab sharing stopped: the show ends." if choice.get("tab") else
+                      "The program closed: capture stopped. Run again to pick a program.")
                 break
-            if time.monotonic() - tree_at >= TREE_CHECK_S:
+            if not choice.get("tab") and time.monotonic() - tree_at >= TREE_CHECK_S:
                 tree_at = time.monotonic()
                 bad = denied_in_tree(choice["pid"], deny)
                 if bad:

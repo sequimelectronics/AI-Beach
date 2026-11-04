@@ -54,18 +54,26 @@ the sound as usual.
 
 ## Showing from a browser (YouTube and other sites)
 
-It works: play the video in a browser, start the projector, and pick the browser from the list. A few things to know
-(tried with YouTube, 11-03):
+**Share one tab (option 0, the easy way).** Start the projector and pick **0. A browser tab**. Your browser opens the
+projector's own page, which runs on this computer only (`http://127.0.0.1:8795`). Click **Share a tab**, choose the
+tab with your show, and keep **Also share tab audio** on. Only that one tab's sound is used: other tabs, calls and
+extensions don't matter, so your everyday browser is fine. Stop sharing (the browser's bar) to end the show. The
+page holds no sign-in; it only hands the tab's sound to the projector beside it. (Chrome and Edge share tab sound;
+Firefox doesn't.)
 
-- **Words only, by ear.** The projector turns the sound into words on this computer; it never fetches a site's own
-  captions. Spoken words come through well (a word list in `projector.json` gets names right), but sound effects
-  don't: for those, a captions file with VLC (above) is the deluxe version.
+Or pick the whole browser program from the list, as with any app. Then:
+
 - **A browser window just for the Drive-In.** A browser plays every tab's sound through one program, so a call,
   music or another video in any tab would be heard too.
 - **If your browser isn't in the list:** the projector never captures a program that's running a command prompt or
   a shell, and some browser extensions start one as a helper (for example, an AI assistant extension that can control
-  the browser). That browser is then left off the list. Use a different browser without that extension for shows
-  (Edge, say, if your extension is in Chrome).
+  the browser). The list says so; share a tab (option 0) instead.
+
+Either way (tried with YouTube, 11-03):
+
+- **Words only, by ear.** The projector turns the sound into words on this computer; it never fetches a site's own
+  captions. Spoken words come through well (a word list in `projector.json` gets names right), but sound effects
+  don't: for those, a captions file with VLC (above) is the deluxe version.
 - **Long stretches with no pause** can split a word between two pieces now and then ("magic" heard as "ma-" and
   "...gic"). A small overlap between pieces is on the way.
 
