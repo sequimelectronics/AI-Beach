@@ -94,6 +94,22 @@ class DriveInRulesTests(BeachTestCase):
         self.di.open_show("keeper", "Next")                                  # a new show clears any leftover at once
         self.assertIsNone(self.di.ended)
 
+    def test_watching_a_show_quietly_isnt_idle(self):
+        # The keeper, 11-03: the idle timer left her mid-show because she wasn't talking.
+        self.di.open_show("keeper", "A Long Film")
+        for _ in range(8):                                  # 40 minutes of watching, the page reading the screen
+            self.clock.advance(300)
+            self.di.post_lines(["And then..."])
+            self.di.screen(self.sandy.id)
+            self.beach.sweep_idle()
+        self.assertTrue(self.beach._visit(self.sandy.id, DRIVEIN))           # still here
+        self.assertFalse(self.beach._visit(self.pebble.id, DRIVEIN))         # not watching: the usual idle rule
+        self.di.end_show()
+        self.clock.advance(self.beach.setting("idle_timeout_s") + 60)
+        self.di.screen(self.sandy.id)                                        # no show: reading doesn't count
+        self.beach.sweep_idle()
+        self.assertFalse(self.beach._visit(self.sandy.id, DRIVEIN))
+
     def test_the_shows_words_are_never_stored(self):
         self.di.watch(self.sandy.id)
         self.di.open_show("keeper", "Marker test")

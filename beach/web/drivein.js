@@ -12,6 +12,7 @@
   let last = 0
   let title = null
   const ui = {}
+  const NOTE = 'The show\'s words appear here as they\'re spoken. They\'re never kept after the show.'
 
   function mmss (s) {
     s = Math.max(0, Math.floor(s))
@@ -21,7 +22,7 @@
   function build () {
     ui.title = el('h2', { class: 'screen-title', text: 'The screen' })
     ui.lines = el('div', { class: 'screen-lines', role: 'log', 'aria-live': 'polite', 'aria-label': 'The show\'s words', tabindex: '0' })
-    ui.note = el('p', { class: 'hint', text: 'The show\'s words appear here as they\'re spoken. They\'re never kept after the show.' })
+    ui.note = el('p', { class: 'hint', text: NOTE })
     ui.keeper = el('div', { class: 'screen-keeper' })
     // The keeper's controls fold away above the screen: the show's words are the movie, so the screen gets the room
     // (the keeper, 11-02). Open when nothing's showing, folded during a show.
@@ -43,6 +44,7 @@
       ui.note.textContent = e.status === 409 ? 'Join the Drive-In to see the screen.' : e.message
       return
     }
+    ui.note.textContent = NOTE      // back to normal once the screen answers again (the keeper, 11-03: "join" stayed)
     if (!r.showing) {
       if (title !== null) { ui.lines.replaceChildren(); last = 0; title = null }
       ui.title.textContent = 'Nothing showing right now'

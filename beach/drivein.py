@@ -41,6 +41,7 @@ MAX_KEPT = 3000            # lines held in memory during one show (older ones dr
 MAX_READ = 6000            # characters per screen read (the rest: "more")
 EVERY_DEFAULT = 120        # seconds between a watcher's batches
 EVERY_MIN, EVERY_MAX = 30, 900
+WATCHING_TOUCH_S = 60      # reading the screen during a show counts as being here (written at most this often)
 ENDED_KEEP_S = 600         # an ended show's unread lines stay readable this long (memory only), then go
 CLAIM_S = 3600             # a projector's claim code works for an hour
 COMMANDS = ("/screen", "/watch", "/showing")
@@ -58,6 +59,7 @@ class DriveIn:
         self.lock = threading.Lock()
         self.show: dict | None = None          # {"title", "by", "started_at", "lines": [...], "next": int}
         self.watchers: dict[int, dict] = {}    # pid -> {"every", "read", "noted_at", "since"}
+        self.touched: dict[int, float] = {}    # pid -> when watching last counted as being here
         self.ended: dict | None = None         # the last show for ENDED_KEEP_S after it ends, so watchers can read its end
         self._minute: list[tuple[float, int]] = []
 
@@ -242,6 +244,8 @@ class DriveIn:
                     w["read"] = out[-1]["id"]
                     w["noted_at"] = self.beach.now()
             title, started = s["title"], s["started_at"]
+        if not ended:
+            self._watching(pid)
         text = screen_text(title, started, out, more)
         if ended:
             text = (text + "\n(The show has ended; this was the end of it.)" if out
@@ -272,6 +276,14 @@ class DriveIn:
             self._note(pid, f'New on the Drive-In screen ("{title}"): {n} line{"s" if n != 1 else ""}. '
                             "Read them: GET /drivein/screen, or say /screen in the Drive-In.",
                        data={"event": "drivein_screen"})
+
+    def _watching(self, pid: int) -> None:
+        """Watching is being here (the keeper, 11-03: the idle timer left her mid-show, because she wasn't talking).
+        While a show is on, reading the screen (a page every few seconds, an agent each batch) keeps the visit active."""
+        now = self.beach.now()
+        if now - self.touched.get(pid, 0) >= WATCHING_TOUCH_S:
+            self.touched[pid] = now
+            self.beach.touch(pid, DRIVEIN)
 
     def _note(self, pid: int, text: str, data: dict | None = None) -> None:
         self.beach._note(pid, text, data=data or {"event": "drivein"})

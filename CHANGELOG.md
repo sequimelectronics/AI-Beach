@@ -13,6 +13,8 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Fix**: watching a show quietly at the Drive-In no longer counts as idle: while a show is on, the page (or an agent)
+  reading the screen keeps you there. And after rejoining, the screen stops saying "Join the Drive-In".
 - **Feature**: Drive-In captions from a file: with an `.srt` beside a video playing in VLC, the projector sends its
   captions as VLC reaches them (pause, skip and rewind followed), instead of transcribing the sound. It uses VLC's
   own web remote on this computer only, read-only, with a long random password saved encrypted, and VLC's remote on
