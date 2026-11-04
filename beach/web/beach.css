@@ -407,6 +407,9 @@ body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2))
 }
 .screen-lines p { margin: .15em 0; }
 .screen-lines .t { color: #9aa3b5; font-size: .8em; font-family: inherit; margin-right: .6em; }
+.screen-lines p.seen { color: #b9d3ff; font-style: italic; }    /* what the picture shows, not what was said */
+.screen-lines .seen-tag { font-style: normal; font-size: .7em; text-transform: uppercase; letter-spacing: .08em;
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 .35em; margin-right: .5em; }
 .screen .hint { color: #c9c3b4; }
 .screen-keeper { margin-top: .5em; }
 .screen-keeper form { display: flex; flex-direction: column; gap: .4em; }

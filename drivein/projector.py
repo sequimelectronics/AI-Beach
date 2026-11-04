@@ -442,6 +442,8 @@ TAB_WAIT_S = 600             # time to share a tab after the page opens
 TAB_QUIET_S = 20             # no sound from the page this long after sharing = it's gone
 TAB_MAX_POST = 256 * 1024    # bytes per post (the page sends about half a second at a time)
 TAB_MAX_BUFFER = 60 * RATE * 2
+TAB_MAX_FRAME = 2 * 1024 * 1024   # one JPEG picture of the tab (the page sends one every few seconds, ~768 px wide)
+TAB_FRAME_FRESH_S = 10            # an older picture isn't the show any more (sharing paused, page hidden)
 TAB_FILES = {"/": ("tabpage.html", "text/html; charset=utf-8"),
              "/tabpage.js": ("tabpage.js", "text/javascript; charset=utf-8"),
              "/tabpage-worklet.js": ("tabpage-worklet.js", "text/javascript; charset=utf-8")}
@@ -466,14 +468,17 @@ def exclusive_server(base):
 class TabCapture:
     """Sound from one shared browser tab, through the local page. Same shape as ProcessCapture (take/alive/close).
     Answers only requests addressed to exactly 127.0.0.1:<port> (no DNS rebinding), posts only from its own page
-    (Origin) carrying this show's random key, raw samples only, capped."""
+    (Origin) carrying this show's random key, raw samples only, capped. With pictures on, it also takes the tab's
+    picture (/frame: one JPEG, the latest kept in memory only, for the describer)."""
 
-    def __init__(self, port: int = TAB_PORT):
+    def __init__(self, port: int = TAB_PORT, pictures: bool = False):
         import secrets
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         self.key = secrets.token_urlsafe(18)
         self.lock = threading.Lock()
         self.buf = bytearray()
+        self.pictures = pictures
+        self.frame: tuple[float, bytes] | None = None
         self.started = self.ended = False
         self.opened = self.last = time.monotonic()
         here = os.path.dirname(os.path.abspath(__file__))
@@ -512,12 +517,29 @@ class TabCapture:
                     return self._send(403, b"only the projector's own page")
                 if not hmac.compare_digest(self.headers.get("X-Key", ""), tab.key):
                     return self._send(403, b"wrong key")
-                if self.headers.get("Content-Type") != "application/octet-stream":
-                    return self._send(415, b"raw samples only")
                 try:
                     size = int(self.headers.get("Content-Length", "-1"))
                 except ValueError:
                     size = -1
+                if self.path == "/frame":                       # the tab's picture: one JPEG, only with pictures on
+                    if not tab.pictures:
+                        return self._send(404, b"not here")
+                    if self.headers.get("Content-Type") != "image/jpeg":
+                        return self._send(415, b"a JPEG picture only")
+                    if size < 4 or size > TAB_MAX_FRAME:
+                        return self._send(413, b"too big")
+                    body = self.rfile.read(size)
+                    if not body.startswith(b"\xff\xd8\xff"):
+                        return self._send(415, b"a JPEG picture only")
+                    with tab.lock:
+                        if tab.ended:
+                            return self._send(410, b"the show has ended")
+                        if not tab.started:
+                            return self._send(404, b"not here")
+                        tab.frame = (time.monotonic(), body)
+                    return self._send(204)
+                if self.headers.get("Content-Type") != "application/octet-stream":
+                    return self._send(415, b"raw samples only")
                 if size < 0 or size > TAB_MAX_POST or size % 2:
                     return self._send(413, b"too big")
                 body = self.rfile.read(size)
@@ -526,6 +548,8 @@ class TabCapture:
                         return self._send(410, b"the show has ended")
                     if self.path == "/start":
                         tab.started = True
+                        tab.last = time.monotonic()
+                        return self._send(200, json.dumps({"pictures": tab.pictures}).encode(), "application/json")
                     elif self.path == "/stop":
                         tab.ended = True
                     elif self.path == "/pcm" and tab.started:
@@ -551,6 +575,21 @@ class TabCapture:
             out = bytes(self.buf)
             self.buf.clear()
         return out
+
+    def latest_frame(self):
+        """The tab's latest picture as a PIL image, or None (none yet, or older than TAB_FRAME_FRESH_S)."""
+        with self.lock:
+            f = self.frame
+        if not f or time.monotonic() - f[0] > TAB_FRAME_FRESH_S:
+            return None
+        import io
+        from PIL import Image
+        try:
+            img = Image.open(io.BytesIO(f[1]))
+            img.load()
+            return img
+        except Exception:                 # a broken picture is just skipped
+            return None
 
     def alive(self) -> bool:
         now = time.monotonic()
@@ -849,13 +888,23 @@ def next_cues(cues: list[dict], index: int, now: float, last: float | None) -> t
     return due, index
 
 
-def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues: list[dict], name: str) -> int:
+def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues: list[dict], name: str,
+                     pics=None) -> int:
     import psutil
     _end_on_close(cfg, token)
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector (captions)")
     print(f"\n*** ON AIR: captions from {name} ({len(cues)} lines), following VLC. Press Play whenever you're ready. ***")
     print("    No sound is captured. Close this window (or Ctrl+C) to end the show.\n")
     index, last, misses = 0, None, 0
+
+    def send_seen(lines: list[str]) -> bool:
+        code, r = beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
+        if code == 200:
+            for ln in lines:
+                print("  >", ln)
+        return code != 409
+
+    loop = start_picture_loop(cfg, token, pics, window_grabber(choice["pid"]), send_seen) if pics else None
     try:
         while True:
             if not psutil.pid_exists(choice["pid"]):
@@ -890,6 +939,8 @@ def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
+        if loop is not None:
+            loop.stop()
         ctypes.windll.kernel32.SetConsoleTitleW("Drive-In projector")
     code, r = beach_call(cfg, "POST", "/drivein/show/end", None, token)
     print("The show has ended. Thanks for projecting!" if code in (200, 409) else
@@ -912,12 +963,58 @@ def vlc_setup(cfg: dict) -> int:
     return 0
 
 
+# ------------------------------------------------------------------------------------------- the picture (step 2)
+# Optional: with a "vision" section in projector.json, the projector also describes what's on screen ("(seen) ..."
+# lines), paced and only when the picture changes; watchers can ask for a look (/look). The describer is the swap
+# point (describer.py); setup and swapping recipes: VISION.md.
+
+def make_pictures(cfg: dict):
+    """The describer projector.json asks for, or None (no "vision" section, or it couldn't start: words only)."""
+    vision = cfg.get("vision")
+    if not vision or (isinstance(vision, dict) and vision.get("off")):
+        return None
+    try:
+        import describer
+        print("Starting the picture describer...")
+        d = describer.make_describer(vision, log_dir=os.path.dirname(cfg["token_file"]))
+        print("Pictures: on (lines marked (seen) describe what's on screen).")
+        return d
+    except Exception as e:          # a bad setting never costs the keeper the show: words carry on
+        print(f"(Pictures are off for this show: {e})")
+        return None
+
+
+def start_picture_loop(cfg: dict, token: str, describer_, grab, send):
+    if describer_ is None:
+        return None
+    import seeing
+
+    def wants() -> bool:
+        st, r = beach_call(cfg, "GET", "/drivein/projector/wants", None, token)
+        return st == 200 and bool(r.get("look"))
+
+    words = cfg.get("words", [])
+    loop = seeing.PictureLoop(grab=grab, describer=describer_, send=send, wants=wants,
+                              allowed_words=words if isinstance(words, list) else [words],
+                              short_every=int(cfg["vision"].get("short_every_s", seeing.SHORT_EVERY_S)),
+                              long_every=int(cfg["vision"].get("long_every_s", seeing.LONG_EVERY_S)))
+    loop.start()
+    return loop
+
+
+def window_grabber(pid: int):
+    """Pictures of a program's own window (and its child processes' windows, e.g. a browser's)."""
+    import frames
+    return lambda: frames.grab_window({pid, *_children(pid)})
+
+
 def run(cfg: dict, title: str | None) -> int:
     """The keeper's routine (11-01): open the show paused, start this, type the title, pick the app, press Play.
     The helper starts by itself; the show opens on the Beach by itself; closing this window ends it."""
     token = read_token(cfg)
     deny = cfg["_deny"]
     helper = start_helper(cfg)
+    pics = None
     try:
         title = title or input("Title of the show: ").strip()
         if not title:
@@ -926,43 +1023,47 @@ def run(cfg: dict, title: str | None) -> int:
         choice = pick(open_programs(), deny)
         if not choice:
             return 1
+        if not choice.get("tab") and denied_in_tree(choice["pid"], deny):   # it started something while choosing
+            print("That app now runs something that is never captured. No show started.")
+            return 1
+        pics = make_pictures(cfg)
+        show = {"title": title, "pictures": pics is not None}
         if choice.get("tab"):
             try:
-                cap = TabCapture(int(cfg.get("tab_port", TAB_PORT)))
+                cap = TabCapture(int(cfg.get("tab_port", TAB_PORT)), pictures=pics is not None)
             except OSError as e:
                 print(f"Couldn't open the tab page ({e}). Is another projector running?")
                 return 1
             os.startfile(cap.url)              # the default browser opens the projector's own page
             print("\nYour browser opened the projector's page. Click 'Share a tab' there and pick your show's tab.")
-            st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
+            st, r = beach_call(cfg, "POST", "/drivein/show", show, token)
             if st not in (200, 409):
                 cap.close()
                 print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
                 return 1
             try:
-                return _on_air(cfg, token, deny, choice, cap)
+                return _on_air(cfg, token, deny, choice, cap, pics, cap.latest_frame)
             finally:
                 cap.close()
-        if denied_in_tree(choice["pid"], deny):   # it started something while you were choosing
-            print("That app now runs something that is never captured. No show started.")
-            return 1
         captions = caption_source(cfg) if choice["name"].lower() == "vlc.exe" else None
         if captions:
-            st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
+            st, r = beach_call(cfg, "POST", "/drivein/show", show, token)
             if st not in (200, 409):
                 print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
                 return 1
-            return _captions_on_air(cfg, token, choice, *captions)
+            return _captions_on_air(cfg, token, choice, *captions, pics=pics)
         cap = ProcessCapture(choice["pid"], choice["name"], choice["created"])
-        st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
+        st, r = beach_call(cfg, "POST", "/drivein/show", show, token)
         if st == 409:
             print("(A show was already open on the Beach: its screen gets these words.)")
         elif st != 200:
             cap.close()
             print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
             return 1
-        return _on_air(cfg, token, deny, choice, cap)
+        return _on_air(cfg, token, deny, choice, cap, pics, window_grabber(choice["pid"]) if pics else None)
     finally:
+        if pics is not None:
+            pics.close()                       # the describer's model server stops with the show
         if helper is not None:
             helper.terminate()
 
@@ -1004,7 +1105,8 @@ def join_unfinished(held: str | None, lines: list[str]) -> tuple[list[str], str 
     return lines, None
 
 
-def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCapture") -> int:
+def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCapture", pics=None,
+            grab=None) -> int:
     _end_on_close(cfg, token)
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector")
     print(f"\n*** ON AIR: listening to {choice['name']} only. Press Play whenever you're ready. ***")
@@ -1029,6 +1131,7 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
                 print("  >", ln)
         return True
 
+    loop = start_picture_loop(cfg, token, pics, grab, send) if grab else None
     try:
         while True:
             if not cap.alive():
@@ -1073,6 +1176,8 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
+        if loop is not None:
+            loop.stop()
         cap.close()
         ctypes.windll.kernel32.SetConsoleTitleW("Drive-In projector")
     # The last words still held (up to a piece's length) go out before the show ends; found in rehearsal (11-01): a

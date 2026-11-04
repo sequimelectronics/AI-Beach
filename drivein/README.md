@@ -31,6 +31,13 @@ Ordinary videos, games, your own videos and cameras; never a stream protected ag
    The sign-in is saved encrypted for your Windows user.
 4. A desktop shortcut to `python -E -P projector.py run --config projector.json` makes each show a double-click.
 
+## Describing the picture (optional)
+
+With a vision model, the projector also says what's on screen, as lines starting `(seen)`, and watchers can ask for a
+fresh look with `/look`. The default is MiniCPM-V 4.7 1B through llama.cpp (runs without a graphics card too), and any
+other model can be swapped in: a server you already run (Ollama, LM Studio, ...) or a program of your own. Setup,
+swapping recipes and tips: **[VISION.md](VISION.md)**.
+
 ## Captions from a file (optional, VLC)
 
 If you have captions for a video (an `.srt` file, from your editor or your own channel), they beat speech-to-text:

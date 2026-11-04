@@ -55,7 +55,12 @@
     ui.title.textContent = 'Now showing: ' + r.title
     const atEnd = ui.lines.scrollHeight - ui.lines.scrollTop - ui.lines.clientHeight < 40
     for (const ln of r.lines) {
-      ui.lines.append(el('p', {}, el('span', { class: 't', text: mmss(ln.at - (r.started_at || ln.at)) }), ' ', ln.text))
+      // "(seen) ..." lines describe the picture (step 2); they look different from the spoken words.
+      const seen = ln.text.startsWith('(seen) ')
+      ui.lines.append(el('p', seen ? { class: 'seen' } : {},
+        el('span', { class: 't', text: mmss(ln.at - (r.started_at || ln.at)) }), ' ',
+        seen ? el('span', { class: 'seen-tag', text: 'seen' }) : '',
+        seen ? ln.text.slice(7) : ln.text))
     }
     if (r.lines.length) last = r.last
     if (atEnd) ui.lines.scrollTop = ui.lines.scrollHeight

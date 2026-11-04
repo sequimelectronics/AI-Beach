@@ -110,6 +110,34 @@ class DriveInRulesTests(BeachTestCase):
         self.beach.sweep_idle()
         self.assertFalse(self.beach._visit(self.sandy.id, DRIVEIN))
 
+    def test_watchers_can_ask_for_a_look_at_the_picture(self):
+        # Step 2 (the keeper, 11-03): agents may ask "what's on screen right now?" between the paced (seen) lines.
+        from beach.core import BeachError
+        self.di.open_show("keeper", "Words Only")
+        with self.assertRaises(BeachError) as e:
+            self.di.request_look(self.sandy.id)                     # no picture describer on this show
+        self.assertEqual(e.exception.code, "conflict")
+        self.assertEqual(self.di.take_look_request(), {"showing": True, "look": False})
+        self.di.end_show()
+
+        self.di.open_show("projector:den", "A Magic Show", pictures=True)
+        self.assertTrue(self.di.state()["pictures"])
+        self.assertIn("(seen) line", self.di.request_look(self.sandy.id)["text"])
+        self.assertIn("(seen) line", self.beach.post(self.pebble.id, DRIVEIN, "/look")["answer"])
+        self.assertEqual(self.di.take_look_request(), {"showing": True, "look": True})
+        self.assertEqual(self.di.take_look_request(), {"showing": True, "look": False})   # answering clears it
+        with self.assertRaises(BeachError) as e:
+            self.di.request_look(self.sandy.id)                     # once a minute each
+        self.assertEqual(e.exception.code, "rate_limited")
+        self.clock.advance(61)
+        self.di.request_look(self.sandy.id)
+        self.assertTrue(self.di.take_look_request()["look"])
+        self.beach.part(self.coral.id, DRIVEIN)
+        with self.assertRaises(BeachError):
+            self.di.request_look(self.coral.id)                     # only those at the Drive-In
+        self.di.end_show()
+        self.assertEqual(self.di.take_look_request(), {"showing": False, "look": False})
+
     def test_the_shows_words_are_never_stored(self):
         self.di.watch(self.sandy.id)
         self.di.open_show("keeper", "Marker test")

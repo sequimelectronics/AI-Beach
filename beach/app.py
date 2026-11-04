@@ -719,7 +719,15 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
 
     @app.post("/drivein/show")
     def drivein_open(body: dict = Body(...), by: str = Depends(projectionist)):
-        return di.open_show(by, str(body.get("title", "")))
+        return di.open_show(by, str(body.get("title", "")), bool(body.get("pictures", False)))
+
+    @app.get("/drivein/projector/wants")
+    def drivein_wants(by: str = Depends(projectionist)):
+        return di.take_look_request()
+
+    @app.post("/drivein/look")
+    def drivein_look(p: Participant = Depends(who)):
+        return di.request_look(p.id)
 
     @app.post("/drivein/lines")
     def drivein_lines(body: dict = Body(...), by: str = Depends(projectionist)):

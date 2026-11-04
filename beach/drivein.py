@@ -44,7 +44,8 @@ EVERY_MIN, EVERY_MAX = 30, 900
 WATCHING_TOUCH_S = 60      # reading the screen during a show counts as being here (written at most this often)
 ENDED_KEEP_S = 600         # an ended show's unread lines stay readable this long (memory only), then go
 CLAIM_S = 3600             # a projector's claim code works for an hour
-COMMANDS = ("/screen", "/watch", "/showing")
+COMMANDS = ("/screen", "/watch", "/showing", "/look")
+LOOK_EVERY_S = 60          # a watcher may ask the projector for a fresh description of the picture once a minute
 
 
 def _key(code: str) -> str:
@@ -116,7 +117,7 @@ class DriveIn:
 
     # ---------------------------------------------------------------- the show (keeper or projector)
 
-    def open_show(self, by: str, title: str) -> dict:
+    def open_show(self, by: str, title: str, pictures: bool = False) -> dict:
         title = clean_text(title, one_line=True)[:MAX_TITLE]
         if not title:
             raise self._err("invalid", "a show needs a title (\"now showing ...\")")
@@ -124,8 +125,9 @@ class DriveIn:
             if self.show:
                 raise self._err("conflict", f'"{self.show["title"]}" is still showing; end it first')
             self.ended = None
+            # pictures: the projector also describes what's on screen ("(seen) ..." lines), and takes /look requests.
             self.show = {"title": title, "by": by, "started_at": self.beach.now(), "lines": [], "next": 1,
-                         "seen_by": set()}
+                         "seen_by": set(), "pictures": bool(pictures), "look_wanted": False, "looks": {}}
             for w in self.watchers.values():
                 w["read"] = 0
         for pid in list(self.watchers):
@@ -210,7 +212,8 @@ class DriveIn:
     def state(self, pid: int | None = None) -> dict:
         s = self.show
         out = {"showing": bool(s), "title": s["title"] if s else None, "started_at": s["started_at"] if s else None,
-               "lines": (s["next"] - 1) if s else 0, "watchers": len(self.watchers)}
+               "lines": (s["next"] - 1) if s else 0, "watchers": len(self.watchers),
+               "pictures": bool(s and s.get("pictures"))}
         if pid is not None and pid in self.watchers:
             w = self.watchers[pid]
             out.update({"you_watch": True, "every": w["every"], "unread": max(0, out["lines"] - w["read"])})
@@ -295,11 +298,44 @@ class DriveIn:
 
     # ---------------------------------------------------------------- the room's commands
 
+    # ---------------------------------------------------------------- a fresh look at the picture (step 2, 11-03)
+
+    def request_look(self, pid: int) -> dict:
+        """A watcher asks the projector to describe the picture now (the keeper, 11-03: agents may ask "what's on screen
+        right now?" between the paced lines). Once a minute each; only when this show's projector describes pictures."""
+        self._may_watch(pid)
+        now = self.beach.now()
+        with self.lock:
+            s = self.show
+            if not s:
+                raise self._err("conflict", "nothing is showing at the Drive-In right now")
+            if not s.get("pictures"):
+                raise self._err("conflict", "this show comes in words only: its projector doesn't describe the picture")
+            last = s["looks"].get(pid, 0)
+            if now - last < LOOK_EVERY_S:
+                raise self._err("rate_limited", f"you asked for a look {int(now - last)} s ago; once a minute",
+                                retry_after=int(LOOK_EVERY_S - (now - last)) + 1)
+            s["looks"][pid] = now
+            s["look_wanted"] = True
+        return {"asked": True, "text": "Asked: the projector describes the picture in a moment, on the screen as a "
+                                       "(seen) line."}
+
+    def take_look_request(self) -> dict:
+        """The projector's check: has anyone asked for a look since last time? (Answering clears it.)"""
+        with self.lock:
+            s = self.show
+            wanted = bool(s and s.get("look_wanted"))
+            if wanted:
+                s["look_wanted"] = False
+        return {"showing": bool(s), "look": wanted}
+
     def command(self, pid: int, text: str) -> str | None:
         words = text.strip().split()
         if not words or words[0].lower() not in COMMANDS:
             return None
         cmd = words[0].lower()
+        if cmd == "/look":
+            return self.request_look(pid)["text"]
         if cmd == "/showing":
             s = self.state(pid)
             return (f'Now showing: "{s["title"]}" ({s["lines"]} lines so far, {s["watchers"]} watching).'

@@ -13,6 +13,13 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Feature**: the Drive-In can describe the picture. With a vision model set up, the projector puts `(seen)` lines
+  on the screen (a short one every 15 s and a longer one every 30 s, only when the picture changed), and watchers can
+  ask for a look with `/look` (`POST /drivein/look`, once a minute). The default is MiniCPM-V 4.7 1B, the winner of a
+  four-model bake-off, through llama.cpp's llama-server, started and stopped by the projector on this computer only.
+  The describer is one small swappable module (`drivein/describer.py`): any OpenAI-compatible server or a program of
+  your own works too. Every description carries a no-names rule and a name net. Setup, recipes and tips:
+  `drivein/VISION.md`.
 - **Feature**: the Drive-In projector can share one browser tab (option 0): it opens its own page on this computer
   (127.0.0.1), and the browser's tab sharing sends just that tab's sound, so any browser works, extensions and all.
   The list of apps also says why an app isn't offered.

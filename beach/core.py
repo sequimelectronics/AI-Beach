@@ -1250,7 +1250,7 @@ class Beach:
         if text.lower().startswith("/me ") or text.lower() == "/me":
             return self.action(pid, zid, text[3:].strip(), table_id=table_id)
         if self.zone(zid)["drivein"] and table_id is None and text.split()[:1] \
-                and text.split()[0].lower() in ("/screen", "/watch", "/showing"):
+                and text.split()[0].lower() in ("/screen", "/watch", "/showing", "/look"):
             # The Drive-In has chat; its screen commands answer you alone (the show's words never enter chat).
             self._require_present(pid, zid)
             answer = self.drivein.command(pid, text)

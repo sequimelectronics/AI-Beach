@@ -6,6 +6,7 @@ The capture itself was tested live on Windows (one speaking program captured, tr
 from __future__ import annotations
 
 import ast
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -225,14 +226,52 @@ class ProjectorTests(unittest.TestCase):
                 pass
             self.assertEqual(call("POST", "/pcm", pcm)[0], 404)                     # nothing before sharing starts
             self.assertTrue(tab.alive())                                             # waiting for the share
-            self.assertEqual(call("POST", "/start")[0], 204)
+            st, _, started = call("POST", "/start")
+            self.assertEqual((st, json.loads(started)), (200, {"pictures": False}))
             self.assertEqual(call("POST", "/pcm", pcm)[0], 204)
             self.assertEqual(call("POST", "/pcm", pcm)[0], 204)
             self.assertEqual(tab.take(), pcm * 2)
             self.assertEqual(tab.take(), b"")
+            jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+            self.assertEqual(call("POST", "/frame", jpeg, ctype="image/jpeg")[0], 404)  # pictures off: no frames
             self.assertEqual(call("POST", "/stop")[0], 204)
             self.assertFalse(tab.alive())
             self.assertEqual(call("POST", "/pcm", pcm)[0], 410)                     # ended: the page stops too
+        finally:
+            tab.close()
+
+    def test_the_tab_page_takes_pictures_only_when_asked_and_only_jpegs(self):
+        import http.client
+        import io
+        from projector import TabCapture
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        tab = TabCapture(0, pictures=True)
+        try:
+            def call(path, body=b"", ctype="image/jpeg", origin=None, key=None):
+                c = http.client.HTTPConnection("127.0.0.1", tab.port, timeout=5)
+                c.request("POST", path, body=body, headers={"Host": tab.host, "Content-Type": ctype,
+                                                            "Origin": origin or tab.origin,
+                                                            "X-Key": tab.key if key is None else key})
+                r = c.getresponse()
+                return r.status, r.read()
+            buf = io.BytesIO()
+            Image.new("RGB", (320, 180), (10, 120, 200)).save(buf, "JPEG")
+            jpeg = buf.getvalue()
+            self.assertEqual(call("/frame", jpeg)[0], 404)                          # nothing before sharing starts
+            st, body = call("/start", ctype="application/octet-stream")
+            self.assertEqual(json.loads(body), {"pictures": True})
+            self.assertEqual(call("/frame", jpeg, origin="http://evil.example")[0], 403)
+            self.assertEqual(call("/frame", jpeg, key="guess")[0], 403)
+            self.assertEqual(call("/frame", jpeg, ctype="image/png")[0], 415)
+            self.assertEqual(call("/frame", b"<html>not a picture</html>")[0], 415)  # must really be a JPEG
+            self.assertIsNone(tab.latest_frame())
+            self.assertEqual(call("/frame", jpeg)[0], 204)
+            self.assertEqual(tab.latest_frame().size, (320, 180))
+            tab.frame = (tab.frame[0] - 60, tab.frame[1])                          # a stale picture isn't the show
+            self.assertIsNone(tab.latest_frame())
         finally:
             tab.close()
 
