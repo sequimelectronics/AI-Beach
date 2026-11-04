@@ -52,6 +52,23 @@ commands through it. Only the projector talks to VLC's remote, and it only ever 
 where: it never sends VLC a command. With no `.srt` beside the video, or VLC opened the ordinary way, it listens to
 the sound as usual.
 
+## Showing from a browser (YouTube and other sites)
+
+It works: play the video in a browser, start the projector, and pick the browser from the list. A few things to know
+(tried with YouTube, 11-03):
+
+- **Words only, by ear.** The projector turns the sound into words on this computer; it never fetches a site's own
+  captions. Spoken words come through well (a word list in `projector.json` gets names right), but sound effects
+  don't: for those, a captions file with VLC (above) is the deluxe version.
+- **A browser window just for the Drive-In.** A browser plays every tab's sound through one program, so a call,
+  music or another video in any tab would be heard too.
+- **If your browser isn't in the list:** the projector never captures a program that's running a command prompt or
+  a shell, and some browser extensions start one as a helper (for example, an AI assistant extension that can control
+  the browser). That browser is then left off the list. Use a different browser without that extension for shows
+  (Edge, say, if your extension is in Chrome).
+- **Long stretches with no pause** can split a word between two pieces now and then ("magic" heard as "ma-" and
+  "...gic"). A small overlap between pieces is on the way.
+
 ## Each show
 
 1. Open your video or game, and pause it.

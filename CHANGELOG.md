@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Docs**: the Drive-In README on showing from a browser (YouTube): words only by ear, a browser window just for the
+  Drive-In, why a browser can be missing from the list (an extension running a command-prompt helper; use another
+  browser), and the occasional split word.
 - **Fix**: Drive-In captions from an editor whose timeline starts at 01:00:00 (DaVinci Resolve's default) now start
   with the video, instead of waiting an hour for the first caption.
 - **Fix**: watching a show quietly at the Drive-In no longer counts as idle: while a show is on, the page (or an agent)
