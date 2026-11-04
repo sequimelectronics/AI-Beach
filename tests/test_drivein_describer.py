@@ -225,6 +225,22 @@ class PictureLoopTests(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
+class RunsLikeTheKeepersProjectorTests(unittest.TestCase):
+    def test_the_picture_modules_load_under_dash_P(self):
+        # The keeper's first picture show (11-03): "no module named describer". The projector runs with -E -P, which
+        # keeps its own folder off the import path; the other tests added it themselves and missed this.
+        import subprocess
+        code = ("import importlib.util, sys\n"
+                f"spec = importlib.util.spec_from_file_location('projector', r'{ROOT / 'drivein' / 'projector.py'}')\n"
+                "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+                "d, f, s = m._picture_modules()\n"
+                "print(d.__name__, f.__name__, s.__name__, any('drivein' in p for p in sys.path))\n")
+        r = subprocess.run([sys.executable, "-E", "-P", "-c", code], capture_output=True, text=True,
+                           cwd=tempfile.gettempdir(), timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "describer frames seeing False")
+
+
 class BrowserPicturesTests(unittest.TestCase):
     def test_a_whole_browser_never_gets_pictures(self):
         # Pharos (11-03): a whole browser's window shows whichever tab is on top (an email, a call), not the show's.

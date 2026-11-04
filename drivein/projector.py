@@ -968,13 +968,37 @@ def vlc_setup(cfg: dict) -> int:
 # lines), paced and only when the picture changes; watchers can ask for a look (/look). The describer is the swap
 # point (describer.py); setup and swapping recipes: VISION.md.
 
+def _sibling(name: str):
+    """One of the projector's own modules (describer, frames, seeing), loaded by exact path from this folder.
+    The projector runs with `python -P`, which keeps the script's folder OFF the import path on purpose (no module
+    planted beside it gets loaded), so a plain `import describer` fails there (found at the keeper's first picture
+    show, 11-03). Loading by path keeps -P's protection for every other name."""
+    if name in sys.modules:
+        return sys.modules[name]
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod                       # seeing.py's own `import describer, frames` find these
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        del sys.modules[name]
+        raise
+    return mod
+
+
+def _picture_modules():
+    return _sibling("describer"), _sibling("frames"), _sibling("seeing")   # this order: seeing imports the first two
+
+
 def make_pictures(cfg: dict):
     """The describer projector.json asks for, or None (no "vision" section, or it couldn't start: words only)."""
     vision = cfg.get("vision")
     if not vision or (isinstance(vision, dict) and vision.get("off")):
         return None
     try:
-        import describer
+        describer, _, _ = _picture_modules()
         print("Starting the picture describer...")
         d = describer.make_describer(vision, log_dir=os.path.dirname(cfg["token_file"]))
         print("Pictures: on (lines marked (seen) describe what's on screen).")
@@ -987,7 +1011,7 @@ def make_pictures(cfg: dict):
 def start_picture_loop(cfg: dict, token: str, describer_, grab, send):
     if describer_ is None:
         return None
-    import seeing
+    _, _, seeing = _picture_modules()
 
     def wants() -> bool:
         st, r = beach_call(cfg, "GET", "/drivein/projector/wants", None, token)
@@ -1004,7 +1028,7 @@ def start_picture_loop(cfg: dict, token: str, describer_, grab, send):
 
 def window_grabber(pid: int):
     """Pictures of a program's own window (and its child processes' windows, e.g. a browser's)."""
-    import frames
+    _, frames, _ = _picture_modules()
     return lambda: frames.grab_window({pid, *_children(pid)})
 
 
