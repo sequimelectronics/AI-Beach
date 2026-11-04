@@ -43,8 +43,11 @@ class TidyAndScrubTests(unittest.TestCase):
 
     def test_the_default_prompts_carry_the_no_names_rule(self):
         # The keeper (11-03): "Don't use anyone's name", not "don't guess": a model that thinks it knows isn't guessing.
-        for p in describer.DEFAULT_PROMPTS.values():
-            self.assertIn("Don't use anyone's name, even if you recognize them", p)
+        for key, p in describer.DEFAULT_PROMPTS.items():
+            if key == "change":      # names the show just said are allowed there; recognized faces still never
+                self.assertIn("Never name anyone you recognize", p)
+            else:
+                self.assertIn("Don't use anyone's name, even if you recognize them", p)
             self.assertNotIn("guess", p.lower())
             self.assertNotIn("surprising", p.lower())       # it made MiniCPM-V pad with "something unusual"
 
@@ -156,6 +159,9 @@ class FrameTests(unittest.TestCase):
 
 
 class PictureLoopTests(unittest.TestCase):
+    """The picture loop (11-03 design): checked often, the model asked when the picture really changed, two pictures
+    per look, the show's words since the last look (each once), a pace knob, a per-minute cap."""
+
     def setUp(self):
         try:
             from PIL import Image
@@ -167,79 +173,80 @@ class PictureLoopTests(unittest.TestCase):
         self.picture = self.scene(1)
         self.asked = [False]
         self.sent: list[str] = []
-        self.calls: list[str] = []
-        self.contexts: list[str] = []
-        self.spoken: list[str] = []
+        self.calls: list[tuple] = []          # (detail, context, had a previous picture)
+        self.spoken: list[tuple] = []         # (time, line)
         loop_self = self
 
         class Fake:
             fail = 0
 
-            def describe(self, jpeg, detail, context=""):
+            def describe(self, jpeg, detail, context="", previous=None):
                 if Fake.fail:
                     Fake.fail -= 1
                     raise describer.DescriberError("no model")
-                loop_self.calls.append(detail)
-                loop_self.contexts.append(context)
-                return "Michael Jackson waves." if detail == "long" else "A man waves."
+                loop_self.calls.append((detail, context, previous is not None))
+                return "Whatsit Doohicky waves." if detail == "long" else "A man waves."
 
         self.Fake = Fake
         self.loop = seeing.PictureLoop(grab=lambda: self.picture, describer=Fake(),
                                        send=lambda lines: self.sent.extend(lines) or True,
                                        wants=lambda: self.asked[0], clock=lambda: self.now[0], say=lambda m: None,
-                                       heard=lambda: self.spoken)
+                                       heard=lambda: self.spoken, pace=3)
 
     def scene(self, n):
         img = self.Image.new("RGB", (640, 360), (20 * n % 255, 40, 90))
         img.paste((255, 255, 255), (0, 0, 64 * n % 640 or 64, 360))
         return img
 
-    def test_pace_change_look_and_the_name_net(self):
-        L = self.loop
-        self.assertEqual(L.step(), "(seen) someone waves.")             # first look: a long one, name scrubbed
-        self.now[0] = 16
-        self.assertIsNone(L.step())                                   # due, but the picture hasn't changed
+    def test_changes_drive_the_looks_with_two_pictures_and_fresh_words(self):
+        L = self.loop                                                   # pace 3: >= 5 s apart, 8 a minute, still 30 s
+        self.assertEqual(L.step(), "(seen) A man waves.")             # first look: one picture
+        self.assertEqual(self.calls[-1], ("short", "", False))
+        self.now[0] = 2
         self.picture = self.scene(2)
-        self.assertEqual(L.step(), "(seen) A man waves.")             # changed after 16 s: a short one
+        self.assertIsNone(L.step())                                   # changed, but too soon after the last line
+        self.spoken.append((3, "Watch the doohicky."))
+        self.now[0] = 5
+        self.assertEqual(L.step(), "(seen) A man waves.")             # changed + 5 s: a two-picture look
+        self.assertEqual(self.calls[-1], ("change", "Watch the doohicky.", True))
+        self.now[0] = 11
+        self.picture = self.scene(3)
+        L.step()
+        self.assertEqual(self.calls[-1][1], "")                       # that line went once; nothing new was said
         self.now[0] = 20
-        self.picture = self.scene(3)
-        self.assertIsNone(L.step())                                   # changed, but not due yet
-        self.asked[0] = True
-        self.now[0] = 21
-        self.picture = self.scene(3)
-        self.assertEqual(L.step(), "(seen) someone waves.")             # asked: at once, long, even if unchanged
-        self.asked[0] = False
-        self.now[0] = 52
-        self.picture = self.scene(4)
-        self.assertEqual(L.step(), "(seen) someone waves.")             # 31 s since the last long: long again
-        self.assertEqual(self.calls, ["long", "short", "long", "long"])
+        self.assertIsNone(L.step())                                   # same picture, not yet a still-scene look
+        self.now[0] = 41
+        self.assertEqual(L.step(), "(seen) someone waves.")            # 30 s still: a fresh long look, name netted
+        self.assertEqual(self.calls[-1][0], "long")
 
-    def test_the_story_so_far_and_names_the_show_says(self):
-        # The keeper (11-03): "the poor thing would have to have a running narrative"; and the title card's name
-        # (said aloud by the show's narrator) was turned into "someone".
+    def test_names_the_show_says_pass_and_a_look_comes_at_once(self):
         L = self.loop
-        self.assertEqual(L.step(), "(seen) someone waves.")         # nobody said the name: still scrubbed
-        self.assertEqual(self.contexts[-1], "")                     # nothing before the first picture
-        self.spoken.extend(["Tonight, Michael Jackson will vanish.", "I call this the fan."])
-        self.now[0] = 31
-        self.picture = self.scene(2)
-        self.assertEqual(L.step(), "(seen) Michael Jackson waves.")  # the show said it: it stays
-        ctx = self.contexts[-1]
-        self.assertIn("(seen) someone waves.", ctx)                 # its own last description
-        self.assertIn("I call this the fan.", ctx)                  # and what was just said
+        L.step()
+        self.spoken.append((1, "Please welcome Whatsit Doohicky!"))
+        self.asked[0] = True
+        self.now[0] = 1                                               # asked: even too soon, even unchanged
+        self.assertEqual(L.step(), "(seen) Whatsit Doohicky waves.")
+        self.assertIn("Please welcome Whatsit Doohicky!", self.calls[-1][1])
 
-    def test_context_helpers(self):
-        self.assertEqual(describer.names_in(["Tonight, Whatsit Doohicky is making me disappear.",
-                                             "The Magic of Whatsit Doohicky", "A man waves."]),
-                         {"Whatsit Doohicky"})
-        p = describer.with_context("Describe it.", "(seen) A fan.\nAnd now the fan spins.")
-        self.assertTrue(p.startswith("Describe it."))
-        self.assertIn("for context only", p)
-        self.assertIn("And now the fan spins.", p)
-        self.assertEqual(describer.with_context("Describe it.", "  "), "Describe it.")
-        self.assertLessEqual(len(describer.with_context("x", "y" * 5000)), describer.CONTEXT_MAX + 200)
+    def test_the_pace_knob_and_the_cap(self):
+        L = self.loop
+        self.assertEqual(L.set_pace(9), 5)                            # clamped
+        self.assertEqual(L.set_pace(0), 1)
+        L.set_pace(5)                                                 # >= 2 s apart, 20 a minute
+        for i in range(25):
+            self.now[0] = 2.0 * i
+            self.picture = self.scene(i + 1)
+            L.step()
+        self.assertEqual(len(self.sent), 20)                          # the per-minute cap held
+        L.set_pace(1)                                                 # >= 15 s apart
+        self.now[0] = 200
+        self.picture = self.scene(30)
+        L.step()
+        self.now[0] = 205
+        self.picture = self.scene(31)
+        self.assertIsNone(L.step())
 
-    def test_blank_pictures_and_a_broken_model(self):
+    def test_blank_pictures_same_and_a_broken_model(self):
         L = self.loop
         self.picture = self.Image.new("RGB", (640, 360), (0, 0, 0))
         self.assertIsNone(L.step())                                   # a black screen isn't described
@@ -252,6 +259,28 @@ class PictureLoopTests(unittest.TestCase):
             self.assertIsNone(L.step())
         self.assertTrue(L.stop_event.is_set())                        # gave up; the words go on without it
         self.assertEqual(self.sent, [])
+
+    def test_context_helpers(self):
+        self.assertEqual(describer.names_in(["Tonight, Whatsit Doohicky is making me disappear.",
+                                             "The Magic of Whatsit Doohicky", "A man waves."]),
+                         {"Whatsit Doohicky"})
+        p = describer.with_context("Describe it.", "And now the doohicky spins.")
+        self.assertTrue(p.startswith("Describe it."))
+        self.assertIn("for context only", p)
+        self.assertEqual(describer.with_context("Describe it.", "  "), "Describe it.")
+        self.assertLessEqual(len(describer.with_context("x", "y" * 5000)), describer.CONTEXT_MAX + 200)
+
+    def test_the_change_prompt_has_no_example_people(self):
+        # Tested 11-03: an example person in the prompt ("the woman in the red dress") was described 8 times in a show
+        # that had none. The keeper's rule: examples models read are placeholders, or absent.
+        import re
+        p = describer.DEFAULT_PROMPTS["change"]
+        for word in ("dress", "shirt", "hat", "woman in", "man in"):
+            self.assertIsNone(re.search(r"\b" + word + r"\b", p), word)
+        self.assertIn("SECOND", p)
+        self.assertIn("Never name anyone you recognize", p)
+        self.assertEqual(describer.tidy("The second image shows a man jumping."), "A man jumping.")
+        self.assertEqual(describer.tidy("In the second picture, a fire grows."), "A fire grows.")
 
 
 class RunsLikeTheKeepersProjectorTests(unittest.TestCase):

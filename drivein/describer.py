@@ -44,6 +44,16 @@ DEFAULT_PROMPTS = {
     "short": "Describe what is happening on screen in ONE short sentence of at most 15 words. " + NO_NAMES,
     "long": "Describe what is happening on screen in two or three plain sentences, at most 50 words: who is there "
             "and what they are doing. " + NO_NAMES,
+    # Two pictures (the one last described, and now). Tested 11-03 on 36 frames of a magic act ("version E"): it
+    # narrated the action ("swings upward, gripping a rope"; "now it's a massive fireball") where one picture at a time
+    # couldn't. NO EXAMPLE PEOPLE in this prompt on purpose: with "the woman in the red dress" as an example, the model
+    # described a woman in red eight times in a show that had none (the keeper's rule of placeholders, proven).
+    "change": "You see two pictures from a video, a few seconds apart: the FIRST is earlier, the SECOND is now. In one "
+              "or two short sentences (at most 25 words): first say what is happening in the SECOND picture, then "
+              "anything that changed since the first (someone moved or did something, or the camera cut to a new "
+              "view). If there is more than one person, tell them apart by what they are wearing or how they look. "
+              "Never name anyone you recognize; use a name only if the show's words below just said it. Say only what "
+              "you can see.",
 }
 
 
@@ -55,8 +65,9 @@ class DescriberError(Exception):
 
 _THOUGHTS = [re.compile(r"<think>.*?</think>", re.S | re.I),            # Qwen/DeepSeek-style reasoning
              re.compile(r"<\|channel>thought.*?<channel\|>", re.S)]       # Gemma 4's thinking channel
-_LEADS = re.compile(r"^(?:(?:the|this) (?:image|picture|frame|scene|screen|still) (?:shows|depicts|displays|features)"
-                    r"|in (?:the|this) (?:image|picture|frame|scene),?)\s+", re.I)
+_LEADS = re.compile(r"^(?:(?:the|this) (?:(?:second|first) )?(?:image|picture|frame|scene|screen|still) "
+                    r"(?:shows|depicts|displays|features)"
+                    r"|in (?:the|this) (?:(?:second|first) )?(?:image|picture|frame|scene),?)\s+", re.I)
 
 
 def tidy(text: str) -> str:
@@ -166,10 +177,15 @@ class OpenAIDescriber:
         self.prompts = {**DEFAULT_PROMPTS, **(prompts or {})}
         self.extra = extra or {}
 
-    def describe(self, jpeg: bytes, detail: str = "short", context: str = "") -> str:
+    def describe(self, jpeg: bytes, detail: str = "short", context: str = "", previous: bytes | None = None) -> str:
+        """`previous` (the picture last described) makes it a two-picture "what changed" look (detail "change")."""
+        pictures = ([previous] if previous else []) + [jpeg]
+        if not previous and detail == "change":
+            detail = "short"
+        parts = [{"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(p).decode()}}
+                 for p in pictures]
         body = {
-            "messages": [{"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}},
+            "messages": [{"role": "user", "content": parts + [
                 {"type": "text", "text": with_context(self.prompts[detail], context)}]}],
             "max_tokens": 150, "temperature": 0.2,
             # Many servers pass this to the model's chat template: "answer, don't reason first" for thinking models.
@@ -265,7 +281,10 @@ class CommandDescriber:
         self.argv = argv
         self.timeout = timeout
 
-    def describe(self, jpeg: bytes, detail: str = "short", context: str = "") -> str:
+    def describe(self, jpeg: bytes, detail: str = "short", context: str = "", previous: bytes | None = None) -> str:
+        # One picture only through this way (stdin carries one JPEG); a "change" look becomes a "short" one here.
+        if detail == "change":
+            detail = "short"
         flags = 0x08000000 if os.name == "nt" else 0
         env = {**os.environ, "DRIVEIN_CONTEXT": (context or "")[-CONTEXT_MAX:]}
         try:
@@ -291,9 +310,9 @@ def make_describer(vision: dict, log_dir: str | None = None):
     kind = vision.get("kind", "llama-server")
     timeout = float(vision.get("timeout_s", DEFAULT_TIMEOUT_S))
     prompts = vision.get("prompts")
-    if prompts is not None and not (isinstance(prompts, dict) and set(prompts) <= {"short", "long"}
+    if prompts is not None and not (isinstance(prompts, dict) and set(prompts) <= {"short", "long", "change"}
                                     and all(isinstance(v, str) and v.strip() for v in prompts.values())):
-        raise DescriberError('vision "prompts" is {"short": "...", "long": "..."} (either or both)')
+        raise DescriberError('vision "prompts" is {"short": "...", "long": "...", "change": "..."} (any of them)')
     if kind == "llama-server":
         return LlamaServerDescriber(
             vision.get("server", ""), vision.get("model", ""), vision.get("mmproj", ""),

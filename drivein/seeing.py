@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Becky Northaven and the AI-Beach contributors
-"""The projector's picture loop: when a description is due, look at the show and put one line on the screen.
+"""The projector's picture loop: watch the show, and when the picture changes, say what happened.
 
-Pace (the keeper's choice, 11-03): a SHORT line every 15 s and a LONGER one every 30 s, but only when the picture has
-changed since the last description (a talking head gets one line, a magic act many), and at once when a watcher asks
-with /look. Lines go to the screen as "(seen) ...". Pictures are kept in memory only, never saved.
+How it decides (the keeper's design, 11-03): the picture is checked often (a tiny thumbnail compare, nearly free), and
+the model is asked only when it really changed: fast action gets many lines, a slow conversation few. Each look shows
+the model TWO pictures, the one it last described and the one now, and asks what is happening and what changed, with
+the show's words spoken since its last look (each line once, never twice). A still scene still gets a fresh look now and
+then, and a watcher's /look gets one at once. Lines go to the screen as "(seen) ...". Pictures stay in memory only.
 
-Everything model-specific lives in describer.py; this loop only needs four things handed to it, so it works the same
-for a program window, a shared browser tab, or anything else that can produce a picture:
-    grab()          -> a PIL image of the show right now, or None
-    describe(jpeg, detail, context) -> one line (any describer from describer.make_describer)
-    heard()         -> the show's recent spoken lines (optional: the story so far + names the show says)
-    send(lines)     -> put lines on the screen; False when the show has ended
-    wants()         -> True when a watcher asked for a look (the Beach's GET /drivein/projector/wants)
+The PACE (1 calm .. 5 max) is the projectionist's: in projector.json ("pace") and live, with + and - in the projector's
+window. Everything model-specific lives in describer.py; this loop needs only:
+    grab()                 -> a PIL image of the show right now, or None
+    describe(jpeg, detail, context=..., previous=...) -> one line (any describer from describer.make_describer)
+    heard()                -> the show's spoken lines as (monotonic time, text) pairs (optional)
+    send(lines)            -> put lines on the screen; False when the show has ended
+    wants()                -> True when a watcher asked for a look (the Beach's GET /drivein/projector/wants)
 """
 
 from __future__ import annotations
@@ -23,63 +25,76 @@ import time
 import describer as _describer
 import frames as _frames
 
-SHORT_EVERY_S = 15
-LONG_EVERY_S = 30
-POLL_S = 3
+# pace: (seconds at least between lines, lines at most per minute, a fresh look at a still scene every N seconds)
+PACES = {1: (15, 4, 60), 2: (8, 6, 45), 3: (5, 8, 30), 4: (3, 12, 30), 5: (2, 20, 20)}
+PACE_NAMES = {1: "calm", 2: "relaxed", 3: "normal", 4: "busy", 5: "max"}
+DEFAULT_PACE = 3
+POLL_S = 1                  # how often the picture is checked (a thumbnail compare; the model isn't asked)
 GIVE_UP_AFTER = 5           # describer failures in a row before pictures stop for this show (words carry on)
-HEARD_LINES = 4             # the show's last spoken lines handed over with each picture
-SEEN_LINES = 2              # this loop's own last descriptions handed over too
 
 
 class PictureLoop(threading.Thread):
-    def __init__(self, grab, describer, send, wants=None, allowed_words=(), short_every=SHORT_EVERY_S,
-                 long_every=LONG_EVERY_S, poll=POLL_S, say=print, clock=time.monotonic, sleep=None, heard=None,
-                 story=True):
+    def __init__(self, grab, describer, send, wants=None, allowed_words=(), pace=DEFAULT_PACE, poll=POLL_S,
+                 say=print, clock=time.monotonic, sleep=None, heard=None, story=True):
         super().__init__(name="drivein-pictures", daemon=True)
         self.grab, self.describer, self.send, self.wants = grab, describer, send, wants or (lambda: False)
-        # The story so far (the keeper, 11-03): the show's last spoken lines and this loop's own last descriptions go
-        # with each picture, and names the show itself says are let through the name net.
         self.heard = heard or (lambda: [])
-        self.story = story                    # False: no story so far in the prompt (names the show says still pass)
-        self.recent_seen: list[str] = []
+        self.story = story                   # False: no spoken words and no previous picture (each look on its own)
         self.allowed = {w.strip() for w in allowed_words if str(w).strip()}
-        self.short_every, self.long_every, self.poll = short_every, long_every, poll
-        self.say, self.clock = say, clock
+        self.pace = max(1, min(5, int(pace)))
+        self.poll, self.say, self.clock = poll, say, clock
         self.stop_event = threading.Event()
         self._sleep = sleep or self.stop_event.wait
-        self.last_short = self.last_long = -1e9
+        self.last_line = self.last_look = -1e9
         self.last_thumb: bytes | None = None
+        self.last_jpeg: bytes | None = None
+        self.recent: list[float] = []       # when lines went out (the per-minute cap)
         self.failures = 0
         self.posted = 0
+
+    # ------------------------------------------------------------------ the projectionist's knob
+    def set_pace(self, pace: int) -> int:
+        self.pace = max(1, min(5, int(pace)))
+        gap, cap, still = PACES[self.pace]
+        self.say(f"(pictures: pace {self.pace}, {PACE_NAMES[self.pace]}: a line at most every {gap} s, up to {cap} a "
+                 f"minute, a still scene every {still} s)")
+        return self.pace
 
     def stop(self) -> None:
         self.stop_event.set()
 
+    def _spoken_since_last_look(self) -> list[str]:
+        """The show's words since the model last looked (the keeper: each line once, never twice or out of order)."""
+        try:
+            return [str(text) for t, text in (self.heard() or []) if t > self.last_look]
+        except Exception:
+            return []
+
     def step(self) -> str | None:
-        """One check: describe if due. Returns the line posted (for tests and the console), or None."""
+        """One check. Returns the line posted (for tests and the console), or None."""
         now = self.clock()
+        gap, cap, still = PACES[self.pace]
         try:
             asked = bool(self.wants())
         except Exception:                                         # the Beach being slow never stops the pictures
             asked = False
-        due_long = now - self.last_long >= self.long_every
-        due_short = now - self.last_short >= self.short_every
-        if not (asked or due_long or due_short):
+        self.recent = [t for t in self.recent if now - t < 60]
+        if not asked and (now - self.last_line < gap or len(self.recent) >= cap):
             return None
         img = self.grab()
         if img is None or _frames.looks_blank(img):
             return None
         t = _frames.thumb(img)
-        if not asked and not _frames.changed(self.last_thumb, t):
-            return None                                           # same picture: nothing new to say
-        detail = "long" if (asked or due_long) else "short"
+        moved = _frames.changed(self.last_thumb, t)
+        if not (asked or moved or now - self.last_line >= still):
+            return None                                           # nothing new, and not yet time for a fresh look
+        jpeg = _frames.to_jpeg(img)
+        previous = self.last_jpeg if (self.story and moved and self.last_jpeg) else None
+        spoken = self._spoken_since_last_look()
+        context = "\n".join(spoken) if self.story else ""
+        detail = "change" if previous else ("long" if (asked or not moved) else "short")
         try:
-            spoken = [str(s) for s in (self.heard() or [])][-HEARD_LINES:]
-        except Exception:
-            spoken = []
-        context = "\n".join([f"(seen) {s}" for s in self.recent_seen] + spoken) if self.story else ""
-        try:
-            line = self.describer.describe(_frames.to_jpeg(img), detail, context=context)
+            line = self.describer.describe(jpeg, detail, context=context, previous=previous)
         except _describer.DescriberError as e:
             self.failures += 1
             self.say(f"(pictures: {e})")
@@ -88,13 +103,12 @@ class PictureLoop(threading.Thread):
                 self.stop()
             return None
         self.failures = 0
+        self.last_look = now
         line = _describer.scrub(line, self.allowed | _describer.names_in(spoken))
-        if not line:
+        if not line or line.strip(" .").upper() == "SAME":
             return None
-        self.recent_seen = (self.recent_seen + [line])[-SEEN_LINES:]
-        self.last_thumb, self.last_short = t, now
-        if detail == "long":
-            self.last_long = now
+        self.last_thumb, self.last_jpeg, self.last_line = t, jpeg, now
+        self.recent.append(now)
         text = "(seen) " + line
         if self.send([text]) is False:
             self.stop()

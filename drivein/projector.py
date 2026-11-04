@@ -905,10 +905,11 @@ def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues
                 print("  >", ln)
         return code != 409
 
-    heard = collections.deque(maxlen=8)          # the captions just shown: the pictures' story so far
+    heard = collections.deque(maxlen=20)         # (time, caption): what was said since the pictures' last look
     loop = start_picture_loop(cfg, token, pics, window_grabber(choice["pid"]), send_seen, heard) if pics else None
     try:
         while True:
+            pace_keys(loop)
             if not psutil.pid_exists(choice["pid"]):
                 print("VLC closed: the show ends.")
                 break
@@ -934,7 +935,7 @@ def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues
                 else:
                     for ln in due:
                         print("  >", ln)
-                    heard.extend(due)
+                    heard.extend((time.monotonic(), ln) for ln in due)
             if index >= len(cues) and st["state"] != "playing":
                 print("The captions are done: the show ends.")
                 break
@@ -1025,11 +1026,26 @@ def start_picture_loop(cfg: dict, token: str, describer_, grab, send, heard=None
     words = cfg.get("words", [])
     loop = seeing.PictureLoop(grab=grab, describer=describer_, send=send, wants=wants,
                               allowed_words=words if isinstance(words, list) else [words],
-                              short_every=int(cfg["vision"].get("short_every_s", seeing.SHORT_EVERY_S)),
-                              long_every=int(cfg["vision"].get("long_every_s", seeing.LONG_EVERY_S)),
+                              pace=int(cfg["vision"].get("pace", seeing.DEFAULT_PACE)),
                               heard=lambda: list(heard_lines), story=story)
+    loop.set_pace(loop.pace)                     # says the pace in the window
+    print("    (Pictures: press + or - in this window to see more or fewer details.)")
     loop.start()
     return loop
+
+
+def pace_keys(loop) -> None:
+    """The projectionist's live knob (the keeper, 11-03: "if they find themselves missing out on details"): + and -
+    in the projector's window change the picture pace while the show runs. Checked from the show's own loop."""
+    if loop is None or os.name != "nt":
+        return
+    import msvcrt
+    while msvcrt.kbhit():
+        key = msvcrt.getwch()
+        if key in "+=":
+            loop.set_pace(loop.pace + 1)
+        elif key in "-_":
+            loop.set_pace(loop.pace - 1)
 
 
 def window_grabber(pid: int):
@@ -1152,7 +1168,7 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
         print("    (Waiting for you to share the tab in the browser page.)")
     buf, last_speech, tree_at = b"", time.monotonic(), time.monotonic()
     held, held_at, beach_ended = None, 0.0, False
-    heard = collections.deque(maxlen=8)          # the show's recent spoken lines: the pictures' story so far
+    heard = collections.deque(maxlen=20)         # (time, line): what was said since the pictures' last look
 
     def send(lines: list[str]) -> bool:
         """Put lines on the screen; False when the show has been ended on the Beach."""
@@ -1167,12 +1183,13 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
         else:
             for ln in lines:
                 print("  >", ln)
-            heard.extend(ln for ln in lines if not ln.startswith("(seen) "))
+            heard.extend((time.monotonic(), ln) for ln in lines if not ln.startswith("(seen) "))
         return True
 
     loop = start_picture_loop(cfg, token, pics, grab, send, heard) if grab else None
     try:
         while True:
+            pace_keys(loop)
             if not cap.alive():
                 print("Tab sharing stopped: the show ends." if choice.get("tab") else
                       "The program closed: capture stopped. Run again to pick a program.")

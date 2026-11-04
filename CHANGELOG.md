@@ -13,6 +13,11 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Feature**: Drive-In pictures follow the action. The picture is checked every second and described when it really
+  changes; each look shows the model the last picture and the current one ("what changed") with the show's words
+  since its last look, each line once. A pace from 1 (calm) to 5 (max), set in `projector.json` and live with + and
+  - in the projector's window. Tested on 36 frames of an escape act: two pictures narrated the action; feeding the
+  model its own lines made it copy itself, so it never gets them.
 - **Feature**: Drive-In pictures get the story so far: each picture goes to the model with its last two descriptions
   and the show's last four spoken lines (`"story_so_far": false` turns it off), and names the show itself says are no
   longer replaced by the name net (a title card the narrator had already named came out "someone").

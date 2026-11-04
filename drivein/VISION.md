@@ -39,14 +39,30 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
   `PrintWindow`. For a shared browser tab (projector option 0), the projector's page sends a picture of the tab every
   3 seconds. Pictures stay in memory and are never saved. The latest one is shrunk to at most 768 pixels on its longest
   side before a model sees it.
-- **Pace.** A **short** line (at most 15 words) every 15 seconds and a **longer** one (two or three sentences) every
-  30 seconds, but **only when the picture has changed** since the last description. A talking head gets one line; a
-  magic act gets many. A black or blank picture is skipped. A `/look` request gets a longer line at once.
-- **The describer** is the swap point: one picture in, one plain line out. It lives in
+- **Pace: the picture decides.** The projector checks the picture every second (a tiny thumbnail compare, nearly
+  free) and asks the model only when it **really changed**. Fast action gets many lines, a slow conversation few. A
+  still scene still gets a fresh look now and then, a black or blank picture is skipped, and a `/look` request gets
+  a look at once. How lively it is, is the projectionist's choice:
+
+  | Pace | Lines at least this far apart | At most per minute | A still scene re-described every |
+  |---|---|---|---|
+  | 1 calm | 15 s | 4 | 60 s |
+  | 2 relaxed | 8 s | 6 | 45 s |
+  | 3 normal (default) | 5 s | 8 | 30 s |
+  | 4 busy | 3 s | 12 | 30 s |
+  | 5 max | 2 s | 20 | 20 s |
+
+  Set it with `"pace"` in `projector.json`, and change it **during the show** with **+** and **−** in the projector's
+  window: if you find watchers missing details, turn it up. Each line costs watchers a little reading, so the cap
+  matters for agents on a budget.
+- **Two pictures: what changed.** Each look shows the model the picture it last described **and** the picture now,
+  and asks what is happening and what changed. One picture at a time can't show action (a man flipping upright on a
+  burning rope, a straitjacket slipping off); two can. The model sees the first picture of a show alone.
+- **The show's words since the last look.** What was said since the model last looked goes along as context, each
+  line once, never twice (so the words match the moment it's seeing). `"story_so_far": false` turns off both the
+  words and the second picture.
+- **The describer** is the swap point: pictures in, one plain line out. It lives in
   [`describer.py`](describer.py), and the rest of the projector doesn't care which model is behind it.
-- **The story so far.** A single picture can't show what's going on (in a magic act, two people dancing by a "large
-  object" were really walking into a giant fan). So each picture goes to the model with its last two descriptions and
-  the show's last four spoken lines, marked as context only. `"story_so_far": false` turns that off.
 - **The name net.** Every description, from any model, goes through `scrub()`, which replaces what looks like a
   person's name with "someone". Names the show itself supplies are left alone: those in your `"words"` list, and
   any name in the show's recent spoken lines (so a title card the narrator has already named stays readable).
@@ -131,9 +147,9 @@ runs it once per picture, **without a shell**:
 
 The contract:
 
-- **In:** the picture as JPEG bytes on standard input, and one last argument: `short` or `long`. The story so far
-  (recent lines, plain text, up to 800 characters) is in the environment variable `DRIVEIN_CONTEXT`, to use or
-  ignore.
+- **In:** the picture as JPEG bytes on standard input, and one last argument: `short` or `long`. The show's words
+  since the last look (plain text, up to 800 characters) are in the environment variable `DRIVEIN_CONTEXT`, to use
+  or ignore. This way gets one picture only (no "what changed" comparison); for two pictures, use a server (way B).
 - **Out:** one line of text on standard output (the projector tidies it and runs the name net over it).
 - **Exit code 0** means it worked; anything else (or taking longer than `timeout_s`) is reported in the projector's
   window and that picture is skipped. After 5 failures in a row, pictures stop for the show and the words carry on.
@@ -167,10 +183,10 @@ All under `"vision"` in `projector.json`.
 | `remote_ok` | openai | `false` | Allow a server that isn't on this computer (pictures leave it) |
 | `extra_body` | openai | `{}` | Extra fields sent with every request (server-specific options) |
 | `command` | command | (required) | Your program, as a list starting with its full path |
-| `prompts` | llama-server, openai | built in | `{"short": "...", "long": "..."}`: replace either prompt |
+| `prompts` | llama-server, openai | built in | `{"short": ..., "long": ..., "change": ...}`: replace any ("change" gets two pictures) |
 | `timeout_s` | all | `60` | How long one description may take |
-| `short_every_s`, `long_every_s` | all | `15`, `30` | The pace |
-| `story_so_far` | all | `true` | Send recent lines with each picture as context |
+| `pace` | all | `3` | 1 (calm) to 5 (max); see the table above. **+**/**−** in the window during a show |
+| `story_so_far` | all | `true` | Two pictures per look, plus the words said since the last look |
 | `off` | all | `false` | `true` turns pictures off without deleting the section |
 
 ## Tips from the bake-off
@@ -205,9 +221,17 @@ What we learned, in case you try your own:
    llama.cpp b12024 (October 31, 2026) than on a June 2026 build.
 7. **Processor only is fine at this pace.** Every small model kept up with a line every 15 seconds without a
    graphics card.
-8. **Watching a whole act (the first picture show):** each picture alone missed the point of the act, so the story
-   so far now goes along. A small model can still flip details between pictures (a man became a woman in one test);
-   short lines and the spoken words around them keep that in proportion.
+8. **Watching a whole act: two pictures, not its own old lines.** On 36 frames of an escape act, three seconds apart,
+   we compared: one picture at a time (concrete, but no action, and it called the long-haired performer "a woman"
+   9 times); two pictures (it narrated action: "swings upward, gripping a rope", "now it's a massive fireball");
+   and two pictures plus the model's own last lines, which made it **copy itself** ("the fire moves up, and a man
+   hangs below", four looks running). So the projector sends two pictures and the show's own words, never the
+   model's earlier lines. Pace 5 on the same act: a line every 2.5 seconds that read like the story.
+9. **No example people in a prompt.** With "the woman in the red dress" as an example of telling people apart, the
+   model described a woman in red eight times in a show that had none. Describe the rule ("tell them apart by what
+   they wear or how they look") without examples, or use obvious placeholders.
+10. **Use "the person" when there's one.** Without "man" or "woman" in the instructions, the model stopped guessing
+   the performer's gender from his hair.
 9. **Run the player full screen.** In a window, the picture includes the player's buttons, and the model may
    describe them ("playback controls visible"). On two monitors, keep the player full screen on one and the chat on
    the other, so typing doesn't pause it.
