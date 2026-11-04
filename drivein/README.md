@@ -38,17 +38,19 @@ names come out right and nothing gets invented. Put the `.srt` beside the video 
 `Show.srt`), play it in VLC, and the projector sends its captions as VLC reaches them, following pause, skip and
 rewind. No sound is captured. Once, to set it up:
 
-1. In VLC: **Tools > Preferences**, **Show settings: All**.
-   - **Interface > Main interfaces:** tick **Web**.
-   - **Interface > Main interfaces > Lua:** set a **Lua HTTP password** (any long password, used only here).
-   - **Input / Codecs > Network:** **HTTP server address** `127.0.0.1` (this computer only) and **HTTP server
-     port** `8798` (or set `"vlc_port"` in `projector.json`).
-   - Save, and restart VLC.
-2. `python -E -P projector.py vlc --config projector.json`, and paste the same password. It's saved encrypted for
-   your Windows user, like the projector's sign-in.
+1. `python -E -P projector.py vlc --config projector.json`. It makes a long random password (VLC's remote has no
+   lockout, so a memorable one could be guessed), saves it encrypted for your Windows user, and shows it once.
+2. In VLC: **Tools > Preferences**, **Show settings: All**, **Interface > Main interfaces > Lua**: paste it as the
+   **Password**. Save. Leave **Web** unticked under Main interfaces: the remote should run only for shows.
+3. A shortcut that starts VLC with its remote on, on this computer only, for Drive-In shows (your everyday VLC stays
+   as it was):
+   `"C:\Program Files\VideoLAN\VLC\vlc.exe" --extraintf http --http-host 127.0.0.1 --http-port 8798`
+   (another port? set `"vlc_port"` in `projector.json` too).
 
-The projector only ever asks VLC which file is playing and where; it never sends VLC a command. With no `.srt` beside
-the video, or VLC's remote off, it listens to the sound as usual.
+**Never open VLC's web page in a browser.** A browser that remembers the login would let any website send VLC
+commands through it. Only the projector talks to VLC's remote, and it only ever asks which file is playing and
+where: it never sends VLC a command. With no `.srt` beside the video, or VLC opened the ordinary way, it listens to
+the sound as usual.
 
 ## Each show
 

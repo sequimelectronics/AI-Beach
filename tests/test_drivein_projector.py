@@ -160,6 +160,14 @@ class ProjectorTests(unittest.TestCase):
         self.assertEqual(sorted(set(re.findall(r"""_get\(['"]([^'"]+)['"]\)""", body))),
                          ["/requests/playlist.json", "/requests/status.json"])
 
+    def test_the_vlc_password_is_long_random_and_never_typed(self):
+        # Pharos (11-03): VLC's remote has no lockout, so a memorable password could be guessed locally.
+        src = PROJ.read_text(encoding="utf-8")
+        start = src.index("def vlc_setup")
+        body = src[start:src.index("def run(", start)]
+        self.assertIn("secrets.token_urlsafe(24)", body)
+        self.assertNotIn("input(", body)
+
     def test_the_word_list_reaches_the_helper_as_plain_words(self):
         import json
         import tempfile

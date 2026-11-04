@@ -735,17 +735,17 @@ def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues
 
 
 def vlc_setup(cfg: dict) -> int:
-    """Save VLC's web-remote password for the captions, encrypted for this Windows user."""
-    pw = input("VLC's web remote password (the one you set in VLC; paste it, then Enter): ").strip()
-    if not pw:
-        sys.exit("Nothing was pasted.")
+    """Make VLC's web-remote password for the captions: long and random (Pharos, 11-03: VLC's remote has no lockout,
+    so a memorable password can be guessed by any program on this computer), saved encrypted for this Windows user,
+    and shown once to paste into VLC."""
+    import secrets
+    pw = secrets.token_urlsafe(24)
     with open(vlc_secret_file(cfg), "wb") as f:
         f.write(_dpapi(pw.encode(), protect=True))
-    try:
-        VlcRemote(pw, int(cfg.get("vlc_port", VLC_PORT))).status()
-        print("Saved, and VLC's remote answered: captions will follow VLC.")
-    except (OSError, ValueError) as e:
-        print(f"Saved. VLC's remote didn't answer right now ({e}); is VLC open with its web remote on?")
+    print("A new password for VLC's web remote is saved (encrypted) for the projector. Paste it into VLC once:")
+    print("  VLC: Tools > Preferences > Show settings: All > Interface > Main interfaces > Lua > Password")
+    print(f"\n    {pw}\n")
+    print("Then save and close VLC. Don't open VLC's web page in a browser: only the projector should talk to it.")
     return 0
 
 
