@@ -545,6 +545,210 @@ def start_helper(cfg: dict):
     sys.exit("\nThe speech helper took too long to start.")
 
 
+# ------------------------------------------------------------------------------------------- caption files (.srt)
+# The keeper makes an .srt for every commercial (11-02): real captions beat speech-to-text (names right, nothing
+# invented). When the show plays in VLC and an .srt sits beside the file, its captions go to the screen as VLC
+# reaches them, following pause, skip and rewind; no sound is captured at all. VLC's own web remote says which file
+# is playing and where: it listens on this computer only, behind a password kept encrypted (DPAPI) like the
+# projector's sign-in. Without it, or without an .srt, the projector listens as before.
+
+VLC_PORT = 8798                          # 8080 (VLC's usual) is often taken
+SRT_MAX_BYTES = 2_000_000
+CAPTION_POLL_S = 0.5
+JUMP_S = 3.0                             # VLC's time moving by more than this between polls = a skip or rewind
+
+
+def _srt_time(s: str) -> float:
+    h, m, rest = s.strip().replace(".", ",").split(":")
+    sec, ms = (rest.split(",") + ["0"])[:2]
+    return int(h) * 3600 + int(m) * 60 + int(sec) + int(ms.ljust(3, "0")[:3]) / 1000
+
+
+def parse_srt(text: str) -> list[dict]:
+    """An .srt's cues as [{"start", "end", "text"}], in time order. Formatting tags ({\\an8}, <i>) are dropped and a
+    cue's lines become one line. Anything that doesn't look like a cue is skipped, never guessed at."""
+    import re
+    cues = []
+    for block in re.split(r"\r?\n\s*\r?\n", text.replace(chr(0xFEFF), "")):
+        lines = [ln.strip() for ln in block.strip().splitlines() if ln.strip()]
+        at = next((i for i, ln in enumerate(lines) if "-->" in ln), None)
+        if at is None:
+            continue
+        try:
+            a, b = lines[at].split("-->")[:2]
+            start, end = _srt_time(a), _srt_time(b.split()[0])
+        except (ValueError, IndexError):
+            continue
+        words = " ".join(re.sub(r"<[^>]{0,40}>|\{[^}]{0,40}\}", "", ln) for ln in lines[at + 1:])
+        words = " ".join(words.split())
+        if words:
+            cues.append({"start": start, "end": max(end, start), "text": words})
+    return sorted(cues, key=lambda c: c["start"])
+
+
+def srt_beside(video: str) -> str | None:
+    """The caption file beside a video: same name with .srt (or .en.srt / .eng.srt)."""
+    base, _ = os.path.splitext(video)
+    for cand in (base + ".srt", base + ".en.srt", base + ".eng.srt"):
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def read_srt(path: str) -> list[dict]:
+    if os.path.getsize(path) > SRT_MAX_BYTES:
+        raise ValueError("that caption file is too big to be captions")
+    raw = open(path, "rb").read()
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            return parse_srt(raw.decode(enc))
+        except UnicodeDecodeError:
+            continue
+    return []
+
+
+def vlc_secret_file(cfg: dict) -> str:
+    return os.path.join(os.path.dirname(cfg["token_file"]), "vlc.secret")
+
+
+class VlcRemote:
+    """VLC's web remote on this computer (127.0.0.1 only): which file is playing, where, and whether it plays.
+    Read-only use: the projector only ever asks for status and the playlist, never sends VLC a command."""
+
+    def __init__(self, password: str, port: int = VLC_PORT):
+        import base64
+        self.port = port
+        self.auth = "Basic " + base64.b64encode(f":{password}".encode()).decode()
+
+    def _get(self, path: str) -> dict:
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=3)
+        conn.request("GET", path, headers={"Authorization": self.auth})
+        r = conn.getresponse()
+        body = r.read()
+        if r.status != 200:
+            raise OSError(f"VLC's remote answered {r.status}")
+        return json.loads(body)
+
+    def status(self) -> dict:
+        s = self._get("/requests/status.json")
+        length, pos = float(s.get("length") or 0), float(s.get("position") or 0)
+        at = pos * length if length > 0 else float(s.get("time") or 0)
+        return {"state": s.get("state"), "time": at}
+
+    def current_file(self) -> str | None:
+        def walk(node):
+            if isinstance(node, dict):
+                if node.get("current") and node.get("uri"):
+                    return node["uri"]
+                for child in node.get("children", []) or []:
+                    found = walk(child)
+                    if found:
+                        return found
+            return None
+        uri = walk(self._get("/requests/playlist.json"))
+        if not uri or not uri.startswith("file:///"):
+            return None                         # captions only for a file on this computer
+        return urllib.parse.unquote(uri[len("file:///"):]).replace("/", os.sep)
+
+
+def caption_source(cfg: dict) -> tuple["VlcRemote", list[dict], str] | None:
+    """VLC's remote, the playing file's captions and the .srt's name, or None (then the projector listens)."""
+    secret = vlc_secret_file(cfg)
+    if not os.path.isfile(secret):
+        return None
+    try:
+        vlc = VlcRemote(_dpapi(open(secret, "rb").read(), protect=False).decode(), int(cfg.get("vlc_port", VLC_PORT)))
+        video = vlc.current_file()
+    except (OSError, ValueError) as e:
+        print(f"(VLC's remote didn't answer: {e}. Listening instead.)")
+        return None
+    srt = srt_beside(video) if video else None
+    if not srt:
+        return None
+    try:
+        cues = read_srt(srt)
+    except (OSError, ValueError) as e:
+        print(f"(Couldn't read {os.path.basename(srt)}: {e}. Listening instead.)")
+        return None
+    return (vlc, cues, os.path.basename(srt)) if cues else None
+
+
+def next_cues(cues: list[dict], index: int, now: float, last: float | None) -> tuple[list[str], int]:
+    """The captions due at VLC time `now`, given the next unsent cue `index` and the time seen last poll. A skip or
+    rewind (the time jumping) moves to the cue playing at the new time without replaying the ones skipped over."""
+    if last is not None and (now < last - 1.0 or now > last + JUMP_S):
+        index = next((i for i, c in enumerate(cues) if c["end"] > now), len(cues))
+    due = []
+    while index < len(cues) and cues[index]["start"] <= now:
+        if cues[index]["end"] > now - JUMP_S:       # a cue long gone (a jump landed past it) isn't sent late
+            due.append(cues[index]["text"])
+        index += 1
+    return due, index
+
+
+def _captions_on_air(cfg: dict, token: str, choice: dict, vlc: "VlcRemote", cues: list[dict], name: str) -> int:
+    import psutil
+    _end_on_close(cfg, token)
+    ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector (captions)")
+    print(f"\n*** ON AIR: captions from {name} ({len(cues)} lines), following VLC. Press Play whenever you're ready. ***")
+    print("    No sound is captured. Close this window (or Ctrl+C) to end the show.\n")
+    index, last, misses = 0, None, 0
+    try:
+        while True:
+            if not psutil.pid_exists(choice["pid"]):
+                print("VLC closed: the show ends.")
+                break
+            try:
+                st = vlc.status()
+                misses = 0
+            except (OSError, ValueError):
+                misses += 1
+                if misses * CAPTION_POLL_S > 15:
+                    print("VLC's remote stopped answering: the show ends.")
+                    break
+                time.sleep(CAPTION_POLL_S)
+                continue
+            due, index = next_cues(cues, index, st["time"], last)
+            last = st["time"]
+            if due:
+                code, r = beach_call(cfg, "POST", "/drivein/lines", {"lines": due}, token)
+                if code == 409:
+                    print("The show was ended on the Beach: stopping.")
+                    return 0
+                if code != 200:
+                    print(f"The Beach refused the lines: {r.get('message') or code}")
+                else:
+                    for ln in due:
+                        print("  >", ln)
+            if index >= len(cues) and st["state"] != "playing":
+                print("The captions are done: the show ends.")
+                break
+            time.sleep(CAPTION_POLL_S)
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    finally:
+        ctypes.windll.kernel32.SetConsoleTitleW("Drive-In projector")
+    code, r = beach_call(cfg, "POST", "/drivein/show/end", None, token)
+    print("The show has ended. Thanks for projecting!" if code in (200, 409) else
+          f"(the Beach said: {r.get('message') or code})")
+    return 0
+
+
+def vlc_setup(cfg: dict) -> int:
+    """Save VLC's web-remote password for the captions, encrypted for this Windows user."""
+    pw = input("VLC's web remote password (the one you set in VLC; paste it, then Enter): ").strip()
+    if not pw:
+        sys.exit("Nothing was pasted.")
+    with open(vlc_secret_file(cfg), "wb") as f:
+        f.write(_dpapi(pw.encode(), protect=True))
+    try:
+        VlcRemote(pw, int(cfg.get("vlc_port", VLC_PORT))).status()
+        print("Saved, and VLC's remote answered: captions will follow VLC.")
+    except (OSError, ValueError) as e:
+        print(f"Saved. VLC's remote didn't answer right now ({e}); is VLC open with its web remote on?")
+    return 0
+
+
 def run(cfg: dict, title: str | None) -> int:
     """The keeper's routine (11-01): open the show paused, start this, type the title, pick the app, press Play.
     The helper starts by itself; the show opens on the Beach by itself; closing this window ends it."""
@@ -562,6 +766,13 @@ def run(cfg: dict, title: str | None) -> int:
         if denied_in_tree(choice["pid"], deny):   # it started something while you were choosing
             print("That app now runs something that is never captured. No show started.")
             return 1
+        captions = caption_source(cfg) if choice["name"].lower() == "vlc.exe" else None
+        if captions:
+            st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
+            if st not in (200, 409):
+                print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
+                return 1
+            return _captions_on_air(cfg, token, choice, *captions)
         cap = ProcessCapture(choice["pid"], choice["name"], choice["created"])
         st, r = beach_call(cfg, "POST", "/drivein/show", {"title": title}, token)
         if st == 409:
@@ -720,7 +931,7 @@ def main() -> int:
         sys.exit("the projector runs on Windows 10 (2004) or later")
     ap = argparse.ArgumentParser(description="The Drive-In projector: one program's speech, as words, to the Beach")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("claim", "run", "list"):
+    for name in ("claim", "run", "list", "vlc"):
         s = sub.add_parser(name)
         s.add_argument("--config", required=True, help="projector.json: {\"beach\": \"http://<the Beach>\"}")
         if name == "run":
@@ -729,6 +940,8 @@ def main() -> int:
     cfg = load_config(a.config)
     if a.cmd == "claim":
         return claim(cfg)
+    if a.cmd == "vlc":
+        return vlc_setup(cfg)
     if a.cmd == "list":
         for p in sounding_programs():
             flag = "  (never offered)" if p["name"].lower() in cfg["_deny"] or denied_in_tree(p["pid"], cfg["_deny"]) else ""

@@ -31,6 +31,25 @@ Ordinary videos, games, your own videos and cameras; never a stream protected ag
    The sign-in is saved encrypted for your Windows user.
 4. A desktop shortcut to `python -E -P projector.py run --config projector.json` makes each show a double-click.
 
+## Captions from a file (optional, VLC)
+
+If you have captions for a video (an `.srt` file, from your editor or your own channel), they beat speech-to-text:
+names come out right and nothing gets invented. Put the `.srt` beside the video with the same name (`Show.mp4` and
+`Show.srt`), play it in VLC, and the projector sends its captions as VLC reaches them, following pause, skip and
+rewind. No sound is captured. Once, to set it up:
+
+1. In VLC: **Tools > Preferences**, **Show settings: All**.
+   - **Interface > Main interfaces:** tick **Web**.
+   - **Interface > Main interfaces > Lua:** set a **Lua HTTP password** (any long password, used only here).
+   - **Input / Codecs > Network:** **HTTP server address** `127.0.0.1` (this computer only) and **HTTP server
+     port** `8798` (or set `"vlc_port"` in `projector.json`).
+   - Save, and restart VLC.
+2. `python -E -P projector.py vlc --config projector.json`, and paste the same password. It's saved encrypted for
+   your Windows user, like the projector's sign-in.
+
+The projector only ever asks VLC which file is playing and where; it never sends VLC a command. With no `.srt` beside
+the video, or VLC's remote off, it listens to the sound as usual.
+
 ## Each show
 
 1. Open your video or game, and pause it.

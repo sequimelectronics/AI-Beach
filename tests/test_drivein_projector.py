@@ -87,7 +87,7 @@ class ProjectorTests(unittest.TestCase):
         self.assertIn("deque(maxlen=20)", src)
         start = src.index("def start_helper")
         import re
-        body = src[start:src.index("def run(", start)]
+        body = src[start:src.index(chr(10) + "def ", start + 1)]
         self.assertIsNone(re.search(r"(?<![A-Za-z])open\(", body))           # nothing written to a file (Popen is fine)
 
     def test_local_names_join_the_deny_list_from_the_config(self):
@@ -114,6 +114,51 @@ class ProjectorTests(unittest.TestCase):
         self.assertEqual(join_unfinished("Hello", ["there.", "And then"]), (["Hello there."], "And then"))
         self.assertEqual(join_unfinished("Alone", []), ([], "Alone"))            # nothing new: keeps waiting
         self.assertEqual(join_unfinished(None, ['She said "yes."']), (['She said "yes."'], None))
+
+    def test_a_caption_file_is_read_as_plain_cues(self):
+        # The keeper makes an .srt for every commercial (11-02).
+        from projector import parse_srt
+        srt = ("1\r\n00:00:01,000 --> 00:00:03,500\r\nOnce upon a time,\r\n<i>a fairy</i> visited Whatsit Bay.\r\n\r\n"
+               "2\n00:00:04.250 --> 00:00:06,000 X1:0\n{\\an8}Her wand lost its glow.\n\n"
+               "not a cue at all\n\n3\n00:00:07,000 --> garbage\nskipped\n\n"
+               "4\n00:01:02,5 --> 00:01:03,000\nThe end.\n")
+        cues = parse_srt(chr(0xFEFF) + srt)
+        self.assertEqual([c["text"] for c in cues],
+                         ["Once upon a time, a fairy visited Whatsit Bay.", "Her wand lost its glow.", "The end."])
+        self.assertEqual(cues[0]["start"], 1.0)
+        self.assertEqual(cues[1]["start"], 4.25)
+        self.assertEqual(cues[2]["start"], 62.5)
+
+    def test_captions_follow_play_pause_skip_and_rewind(self):
+        from projector import next_cues
+        cues = [{"start": s, "end": s + 2, "text": f"line {i}"} for i, s in enumerate((1, 4, 8, 12, 20))]
+        due, i = next_cues(cues, 0, 0.5, None)
+        self.assertEqual((due, i), ([], 0))                                   # nothing yet
+        due, i = next_cues(cues, i, 4.2, 3.7)
+        self.assertEqual(due, ["line 0", "line 1"])                          # caught up in order
+        due, i = next_cues(cues, i, 4.2, 4.2)
+        self.assertEqual(due, [])                                            # paused: nothing new
+        due, i = next_cues(cues, i, 12.5, 4.2)                               # skipped ahead
+        self.assertEqual(due, ["line 3"])                                    # the cue playing now, not the skipped one
+        due, i = next_cues(cues, i, 1.5, 12.5)                               # rewound to the start
+        self.assertEqual(due, ["line 0"])
+        due, i = next_cues(cues, i, 4.4, 3.9)                                # playing on after the rewind
+        self.assertEqual(due, ["line 1"])
+        due, i = next_cues(cues, i, 22.0, 21.6)                              # a long stretch, polled late
+        self.assertEqual(due, ["line 4"])                                     # cues long gone aren't sent late
+        self.assertEqual(i, len(cues))
+
+    def test_the_projector_only_ever_asks_vlc_never_commands_it(self):
+        # Pharos's rule for a remote: read-only. VLC's remote can also open files and play URLs; we never ask it to.
+        src = code_of(PROJ)                                    # code only: the docstring may say "command"
+        start = src.index("class VlcRemote")
+        body = src[start:src.index("def caption_source", start)]
+        import re
+        self.assertNotIn("command", body)
+        self.assertIsNone(re.search(r"""['"]POST['"]""", body))
+        self.assertRegex(body, r"""HTTPConnection\(['"]127\.0\.0\.1['"]""")
+        self.assertEqual(sorted(set(re.findall(r"""_get\(['"]([^'"]+)['"]\)""", body))),
+                         ["/requests/playlist.json", "/requests/status.json"])
 
     def test_the_word_list_reaches_the_helper_as_plain_words(self):
         import json

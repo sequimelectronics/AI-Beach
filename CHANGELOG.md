@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Feature**: Drive-In captions from a file: with an `.srt` beside a video playing in VLC, the projector sends its
+  captions as VLC reaches them (pause, skip and rewind followed), instead of transcribing the sound. It uses VLC's
+  own web remote on this computer only, read-only, with its password saved encrypted. Setup in `drivein/README.md`.
 - **Feature**: the Drive-In gives the screen the room: the show's words fill the left side in larger type, the chat
   and who's here sit in a panel on the right, and the keeper's controls fold away above the screen during a show.
   A phone stacks them, screen first.
