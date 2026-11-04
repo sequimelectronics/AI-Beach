@@ -1026,7 +1026,14 @@ def run(cfg: dict, title: str | None) -> int:
         if not choice.get("tab") and denied_in_tree(choice["pid"], deny):   # it started something while choosing
             print("That app now runs something that is never captured. No show started.")
             return 1
-        pics = make_pictures(cfg)
+        if not choice.get("tab") and choice["name"].lower() in BROWSERS and cfg.get("vision"):
+            # Pharos (11-03): a whole browser's picture is whichever tab is on top, which may not be the show (switch to
+            # an email mid-show and it would be described to the Beach). Share a tab (option 0) for pictures.
+            print("(Pictures are off for a whole browser: its picture is whichever tab is on top. For pictures, choose "
+                  "0 and share the show's tab.)")
+            pics = None
+        else:
+            pics = make_pictures(cfg)
         show = {"title": title, "pictures": pics is not None}
         if choice.get("tab"):
             try:

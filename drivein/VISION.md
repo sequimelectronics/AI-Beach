@@ -206,6 +206,10 @@ What we learned, in case you try your own:
 - **Pictures stay on this computer** by default: in memory, never saved, sent only to a describer on `127.0.0.1`.
   A server elsewhere needs `"remote_ok": true`, and then every picture of the show goes there. Use it only for a
   computer you control.
+- **A browser: share the tab (option 0).** If you pick a whole browser as the show's program, its picture is
+  whichever tab happens to be on top, which might be your email or a call, not the show. So the projector turns
+  pictures off for a whole browser and says so. Share the show's tab instead (option 0): those pictures come from
+  that one tab only.
 - **The describer's words go to the Beach** like the show's own words: kept in memory during the show, never stored.
 - **The name net is a net, not a guarantee.** It catches names written the usual way ("Firstname Lastname"); it can't
   catch a name written in lower case or a single first name. The prompt does most of the work.

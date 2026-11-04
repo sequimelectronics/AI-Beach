@@ -225,5 +225,15 @@ class PictureLoopTests(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
+class BrowserPicturesTests(unittest.TestCase):
+    def test_a_whole_browser_never_gets_pictures(self):
+        # Pharos (11-03): a whole browser's window shows whichever tab is on top (an email, a call), not the show's.
+        src = (ROOT / "drivein" / "projector.py").read_text(encoding="utf-8")
+        start = src.index("def run(cfg")
+        body = src[start:src.index("\ndef ", start + 1)]
+        self.assertIn('choice["name"].lower() in BROWSERS and cfg.get("vision")', body)
+        self.assertLess(body.index("in BROWSERS and cfg.get"), body.index("pics = make_pictures(cfg)"))
+
+
 if __name__ == "__main__":
     unittest.main()
