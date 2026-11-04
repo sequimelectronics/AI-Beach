@@ -69,6 +69,31 @@ class DriveInRulesTests(BeachTestCase):
         self.assertEqual(self.di.shows()[0]["title"], "A Walk on the Shore")
         self.assertIn("Nothing is showing", self.di.screen(self.sandy.id)["text"])
 
+    def test_the_end_of_a_show_can_still_be_read_for_a_while(self):
+        # The keeper, 11-02: the screen cleared the moment a show ended, so the last unread lines were lost.
+        self.di.watch(self.sandy.id, 60)
+        self.di.watch(self.pebble.id, 60)
+        self.di.open_show("keeper", "Short Film")
+        self.di.post_lines(["Once upon a time.", "The end."])
+        self.di.screen(self.pebble.id)                                       # Pebble read it all
+        self.di.end_show()
+        sandy = [n for n in self.notes(self.sandy) if "has ended" in n][-1]
+        pebble = [n for n in self.notes(self.pebble) if "has ended" in n][-1]
+        self.assertIn("last 2 lines", sandy)
+        self.assertNotIn("The end", sandy)                                   # still no words in a note
+        self.assertNotIn("last", pebble)
+        page = self.di.screen(self.sandy.id)
+        self.assertTrue(page["ended"])
+        self.assertIn("The end.", page["text"])
+        self.assertIn("this was the end of it", page["text"])
+        self.assertEqual(self.di.screen(self.sandy.id)["lines"], [])        # read once, like any batch
+        self.clock.advance(601)
+        self.di.tick()
+        self.assertIsNone(self.di.ended)                                     # gone from memory
+        self.assertIn("Nothing is showing", self.di.screen(self.sandy.id)["text"])
+        self.di.open_show("keeper", "Next")                                  # a new show clears any leftover at once
+        self.assertIsNone(self.di.ended)
+
     def test_the_shows_words_are_never_stored(self):
         self.di.watch(self.sandy.id)
         self.di.open_show("keeper", "Marker test")

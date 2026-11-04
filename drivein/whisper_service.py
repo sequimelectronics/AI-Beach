@@ -34,6 +34,54 @@ MAX_SECONDS = 30                             # per request
 MAX_PER_MINUTE = 90                          # seconds of sound per minute (a show plays 60)
 DEFAULT_PORT = 8796
 
+# Whisper-style models invent words over music and quiet: they learned from countless videos that end this way (the
+# keeper, 11-02: "it likes to insert 'thanks for watching' and 'no' randomly"). Three guards, cheapest first:
+# - a piece the model itself thinks has no speech (and it isn't confident about the words) is dropped;
+# - these phrases are dropped when they're a whole piece on their own (said mid-sentence, they stay), and a few
+#   short fillers need the model to be quite sure it heard speech;
+# - one- or two-word pieces need the model to be fairly sure there was speech.
+PHANTOMS = {
+    "thanks for watching", "thank you for watching", "thanks for watching and see you next time",
+    "thank you so much for watching", "please subscribe", "subscribe", "like and subscribe",
+    "please like and subscribe", "see you next time", "see you in the next video",
+    "subtitles by the amaraorg community",
+}
+# Real lines in plenty of stories, but also the model's favorite fillers: kept only when it's quite sure it heard speech.
+SUSPECTS = {"thank you", "thanks", "bye", "you", "no", "so", "okay", "oh", "um", "hmm"}
+SUSPECT_NO_SPEECH = 0.1
+NO_SPEECH_DROP = 0.6        # with avg_logprob below -1.0: Whisper's own "this was silence" rule
+SHORT_NO_SPEECH = 0.3       # a one- or two-word piece is kept only below this
+MAX_WORDS_HINT = 240        # characters of the keeper's word list (names to spell right)
+
+
+def phantom_key(text: str) -> str:
+    return " ".join("".join(c for c in text.lower() if c.isalnum() or c.isspace()).split())
+
+
+def keep_segment(text: str, no_speech_prob: float, avg_logprob: float) -> bool:
+    """Whether a heard piece is real speech rather than one of the model's inventions over music or quiet."""
+    key = phantom_key(text)
+    if not key:
+        return False
+    if no_speech_prob > NO_SPEECH_DROP and avg_logprob < -1.0:
+        return False
+    if key in PHANTOMS:
+        return False
+    if key in SUSPECTS and no_speech_prob > SUSPECT_NO_SPEECH:
+        return False
+    if len(key.split()) <= 2 and no_speech_prob > SHORT_NO_SPEECH:
+        return False
+    return True
+
+
+def clean_words(raw: str | None) -> str:
+    """The keeper's word list (names like a town or a shop), as plain words for the model to expect. Letters, digits,
+    spaces, commas, hyphens and apostrophes only, so it can only ever be a list of words."""
+    if not raw:
+        return ""
+    kept = "".join(c if (c.isalnum() or c in " ,-'") else (" " if c.isspace() else "") for c in raw)
+    return " ".join(kept.split())[:MAX_WORDS_HINT]
+
 
 def cuda_dlls_on_path() -> None:
     """On Windows, ctranslate2 needs cublas64_12.dll and cudnn64_9.dll from the nvidia-cublas-cu12 / nvidia-cudnn-cu12
@@ -69,13 +117,19 @@ class Service:
         self.busy = threading.Lock()
         self.minute: list[tuple[float, float]] = []
 
-    def transcribe(self, pcm: bytes) -> dict:
+    def transcribe(self, pcm: bytes, words: str = "") -> dict:
         import numpy as np
         audio = np.frombuffer(pcm, dtype="<i2").astype("float32") / 32768.0
         segments, info = self.model.transcribe(audio, language="en", vad_filter=True, beam_size=5,
-                                               condition_on_previous_text=False)
-        out = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()} for s in segments]
-        return {"segments": [s for s in out if s["text"]], "seconds": round(len(audio) / RATE, 2)}
+                                               condition_on_previous_text=False, hotwords=words or None)
+        out, dropped = [], 0
+        for s in segments:
+            text = s.text.strip()
+            if keep_segment(text, s.no_speech_prob, s.avg_logprob):
+                out.append({"start": round(s.start, 2), "end": round(s.end, 2), "text": text})
+            elif text:
+                dropped += 1
+        return {"segments": out, "dropped": dropped, "seconds": round(len(audio) / RATE, 2)}
 
 
 def handler_for(svc: Service):
@@ -120,7 +174,7 @@ def handler_for(svc: Service):
             self.send_response(204)
             self._cors()
             self.send_header("Access-Control-Allow-Methods", "POST")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Words")
             if self.headers.get("Access-Control-Request-Private-Network") == "true":
                 self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Access-Control-Max-Age", "600")
@@ -155,7 +209,7 @@ def handler_for(svc: Service):
                 return self._answer(429, {"error": "one request at a time"})
             try:
                 svc.minute.append((now, seconds))
-                self._answer(200, svc.transcribe(pcm))
+                self._answer(200, svc.transcribe(pcm, clean_words(self.headers.get("X-Words"))))
             finally:
                 svc.busy.release()
 

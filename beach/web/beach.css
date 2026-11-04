@@ -387,8 +387,26 @@ body.reading { background: linear-gradient(#e9dcc3, #f4ecdc 35%, var(--paper-2))
 .screen { margin-bottom: 1em; padding: .6em .9em; border-radius: 12px; background: #1f2430; color: #f4efe2; border: 4px solid #2f2323; }
 .screen h2 { margin: 0 0 .3em; font-size: 1.1rem; color: #ffd75e; }
 .screen-lines { max-height: 14em; overflow-y: auto; font-family: Georgia, 'Times New Roman', serif; font-size: 1.05rem; line-height: 1.5; }
+/* The Drive-In: the screen is the movie, so it gets the room (the keeper, 11-02). Screen left, full height;
+   the chat and who's here in a panel on the right. A phone stacks them, screen first. */
+.drivein-stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 1em; align-items: stretch; }
+.drivein-stage > * { min-width: 0; }
+.drivein-stage .screen { margin-bottom: 0; display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 22em; box-sizing: border-box; }
+.drivein-stage .screen-lines { flex: 1; max-height: none; font-size: 1.35rem; line-height: 1.6; padding-right: .3em; }
+.drivein-stage .chat-layout { grid-template-columns: 1fr; }
+.drivein-stage .people { order: -1; }
+.drivein-stage .people ul { flex-direction: row; flex-wrap: wrap; gap: .3em .8em; }
+.drivein-stage .log { height: calc(100vh - 430px); min-height: 12em; }
+.keeper-drawer { margin-bottom: .5em; }
+.keeper-drawer > summary { cursor: pointer; color: #ffd75e; }
+@media (max-width: 900px) {
+  .drivein-stage { grid-template-columns: 1fr; }
+  .drivein-stage .screen { height: auto; min-height: 0; }
+  .drivein-stage .screen-lines { max-height: 22em; font-size: 1.15rem; }
+  .drivein-stage .log { height: min(50vh, 480px); }
+}
 .screen-lines p { margin: .15em 0; }
-.screen-lines .t { color: #9aa3b5; font-size: .8em; font-family: inherit; }
+.screen-lines .t { color: #9aa3b5; font-size: .8em; font-family: inherit; margin-right: .6em; }
 .screen .hint { color: #c9c3b4; }
 .screen-keeper { margin-top: .5em; }
 .screen-keeper form { display: flex; flex-direction: column; gap: .4em; }

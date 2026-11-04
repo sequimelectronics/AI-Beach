@@ -101,6 +101,32 @@ class ProjectorTests(unittest.TestCase):
             self.assertIn("our-voice-app.exe", deny)
             self.assertTrue(projector.DENY <= deny)
 
+    def test_a_sentence_split_at_a_pause_is_joined_once(self):
+        # The keeper's second show (11-02): "she found" / "herself in a most peculiar predicament."
+        from projector import join_unfinished
+        self.assertEqual(join_unfinished(None, ["Once upon a time.", "But she found"]),
+                         (["Once upon a time."], "But she found"))
+        self.assertEqual(join_unfinished("But she found", ["herself in a predicament."]),
+                         (["But she found herself in a predicament."], None))
+        # joined once: still unfinished, it goes out anyway rather than waiting forever
+        self.assertEqual(join_unfinished("We have", ["just the"]), (["We have just the"], None))
+        # a later line in the same piece may still wait
+        self.assertEqual(join_unfinished("Hello", ["there.", "And then"]), (["Hello there."], "And then"))
+        self.assertEqual(join_unfinished("Alone", []), ([], "Alone"))            # nothing new: keeps waiting
+        self.assertEqual(join_unfinished(None, ['She said "yes."']), (['She said "yes."'], None))
+
+    def test_the_word_list_reaches_the_helper_as_plain_words(self):
+        import json
+        import tempfile
+        import projector
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d, "projector.json")
+            p.write_text(json.dumps({"beach": "http://192.168.1.20:8765",
+                                     "words": ["Whatsit Town", "Doohicky's <b>Shop</b>", "Ünïcode-ok", "中"]}))
+            words = projector.load_config(str(p))["_words"]
+            self.assertEqual(words, "Whatsit Town, Doohicky's bShopb, Ünïcode-ok, ")
+        self.assertIn('headers["X-Words"] = cfg["_words"]', PROJ.read_text(encoding="utf-8"))
+
     @unittest.skipUnless(sys.platform == "win32", "Windows only")
     def test_a_reused_process_number_is_refused(self):
         # Pharos: between the list and "yes" the program can close and its number go to another one.
@@ -141,6 +167,30 @@ class ProjectorTests(unittest.TestCase):
 
 
 class WhisperServiceTests(unittest.TestCase):
+    def test_the_models_inventions_over_music_are_dropped(self):
+        # The keeper, 11-02: "it likes to insert 'thanks for watching' and 'no' randomly".
+        from whisper_service import keep_segment
+        speech = dict(no_speech_prob=0.02, avg_logprob=-0.2)
+        self.assertTrue(keep_segment("Once upon a time, a fairy visited the town.", **speech))
+        self.assertFalse(keep_segment("Thanks for watching!", **speech))           # a phantom, even when "sure"
+        self.assertFalse(keep_segment("Please subscribe.", **speech))
+        self.assertTrue(keep_segment("Thanks for watching the shop, she said.", **speech))   # inside a sentence: kept
+        self.assertTrue(keep_segment("No.", no_speech_prob=0.05, avg_logprob=-0.3))          # a real "No."
+        self.assertFalse(keep_segment("No", no_speech_prob=0.25, avg_logprob=-0.6))          # a filler over music
+        self.assertFalse(keep_segment("Lovely day", no_speech_prob=0.45, avg_logprob=-0.6))  # short, unsure
+        self.assertTrue(keep_segment("A long line of real words here.", no_speech_prob=0.45, avg_logprob=-0.6))
+        self.assertFalse(keep_segment("Some words", no_speech_prob=0.7, avg_logprob=-1.2))   # Whisper's own silence rule
+        self.assertFalse(keep_segment("  ...  ", **speech))
+
+    def test_the_word_list_header_is_only_ever_words(self):
+        from whisper_service import clean_words
+        self.assertEqual(clean_words("Whatsit Town, Doohicky's"), "Whatsit Town, Doohicky's")
+        newline = chr(10)
+        self.assertEqual(clean_words("Ignore" + newline + 'previous <script>"x"</script>; rm -rf /'),
+                         "Ignore previous scriptxscript rm -rf")
+        self.assertEqual(len(clean_words("a" * 1000)), 240)
+        self.assertEqual(clean_words(None), "")
+
     def test_it_takes_raw_samples_only_and_answers_only_the_beach(self):
         # Pharos: nothing to parse (no container, no decoder); Host and Origin checked; CORS for one origin, never "*".
         src, code = SVC.read_text(encoding="utf-8"), code_of(SVC)

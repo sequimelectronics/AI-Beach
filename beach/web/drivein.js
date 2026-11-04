@@ -23,8 +23,16 @@
     ui.lines = el('div', { class: 'screen-lines', role: 'log', 'aria-live': 'polite', 'aria-label': 'The show\'s words', tabindex: '0' })
     ui.note = el('p', { class: 'hint', text: 'The show\'s words appear here as they\'re spoken. They\'re never kept after the show.' })
     ui.keeper = el('div', { class: 'screen-keeper' })
-    ui.box = el('section', { class: 'screen', 'aria-label': 'The Drive-In screen' }, ui.title, ui.lines, ui.note, ui.keeper)
-    document.querySelector('.chat-layout').before(ui.box)
+    // The keeper's controls fold away above the screen: the show's words are the movie, so the screen gets the room
+    // (the keeper, 11-02). Open when nothing's showing, folded during a show.
+    ui.drawer = el('details', { class: 'keeper-drawer', hidden: true },
+      el('summary', { text: 'Keeper: shows and projectors' }), ui.keeper)
+    ui.box = el('section', { class: 'screen', 'aria-label': 'The Drive-In screen' }, ui.drawer, ui.title, ui.lines, ui.note)
+    // Two columns: the screen on the left, full height; the chat (and who's here) in a panel on the right.
+    const layout = document.querySelector('.chat-layout')
+    const stage = el('div', { class: 'drivein-stage' })
+    layout.before(stage)
+    stage.append(ui.box, layout)
   }
 
   async function poll () {
@@ -60,6 +68,8 @@
   function keeperPanel (showing) {
     if (!me || !me.admin || panelShowing === showing) return
     panelShowing = showing
+    ui.drawer.hidden = false
+    ui.drawer.open = !showing
     if (showing) {
       ui.keeper.replaceChildren(el('button', {
         type: 'button', class: 'danger', text: 'End the show',

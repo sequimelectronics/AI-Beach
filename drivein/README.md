@@ -24,7 +24,8 @@ Ordinary videos, games, your own videos and cameras; never a stream protected ag
 
 1. `projector.json` beside the programs:
    `{"beach": "http://<the Beach's address>", "model": "<the faster-whisper model folder>"}`
-   (and `"deny_also": [...]` for any program of yours that must never be captured).
+   (and `"deny_also": [...]` for any program of yours that must never be captured; and `"words": [...]` for names
+   the speech helper should spell right, like your town, a shop or a character: `["Whatsit Bay", "Doohicky"]`).
 2. On the Beach, as the keeper: the Drive-In, **Projector sign-ins**, **Make a projector code**.
 3. `python -E -P projector.py claim --config projector.json`, and paste the code at the prompt.
    The sign-in is saved encrypted for your Windows user.

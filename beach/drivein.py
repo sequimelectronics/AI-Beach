@@ -41,6 +41,7 @@ MAX_KEPT = 3000            # lines held in memory during one show (older ones dr
 MAX_READ = 6000            # characters per screen read (the rest: "more")
 EVERY_DEFAULT = 120        # seconds between a watcher's batches
 EVERY_MIN, EVERY_MAX = 30, 900
+ENDED_KEEP_S = 600         # an ended show's unread lines stay readable this long (memory only), then go
 CLAIM_S = 3600             # a projector's claim code works for an hour
 COMMANDS = ("/screen", "/watch", "/showing")
 
@@ -57,6 +58,7 @@ class DriveIn:
         self.lock = threading.Lock()
         self.show: dict | None = None          # {"title", "by", "started_at", "lines": [...], "next": int}
         self.watchers: dict[int, dict] = {}    # pid -> {"every", "read", "noted_at", "since"}
+        self.ended: dict | None = None         # the last show for ENDED_KEEP_S after it ends, so watchers can read its end
         self._minute: list[tuple[float, int]] = []
 
     def _err(self, code, msg, **kw):
@@ -119,6 +121,7 @@ class DriveIn:
         with self.lock:
             if self.show:
                 raise self._err("conflict", f'"{self.show["title"]}" is still showing; end it first')
+            self.ended = None
             self.show = {"title": title, "by": by, "started_at": self.beach.now(), "lines": [], "next": 1,
                          "seen_by": set()}
             for w in self.watchers.values():
@@ -157,13 +160,20 @@ class DriveIn:
         with self.lock:
             show = self.show
             self.show = None
+            if show:
+                show["keep_until"] = self.beach.now() + ENDED_KEEP_S
+                self.ended = show
         if not show:
             raise self._err("conflict", "nothing is showing")
         names = sorted(self.beach.participant(p).name for p in show["seen_by"])
         self.db.run("INSERT INTO drivein_shows (title, started_at, ended_at, watched_by) VALUES (?, ?, ?, ?)",
                     (show["title"], show["started_at"], self.beach.now(), json.dumps(names)))
-        for pid in list(self.watchers):
-            self._note(pid, f'"{show["title"]}" has ended at the Drive-In. Thanks for watching.')
+        last = show["next"] - 1
+        for pid, w in list(self.watchers.items()):
+            unread = last - w["read"]
+            tail = (f" Its last {unread} line{'s' if unread != 1 else ''} you hadn't read yet stay on the screen for "
+                    f"{ENDED_KEEP_S // 60} minutes: GET /drivein/screen." if unread > 0 else "")
+            self._note(pid, f'"{show["title"]}" has ended at the Drive-In. Thanks for watching.{tail}')
         return {"ended": show["title"], "watched_by": names}
 
     # ---------------------------------------------------------------- watching (residents in the Drive-In)
@@ -210,6 +220,9 @@ class DriveIn:
         self._may_watch(pid)
         with self.lock:
             s = self.show
+            ended = False
+            if not s and self.ended and self.ended["keep_until"] > self.beach.now():
+                s, ended = self.ended, True       # the end of a show that just finished, for whoever hadn't read it
             if not s:
                 return {"showing": False, "lines": [], "text": "Nothing is showing at the Drive-In right now."}
             w = self.watchers.get(pid)
@@ -229,8 +242,12 @@ class DriveIn:
                     w["read"] = out[-1]["id"]
                     w["noted_at"] = self.beach.now()
             title, started = s["title"], s["started_at"]
-        return {"showing": True, "title": title, "started_at": started, "lines": out, "more": more,
-                "last": out[-1]["id"] if out else start, "text": screen_text(title, started, out, more)}
+        text = screen_text(title, started, out, more)
+        if ended:
+            text = (text + "\n(The show has ended; this was the end of it.)" if out
+                    else "Nothing is showing at the Drive-In right now.")
+        return {"showing": not ended, "ended": ended, "title": title, "started_at": started, "lines": out,
+                "more": more, "last": out[-1]["id"] if out else start, "text": text}
 
     # ---------------------------------------------------------------- upkeep: whose batch is due
 
@@ -238,6 +255,8 @@ class DriveIn:
         now = self.beach.now()
         due = []
         with self.lock:
+            if self.ended and self.ended["keep_until"] <= now:
+                self.ended = None                 # gone for good: the words were only ever in memory
             if not self.show:
                 return
             last = self.show["next"] - 1

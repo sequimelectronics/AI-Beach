@@ -11,6 +11,19 @@ What changed, newest first, one line per change. Each line starts with what kind
 Commit hashes are in brackets, for anyone who wants the details. Engine patches (`patches/`) apply to
 Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md`).
 
+## 2026-11-03
+
+- **Feature**: the Drive-In gives the screen the room: the show's words fill the left side in larger type, the chat
+  and who's here sit in a panel on the right, and the keeper's controls fold away above the screen during a show.
+  A phone stacks them, screen first.
+- **Fix**: the end of a show isn't lost: a watcher who hadn't read the last lines is told how many, and can read
+  them for 10 minutes after the show ends (still in memory only, then gone).
+- **Fix**: the speech helper drops what the model invents over music and quiet ("Thanks for watching!", stray
+  "No"s), and a sentence split at a pause is joined before it goes on the screen.
+- **Feature**: a projector word list (`"words"` in `projector.json`) so names like a town or a shop are spelled
+  right.
+- **Fix**: the projector's list of apps no longer marks the window that started it as playing.
+
 ## 2026-11-02
 
 - **Docs**: keeper's guide: know when the door from outside is down (a free uptime checker on the public

@@ -85,6 +85,12 @@ def load_config(path: str) -> dict:
     # This computer's own programs that must never be captured (a household voice app's names, say): kept in the
     # local config, never in the shared code.
     cfg["_deny"] = DENY | {str(n).lower() for n in cfg.get("deny_also", []) if str(n).strip()}
+    # Names to spell right (a town, a shop, a character), sent with each piece as words to expect (the keeper, 11-02:
+    # "Sequim" came out "Squim"). Plain words only; the helper cleans them again.
+    words = cfg.get("words", [])
+    words = words if isinstance(words, list) else [words]
+    cfg["_words"] = ", ".join("".join(c for c in str(w) if (c.isalnum() or c in " -'") and ord(c) < 256).strip()
+                              for w in words if str(w).strip())[:240]
     return cfg
 
 
@@ -114,7 +120,10 @@ def beach_call(cfg: dict, method: str, path: str, body: dict | None, token: str 
 
 def transcribe(cfg: dict, pcm: bytes) -> list[str]:
     conn = http.client.HTTPConnection("127.0.0.1", int(cfg["whisper_port"]), timeout=60)
-    conn.request("POST", "/transcribe", body=pcm, headers={"Content-Type": "application/octet-stream"})
+    headers = {"Content-Type": "application/octet-stream"}
+    if cfg.get("_words"):
+        headers["X-Words"] = cfg["_words"]
+    conn.request("POST", "/transcribe", body=pcm, headers=headers)
     r = conn.getresponse()
     data = json.loads(r.read() or b"{}")
     if r.status != 200:
@@ -445,7 +454,10 @@ def open_programs() -> list[dict]:
         return True
 
     user32.EnumWindows(each, 0)
-    playing = {p["pid"] for p in sounding_programs()}
+    # The projector's own capture (and its helper) show up as sound sessions; they mustn't make the window that
+    # started it (Explorer, a terminal) look like it's playing (the keeper's list, 11-02).
+    me = {os.getpid(), *_children(os.getpid())}
+    playing = {p["pid"] for p in sounding_programs()} - me
     out = []
     for pid, p in found.items():
         p["titles"] = window_titles({pid})
@@ -580,12 +592,50 @@ def _end_on_close(cfg: dict, token: str) -> None:
     ctypes.windll.kernel32.SetConsoleCtrlHandler(_end_on_close.keep, True)
 
 
+SENTENCE_END = (".", "!", "?", "…", '"', "'", ")", "”", "’")
+HOLD_S = 8          # an unfinished line waits at most this long for the rest of its sentence
+
+
+def join_unfinished(held: str | None, lines: list[str]) -> tuple[list[str], str | None]:
+    """Speech is cut at pauses, so a sentence can arrive in two pieces ("she found" / "herself in a ..."; the keeper,
+    11-02). A last line without an ending is held back and joined to the start of the next piece, once: a line that
+    was already joined goes out as it is. Returns (lines to send now, the line now held, if any)."""
+    lines = list(lines)
+    joined = False
+    if held:
+        if lines:
+            lines[0] = f"{held} {lines[0]}"
+            joined = len(lines) == 1            # only the first line was joined; a later one may still wait
+        else:
+            lines = [held]
+    if lines and not joined and not lines[-1].rstrip().endswith(SENTENCE_END):
+        return lines[:-1], lines[-1]
+    return lines, None
+
+
 def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCapture") -> int:
     _end_on_close(cfg, token)
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector")
     print(f"\n*** ON AIR: listening to {choice['name']} only. Press Play whenever you're ready. ***")
     print("    Close this window (or Ctrl+C) to end the show.\n")
     buf, last_speech, tree_at = b"", time.monotonic(), time.monotonic()
+    held, held_at, beach_ended = None, 0.0, False
+
+    def send(lines: list[str]) -> bool:
+        """Put lines on the screen; False when the show has been ended on the Beach."""
+        if not lines:
+            return True
+        st, r = beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
+        if st == 409:
+            print("The show was ended on the Beach: stopping.")
+            return False
+        if st != 200:
+            print(f"The Beach refused the lines: {r.get('message') or st}")
+        else:
+            for ln in lines:
+                print("  >", ln)
+        return True
+
     try:
         while True:
             if not cap.alive():
@@ -612,15 +662,16 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
                         break
                     if lines:
                         last_speech = time.monotonic()
-                        st, r = beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
-                        if st == 409:
-                            print("The show was ended on the Beach: stopping.")
+                        out, held = join_unfinished(held, lines)
+                        held_at = time.monotonic()
+                        if not send(out):
+                            held, beach_ended = None, True
                             break
-                        elif st != 200:
-                            print(f"The Beach refused the lines: {r.get('message') or st}")
-                        else:
-                            for ln in lines:
-                                print("  >", ln)
+            if held and time.monotonic() - held_at > HOLD_S:    # the sentence never went on: show what there is
+                out, held = [held], None
+                if not send(out):
+                    beach_ended = True
+                    break
             if time.monotonic() - last_speech > IDLE_STOP_S:
                 print(f"No speech for {IDLE_STOP_S // 60} minutes: capture stopped.")
                 break
@@ -633,15 +684,15 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
     # The last words still held (up to a piece's length) go out before the show ends; found in rehearsal (11-01): a
     # show stopped mid-piece lost its final line.
     buf += cap.take()
-    if buf and rms(buf) >= QUIET_RMS / 3:
+    last: list[str] = []
+    if buf and not beach_ended and rms(buf) >= QUIET_RMS / 3:
         try:
-            lines = transcribe(cfg, buf[: 29 * RATE * 2])
-            if lines:
-                beach_call(cfg, "POST", "/drivein/lines", {"lines": lines}, token)
-                for ln in lines:
-                    print("  >", ln)
+            last = transcribe(cfg, buf[: 29 * RATE * 2])
         except (OSError, RuntimeError):
             pass
+    if held or last:                       # nothing waits any more: a held line and the last words go out together
+        out, rest = join_unfinished(held, last)
+        send(out + ([rest] if rest else []))
     st, r = beach_call(cfg, "POST", "/drivein/show/end", None, token)
     print("The show has ended. Thanks for projecting!" if st in (200, 409) else
           f"(the Beach said: {r.get('message') or st})")
