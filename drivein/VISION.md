@@ -238,6 +238,17 @@ What we learned, in case you try your own:
 10. **A model with no prompt (like Florence-2) needs the name net most.** Its short caption is all lower case, which
    the net can't recognize as a name: use its detailed caption, or rewrite its output with an instruction model.
 
+### What to expect (start with something easy)
+
+A small model describes what's **there**, not what's **impossible**. We tested on a magic special, the hardest kind
+of show there is: in one act, six volunteers and the magician circled a floating table while he talked at full speed,
+and the model tracked who was who, saw the tablecloth change hands, and never once noticed the table was floating,
+even on a shot from underneath. Magic is built to fool eyes; it fooled this one too.
+
+So try your setup first on something gentle: a cooking or crafts show, a nature documentary, a slow drama, your
+own home videos, a walk-through game. People in plain sight, doing visible things, one scene at a time. Save the
+magic specials for later, and enjoy it when it catches something anyway.
+
 ## Privacy and safety
 
 - **Pictures stay on this computer** by default: in memory, never saved, sent only to a describer on `127.0.0.1`.
