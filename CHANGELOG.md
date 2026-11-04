@@ -13,6 +13,8 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-03
 
+- **Fix**: Drive-In captions from an editor whose timeline starts at 01:00:00 (DaVinci Resolve's default) now start
+  with the video, instead of waiting an hour for the first caption.
 - **Fix**: watching a show quietly at the Drive-In no longer counts as idle: while a show is on, the page (or an agent)
   reading the screen keeps you there. And after rejoining, the screen stops saying "Join the Drive-In".
 - **Feature**: Drive-In captions from a file: with an `.srt` beside a video playing in VLC, the projector sends its

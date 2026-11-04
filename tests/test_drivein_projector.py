@@ -129,6 +129,22 @@ class ProjectorTests(unittest.TestCase):
         self.assertEqual(cues[1]["start"], 4.25)
         self.assertEqual(cues[2]["start"], 62.5)
 
+    def test_captions_from_an_editors_one_hour_timeline_start_at_zero(self):
+        # The keeper's first captioned show (11-03): Resolve's timeline starts at 01:00:00, so the 2:35 commercial's
+        # first caption was at 1:00:00.9 and nothing ever reached the screen.
+        from projector import from_timeline_start
+        cues = [{"start": 3600.92, "end": 3602.79, "text": "Once upon a time,"},
+                {"start": 3602.79, "end": 3605.5, "text": "a fairy visited."}]
+        shifted, by = from_timeline_start(cues, 155.0)
+        self.assertEqual(by, 3600.0)
+        self.assertAlmostEqual(shifted[0]["start"], 0.92, places=2)
+        self.assertAlmostEqual(shifted[1]["end"], 5.5, places=2)
+        self.assertEqual(from_timeline_start(cues, 7200.0), (cues, 0.0))             # a 2-hour film: leave it
+        normal = [{"start": 1.0, "end": 2.0, "text": "Hi."}]
+        self.assertEqual(from_timeline_start(normal, 155.0), (normal, 0.0))
+        late = [{"start": 3900.0, "end": 3901.0, "text": "x"}]
+        self.assertEqual(from_timeline_start(late, 100.0), (late, 0.0))             # past the end even shifted
+
     def test_captions_follow_play_pause_skip_and_rewind(self):
         from projector import next_cues
         cues = [{"start": s, "end": s + 2, "text": f"line {i}"} for i, s in enumerate((1, 4, 8, 12, 20))]

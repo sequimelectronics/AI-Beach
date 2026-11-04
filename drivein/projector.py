@@ -633,7 +633,7 @@ class VlcRemote:
         s = self._get("/requests/status.json")
         length, pos = float(s.get("length") or 0), float(s.get("position") or 0)
         at = pos * length if length > 0 else float(s.get("time") or 0)
-        return {"state": s.get("state"), "time": at}
+        return {"state": s.get("state"), "time": at, "length": length}
 
     def current_file(self) -> str | None:
         def walk(node):
@@ -667,10 +667,30 @@ def caption_source(cfg: dict) -> tuple["VlcRemote", list[dict], str] | None:
         return None
     try:
         cues = read_srt(srt)
+        length = vlc.status()["length"]
     except (OSError, ValueError) as e:
         print(f"(Couldn't read {os.path.basename(srt)}: {e}. Listening instead.)")
         return None
+    cues, shift = from_timeline_start(cues, length)
+    if shift:
+        print(f"(The captions start at the editor's {int(shift // 3600)}:00:00 timeline mark; following them from 0:00.)")
     return (vlc, cues, os.path.basename(srt)) if cues else None
+
+
+def from_timeline_start(cues: list[dict], length: float) -> tuple[list[dict], float]:
+    """Editors' timelines often start at 01:00:00 (DaVinci Resolve's default), so an exported .srt's first caption
+    sits an hour in while the video itself starts at 0:00 (the keeper's first captioned show, 11-03: nothing ever
+    reached the screen). When the first caption is an hour or more past the video's end, shift back by those whole
+    hours. Returns (cues, seconds shifted)."""
+    if not cues or cues[0]["start"] < 3600:
+        return cues, 0.0
+    hours = int(cues[0]["start"] // 3600)
+    if length > 0 and cues[0]["start"] - hours * 3600 > length:
+        return cues, 0.0                      # still past the end after shifting: not a timeline offset, leave it
+    if length > 0 and cues[0]["start"] <= length:
+        return cues, 0.0                      # a long video really does reach its first caption an hour in
+    shift = hours * 3600.0
+    return [{**c, "start": c["start"] - shift, "end": c["end"] - shift} for c in cues], shift
 
 
 def next_cues(cues: list[dict], index: int, now: float, last: float | None) -> tuple[list[str], int]:
