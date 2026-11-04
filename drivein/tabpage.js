@@ -58,7 +58,7 @@
         preferCurrentTab: false,
         selfBrowserSurface: 'exclude', // not this page itself
         systemAudio: 'exclude', // never the whole computer's sound
-        surfaceSwitching: 'include',
+        surfaceSwitching: 'exclude', // one tab per show: no 'share this tab instead' mid-show (Pharos)
         monitorTypeSurfaces: 'exclude' // no whole screens
       })
     } catch (e) {

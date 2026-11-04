@@ -236,6 +236,22 @@ class ProjectorTests(unittest.TestCase):
         finally:
             tab.close()
 
+    def test_the_tab_page_owns_its_port(self):
+        # Pharos (11-03): on Windows, address reuse lets a second socket bind the same port; a squatter must make the
+        # projector's page fail loudly, not share the port.
+        import socket
+        from projector import TabCapture
+        squatter = socket.socket()
+        squatter.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        squatter.bind(("127.0.0.1", 0))
+        squatter.listen(1)
+        try:
+            with self.assertRaises(OSError):
+                TabCapture(squatter.getsockname()[1]).close()
+        finally:
+            squatter.close()
+        self.assertIn("surfaceSwitching: 'exclude'", (ROOT / "drivein" / "tabpage.js").read_text(encoding="utf-8"))
+
     def test_the_word_list_reaches_the_helper_as_plain_words(self):
         import json
         import tempfile
@@ -317,7 +333,8 @@ class WhisperServiceTests(unittest.TestCase):
         src, code = SVC.read_text(encoding="utf-8"), code_of(SVC)
         for forbidden in ("ffmpeg", "decode_audio", "av.open", "wave.open", "'*'"):
             self.assertNotIn(forbidden, code, forbidden)
-        for needed in ('ThreadingHTTPServer(("127.0.0.1", a.port)', 'self.headers.get("Host") != svc.host',
+        for needed in ('Exclusive(("127.0.0.1", a.port)', "allow_reuse_address = False", "SO_EXCLUSIVEADDRUSE",
+                       'self.headers.get("Host") != svc.host',
                        "origin is not None and origin != svc.origin", "Access-Control-Allow-Private-Network",
                        'os.environ["HF_HUB_OFFLINE"] = "1"', "local_files_only=True"):
             self.assertIn(needed, src, needed)

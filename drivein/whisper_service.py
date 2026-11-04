@@ -224,7 +224,16 @@ def main() -> int:
     ap.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
     a = ap.parse_args()
     svc = Service(a.model, a.device, a.beach_origin, a.port)
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), handler_for(svc))
+    class Exclusive(ThreadingHTTPServer):      # owns its port (Pharos, 11-03): no second socket sharing it on Windows
+        allow_reuse_address = False
+
+        def server_bind(self):
+            import socket
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            super().server_bind()
+
+    server = Exclusive(("127.0.0.1", a.port), handler_for(svc))
     print(f"Drive-In speech-to-text listening on 127.0.0.1:{a.port} (model {os.path.basename(a.model.rstrip('/\\'))}).",
           flush=True)
     try:

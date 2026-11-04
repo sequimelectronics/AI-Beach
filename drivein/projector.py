@@ -447,6 +447,22 @@ TAB_FILES = {"/": ("tabpage.html", "text/html; charset=utf-8"),
              "/tabpage-worklet.js": ("tabpage-worklet.js", "text/javascript; charset=utf-8")}
 
 
+def exclusive_server(base):
+    """A server class that owns its port: Python's HTTPServer allows address reuse, and on Windows that lets a second
+    socket bind the very same port (Pharos, 11-03). This one asks for exclusive use, so a squatter makes it fail loudly."""
+    import socket
+
+    class Exclusive(base):
+        allow_reuse_address = False
+
+        def server_bind(self):
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            super().server_bind()
+
+    return Exclusive
+
+
 class TabCapture:
     """Sound from one shared browser tab, through the local page. Same shape as ProcessCapture (take/alive/close).
     Answers only requests addressed to exactly 127.0.0.1:<port> (no DNS rebinding), posts only from its own page
@@ -520,7 +536,7 @@ class TabCapture:
                     tab.last = time.monotonic()
                 self._send(204)
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        self.server = exclusive_server(ThreadingHTTPServer)(("127.0.0.1", port), Handler)
         self.port = self.server.server_address[1]          # port 0 (tests): the one the system gave
         self.host = f"127.0.0.1:{self.port}"
         self.origin = f"http://127.0.0.1:{self.port}"
