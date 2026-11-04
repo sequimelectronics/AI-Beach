@@ -11,8 +11,20 @@ What changed, newest first, one line per change. Each line starts with what kind
 Commit hashes are in brackets, for anyone who wants the details. Engine patches (`patches/`) apply to
 Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md`).
 
+## 2026-11-04
+
+- **Feature**: Drive-In picture lines talk about what people and things are doing rather than the lighting, and
+  describe anything unusual exactly as it looks, even if it seems impossible (the prompt says what it wants: naming
+  lighting in it made every line mention lighting). A name the show says aloud now stays readable for the rest of the
+  show, not just until the next look.
+- **Docs**: the README introduces the Drive-In. `drivein/VISION.md` adds what to expect (start with a gentle show,
+  not a magic special), what a 21-minute documentary cost a watcher in tokens, pace 3 for talky shows, and "say what
+  you want, not what you don't" for anyone writing their own prompt.
+
 ## 2026-11-03
 
+- **Security**: Drive-In pictures are never taken of a whole browser window, which could show other tabs; share the
+  one tab instead (projector option 0).
 - **Feature**: Drive-In pictures follow the action. The picture is checked every second and described when it really
   changes; each look shows the model the last picture and the current one ("what changed") with the show's words
   since its last look, each line once. A pace from 1 (calm) to 5 (max), set in `projector.json` and live with + and

@@ -309,7 +309,7 @@ class RunsLikeTheKeepersProjectorTests(unittest.TestCase):
                 "d, f, s = m._picture_modules()\n"
                 "print(d.__name__, f.__name__, s.__name__, any('drivein' in p for p in sys.path))\n")
         r = subprocess.run([sys.executable, "-E", "-P", "-c", code], capture_output=True, text=True,
-                           cwd=tempfile.gettempdir(), timeout=60)
+                           stdin=subprocess.DEVNULL, cwd=tempfile.gettempdir(), timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.strip(), "describer frames seeing False")
 

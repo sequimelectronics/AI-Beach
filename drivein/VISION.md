@@ -65,13 +65,14 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
   [`describer.py`](describer.py), and the rest of the projector doesn't care which model is behind it.
 - **The name net.** Every description, from any model, goes through `scrub()`, which replaces what looks like a
   person's name with "someone". Names the show itself supplies are left alone: those in your `"words"` list, and
-  any name in the show's recent spoken lines (so a title card the narrator has already named stays readable).
+  any name the show has said aloud so far this show (so a title card the narrator named minutes ago stays readable).
+  A name that only appears on screen (a caption under an expert, a label on a map) is still replaced for now.
 
 ## The default setup
 
 The bake-off winner is **MiniCPM-V 4.7 1B**: the smallest model we tried and the most accurate small one. It runs
 on a graphics card (about 0.3 seconds a description, 2 GB of video memory) **or on the processor alone** (about 8
-seconds a description, which keeps up with the 15-second pace).
+seconds a description: fine at pace 1 or 2; the busier paces want a graphics card).
 
 You need:
 
@@ -219,8 +220,8 @@ What we learned, in case you try your own:
    no thinking token: llama-server with `--jinja` honors the flag; some other wrappers don't.
 6. **A newer llama.cpp can see better.** The same Gemma model file described pictures noticeably more sharply on
    llama.cpp b12024 (October 31, 2026) than on a June 2026 build.
-7. **Processor only is fine at this pace.** Every small model kept up with a line every 15 seconds without a
-   graphics card.
+7. **Processor only is fine at a calm pace.** Every small model kept up with a line every 15 seconds (pace 1)
+   without a graphics card; paces 4 and 5 look every 2 to 3 seconds and want one.
 8. **Watching a whole act: two pictures, not its own old lines.** On 36 frames of an escape act, three seconds apart,
    we compared: one picture at a time (concrete, but no action, and it called the long-haired performer "a woman"
    9 times); two pictures (it narrated action: "swings upward, gripping a rope", "now it's a massive fireball");
@@ -253,6 +254,16 @@ even on a shot from underneath. Magic is built to fool eyes; it fooled this one 
 So try your setup first on something gentle: a cooking or crafts show, a nature documentary, a slow drama, your
 own home videos, a walk-through game. People in plain sight, doing visible things, one scene at a time. Save the
 magic specials for later, and enjoy it when it catches something anyway.
+
+A field-archaeology documentary was the best show we tried: the model followed the digger, the trench filling with
+stones, a ruler drawn across an aerial photo, and a computer-drawn temple rising over the real field, while the
+narration carried the history. Two things we measured on it:
+
+- **Pictures can drown out the talk.** At pace 5, picture lines were about two thirds of all the text on the screen,
+  even in a show that's mostly conversation (a picture line runs about three times as long as a spoken one). For
+  talky shows, **pace 3** is plenty.
+- **What a show costs a watcher.** 21 minutes at pace 5 then 4 came to about 17,700 tokens of screen text (counted
+  with a Gemma tokenizer), about 830 a minute. Without pictures it would be roughly half.
 
 ## Privacy and safety
 
