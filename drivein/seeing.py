@@ -41,6 +41,10 @@ class PictureLoop(threading.Thread):
         self.heard = heard or (lambda: [])
         self.story = story                   # False: no spoken words and no previous picture (each look on its own)
         self.allowed = {w.strip() for w in allowed_words if str(w).strip()}
+        # Names the show has said at any point this show stay allowed through the name net all show (the keeper's
+        # title card came out "The Magic of someone" when the narrator had said the name minutes before, not since
+        # the last look). The CONTEXT stays since-the-last-look only.
+        self.show_names: set[str] = set()
         self.pace = max(1, min(5, int(pace)))
         self.poll, self.say, self.clock = poll, say, clock
         self.stop_event = threading.Event()
@@ -91,6 +95,7 @@ class PictureLoop(threading.Thread):
         jpeg = _frames.to_jpeg(img)
         previous = self.last_jpeg if (self.story and moved and self.last_jpeg) else None
         spoken = self._spoken_since_last_look()
+        self.show_names |= _describer.names_in(spoken)
         context = "\n".join(spoken) if self.story else ""
         detail = "change" if previous else ("long" if (asked or not moved) else "short")
         try:
@@ -104,7 +109,7 @@ class PictureLoop(threading.Thread):
             return None
         self.failures = 0
         self.last_look = now
-        line = _describer.scrub(line, self.allowed | _describer.names_in(spoken))
+        line = _describer.scrub(line, self.allowed | self.show_names)
         if not line or line.strip(" .").upper() == "SAME":
             return None
         self.last_thumb, self.last_jpeg, self.last_line = t, jpeg, now

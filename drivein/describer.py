@@ -48,12 +48,17 @@ DEFAULT_PROMPTS = {
     # narrated the action ("swings upward, gripping a rope"; "now it's a massive fireball") where one picture at a time
     # couldn't. NO EXAMPLE PEOPLE in this prompt on purpose: with "the woman in the red dress" as an example, the model
     # described a woman in red eight times in a show that had none (the keeper's rule of placeholders, proven).
+    # The keeper (11-03, after the floating table): "talk rarely about lighting and more about the actions of the
+    # people or things on the screen", and "if something seems impossible go ahead and describe it, this could be
+    # sci-fi or fantasy". Phrased POSITIVELY on purpose: naming lighting ("mention lighting only if...") made every
+    # line mention lighting (36 of 36), and a list of impossible things made it recite "nothing appears or
+    # disappears". Whatever words the prompt holds, a small model repeats.
     "change": "You see two pictures from a video, a few seconds apart: the FIRST is earlier, the SECOND is now. In one "
               "or two short sentences (at most 25 words): first say what is happening in the SECOND picture, then "
-              "anything that changed since the first (someone moved or did something, or the camera cut to a new "
-              "view). If there is more than one person, tell them apart by what they are wearing or how they look. "
-              "Never name anyone you recognize; use a name only if the show's words below just said it. Say only what "
-              "you can see.",
+              "what changed since the first. Focus on what people and things are doing. Describe anything unusual "
+              "exactly as it looks, even if it seems impossible. If there is more than one person, tell them apart by "
+              "what they are wearing or how they look. Never name anyone you recognize; use a name only if the "
+              "show's words below just said it. Say only what you can see.",
 }
 
 

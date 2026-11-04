@@ -228,6 +228,21 @@ class PictureLoopTests(unittest.TestCase):
         self.assertEqual(L.step(), "(seen) Whatsit Doohicky waves.")
         self.assertIn("Please welcome Whatsit Doohicky!", self.calls[-1][1])
 
+    def test_a_name_the_show_said_stays_allowed_all_show(self):
+        # The keeper's title card, again: the narrator said the name minutes earlier, not since the last look.
+        L = self.loop
+        self.spoken.append((0.5, "Ladies and gentlemen, Whatsit Doohicky!"))
+        self.now[0] = 1
+        L.step()                                                      # heard it on this look
+        for i in range(2, 6):                                         # several looks later, nothing new said
+            self.now[0] = 31.0 * i
+            self.picture = self.scene(i)
+            L.step()
+        self.asked[0] = True                                          # a long look whose answer names him
+        self.now[0] = 200
+        self.assertEqual(L.step(), "(seen) Whatsit Doohicky waves.")
+        self.assertEqual(self.calls[-1][1], "")                       # the context didn't carry the old line again
+
     def test_the_pace_knob_and_the_cap(self):
         L = self.loop
         self.assertEqual(L.set_pace(9), 5)                            # clamped
