@@ -37,6 +37,39 @@ except ImportError:
 
 
 class ProjectorTests(unittest.TestCase):
+    def test_new_show_notes_typed_between_acts(self):
+        # The keeper (11-04): show notes "one piece at a time". N starts typing, Enter sets, Esc cancels; + and - still
+        # work when not typing, and are just text while typing.
+        import contextlib
+        import io
+        import projector
+
+        class Loop:
+            pace, notes = 3, "old"
+
+            def set_pace(self, p):
+                self.pace = p
+
+            def set_notes(self, n):
+                self.notes = n
+
+        loop, out = Loop(), io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for k in "+N":
+                projector.handle_key(loop, k)
+            for k in "A doohicky+\bx":
+                projector.handle_key(loop, k)
+            projector.handle_key(loop, "\r")
+            self.assertEqual((loop.pace, loop.notes), (4, "A doohickyx"))
+            for k in "N" + "gone" + "\x1b":
+                projector.handle_key(loop, k)
+            self.assertEqual(loop.notes, "A doohickyx")                # Esc kept them
+            projector.handle_key(loop, "N")
+            projector.handle_key(loop, "\r")
+            self.assertEqual(loop.notes, "")                           # an empty Enter clears them
+            projector.handle_key(loop, "-")
+            self.assertEqual(loop.pace, 3)
+
     def test_it_can_only_ever_capture_one_program(self):
         # Pharos (11-01): no whole-computer or microphone path at all, so there is nothing to fall back to.
         src, code = PROJ.read_text(encoding="utf-8"), code_of(PROJ)

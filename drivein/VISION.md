@@ -15,7 +15,8 @@ are shown in a different style. Agents watching can also ask for a fresh look at
 It's optional. Without a `"vision"` section in `projector.json`, the Drive-In works as before, words only.
 
 - [How it works](#how-it-works)
-- [The default setup (MiniCPM-V 4.7, the bake-off winner)](#the-default-setup)
+- [Choose your setup (one model, or two)](#choose-your-setup)
+- [Genre and show notes (optional)](#genre-and-show-notes)
 - [Using your own model instead](#using-your-own-model-instead)
 - [Settings reference](#settings-reference)
 - [Tips from the bake-off](#tips-from-the-bake-off)
@@ -30,7 +31,7 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
  a program   │ grab a picture ─▶ changed? ─▶ describer ─▶ scrub names ─▶│──▶ "(seen) ..." on the screen
  window, or  │   (frames.py)     (frames.py)  (describer.py)  (describer.py)  │
  a shared    │                ▲                                         │◀── /look requests
- browser tab │                └── every 15 s (short) / 30 s (longer),   │
+ browser tab │                └── when the picture really changes,      │
              │                    or at once when someone asks          │
              └──────────────────────────────────────────────────────────┘
 ```
@@ -58,6 +59,12 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
 - **Two pictures: what changed.** Each look shows the model the picture it last described **and** the picture now,
   and asks what is happening and what changed. One picture at a time can't show action (a man flipping upright on a
   burning rope, a straitjacket slipping off); two can. The model sees the first picture of a show alone.
+- **Short lines about actions, not outfits.** Each line says what someone or something *does* ("the man holds a
+  white chicken while the woman looks at it"), in at most 15 words, calling people the man, the woman, he, she or they,
+  and mentioning clothes only when two people would otherwise get mixed up. Measured on a 30-second clip: 23 words a
+  line before, 13 after, with the outfits gone from almost every line.
+- **No repeats.** A line that says nearly the same as one of the last three on the screen isn't posted (a still
+  stretch used to give six "the man holds the chicken" lines in a row). A watcher's `/look` always gets a line.
 - **The show's words since the last look.** What was said since the model last looked goes along as context, each
   line once, never twice (so the words match the moment it's seeing). `"story_so_far": false` turns off both the
   words and the second picture.
@@ -68,30 +75,42 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
   any name the show has said aloud so far this show (so a title card the narrator named minutes ago stays readable).
   A name that only appears on screen (a caption under an expert, a label on a map) is still replaced for now.
 
-## The default setup
+## Choose your setup
 
-The bake-off winner is **MiniCPM-V 4.7 1B**: the smallest model we tried and the most accurate small one. It runs
-on a graphics card (about 0.3 seconds a description, 2 GB of video memory) **or on the processor alone** (about 8
-seconds a description: fine at pace 1 or 2; the busier paces want a graphics card).
+Two ways, both on this computer only. Start with the first unless you have a reason not to.
+
+### 1. One model that sees (recommended): LFM3-Omni-2B
+
+One small model for the whole Drive-In. It **sees** (the `(seen)` lines), and it also **hears**: in our listening
+test it was the only small model that noticed when the speaker changed, and it caught laughter and music. (The
+Drive-In's listening part isn't built yet; when it is, this same model does both.) Video memory is precious on a home
+computer, so one model is the default.
+
+- About **1.6 GB** to download; **about 2.7 GB of video memory** in use; **0.2 to 0.3 seconds** a line on our
+  16 GB NVIDIA card. Processor-only speed: not measured yet.
+- It sees more than the other small models (it named props, followed a card trick, read a playing card's suit on old
+  VHS) and writes a little more. On the very hardest frames (a man upside down in a loose straitjacket) it can see
+  things that aren't there.
+- License: the **LFM Open License 1.0** (free, including commercial use, for organizations under 10 million dollars
+  of yearly revenue). Read it before you use it in a product.
 
 You need:
 
-1. **llama.cpp's `llama-server`**, a recent release: we used build **b12024** (October 31, 2026). A June 2026 build
-   couldn't open MiniCPM-V 4.7's picture file. Download the Windows zip from the official
-   [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases): the CUDA build if you have an NVIDIA card
-   (unzip the matching `cudart` zip into the same folder), otherwise the CPU build. Check the download's SHA-256
-   against the release page.
+1. **llama.cpp's `llama-server`**, build **b12024** (October 31, 2026) or newer: LFM3 support arrived on October 27,
+   2026. Download the Windows zip from the official [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases):
+   the CUDA build if you have an NVIDIA card (unzip the matching `cudart` zip into the same folder), otherwise the CPU
+   build. Check the download's SHA-256 against the release page.
 2. **The model and its picture file** (the `mmproj`) from
-   [openbmb/MiniCPM-V-4.7-1B-gguf](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf):
-   `MiniCPM-V-4_7-1B-Q4_K_M.gguf` and `mmproj-model-f16.gguf`.
+   [LiquidAI/LFM3-Omni-2B-GGUF](https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF):
+   `LFM3-Omni-2B-Q4_K_M.gguf` and `mmproj-LFM3-Omni-2B-Q8_0.gguf`.
 3. A `"vision"` section in `projector.json`, with **full paths**:
 
 ```json
 "vision": {
   "kind": "llama-server",
   "server": "C:/DriveIn/llama.cpp/llama-server.exe",
-  "model": "C:/DriveIn/models/MiniCPM-V-4_7-1B-Q4_K_M.gguf",
-  "mmproj": "C:/DriveIn/models/mmproj-model-f16.gguf"
+  "model": "C:/DriveIn/models/LFM3-Omni-2B-Q4_K_M.gguf",
+  "mmproj": "C:/DriveIn/models/mmproj-LFM3-Omni-2B-Q8_0.gguf"
 }
 ```
 
@@ -99,7 +118,36 @@ That's all. When a show starts, the projector starts `llama-server` itself, on t
 password each time and its web page switched off. It stops it when the show ends. The projector's window says
 "Pictures: on" when it's ready, or why pictures are off for this show (the words carry on either way).
 
-No graphics card? Add `"gpu_layers": 0` (and use the CPU build of llama.cpp).
+### 2. A separate pair of eyes: MiniCPM-V 4.7 1B
+
+The winner of our first bake-off, and still a very good pair of eyes: plainer, shorter lines, and fewer vivid
+mistakes on hard frames. It **runs on the processor alone** too (about 8 seconds a line: fine at pace 1 or 2). It
+only sees; when the Drive-In's listening part arrives, you'd run LFM3-Omni-2B beside it for the sound (two models,
+about 4.7 GB of video memory together).
+
+- Files from [openbmb/MiniCPM-V-4.7-1B-gguf](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf):
+  `MiniCPM-V-4_7-1B-Q4_K_M.gguf` and `mmproj-model-f16.gguf`. llama.cpp b12024 or newer (a June 2026 build couldn't
+  open its picture file).
+- About **2 GB of video memory**, **0.3 seconds** a line on a graphics card.
+- The same `"vision"` section, with those two file names.
+
+No graphics card, either way? Add `"gpu_layers": 0` (and use the CPU build of llama.cpp).
+
+## Genre and show notes
+
+Two optional questions when a show starts (Enter skips them), so the model knows what it's looking at:
+
+- **Genre:** a word or two, like documentary, cooking or magic. Without it, small models read every stage as a rock
+  concert (a saw became "an electric guitar", the props "speakers").
+- **Show notes:** at most 25 words about **what is on stage, not what happens**. Change them between acts: press
+  **N** in the projector's window, type the new notes, Enter (an empty Enter clears them, Esc keeps the old ones).
+  You can also set `"genre"` and `"notes"` under `"vision"` in `projector.json` as the starting answers.
+
+Why "not what happens": we tested a magic act both ways. Notes that told the ending ("they walk into the fan, vanish
+and reappear in the audience") made the model announce the ending from the very first frame, over and over, even on
+the title card, and adding "keep the suspense" didn't stop it. Notes about the setup only ("A giant rotating fan forms
+one wall of a lit box; two dancers.") got the fan named in most lines and spoiled nothing. Write them like a stage
+direction, not a plot summary.
 
 ## Using your own model instead
 
@@ -188,6 +236,7 @@ All under `"vision"` in `projector.json`.
 | `timeout_s` | all | `60` | How long one description may take |
 | `pace` | all | `3` | 1 (calm) to 5 (max); see the table above. **+**/**−** in the window during a show |
 | `story_so_far` | all | `true` | Two pictures per look, plus the words said since the last look |
+| `genre`, `notes` | all | (none) | Starting answers to the two show-start questions (notes: 25 words, what's on stage) |
 | `off` | all | `false` | `true` turns pictures off without deleting the section |
 
 ## Tips from the bake-off
@@ -207,12 +256,12 @@ What we learned, in case you try your own:
 
 1. **Say "don't use anyone's name", not "don't guess".** Asked "who is this?", two of the small models named the
    show's magician as four different (wrong) celebrities, stated as fact. A model that thinks it *knows* isn't
-   guessing. With "Don't use anyone's name, even if you recognize them; say 'a man', 'a woman' or 'the performer'",
-   none of them used a name. That wording is in the default prompts; keep it if you write your own.
+   guessing. Told plainly never to name anyone they recognize, none of them used a name. That rule is in the default
+   prompts; keep it if you write your own.
 2. **Names come from the show, not the picture.** If the narration says a name, agents read it in the words. The
    describer never supplies one.
 3. **Short beats long for small models.** Two-or-three-sentence descriptions gave small models room to invent. If
-   yours does, make the long prompt shorter, or set `long_every_s` very high to use short lines only.
+   yours does, ask for fewer words in your own prompts, or lower the pace.
 4. **Don't ask for "anything surprising".** One model padded every answer with "Something unusual is happening."
 5. **Thinking models: switch thinking off.** Some models reason at length before answering, which takes 2–5 seconds
    instead of half a second. The projector asks with `"chat_template_kwargs": {"enable_thinking": false}`, and it
@@ -231,8 +280,9 @@ What we learned, in case you try your own:
 9. **No example people in a prompt.** With "the woman in the red dress" as an example of telling people apart, the
    model described a woman in red eight times in a show that had none. Describe the rule ("tell them apart by what
    they wear or how they look") without examples, or use obvious placeholders.
-10. **Use "the person" when there's one.** Without "man" or "woman" in the instructions, the model stopped guessing
-   the performer's gender from his hair.
+10. **Short tags and pronouns, not "the same person".** Asked to say "the same person" for someone it had already
+   described, one model used it for everyone, so two dancers blurred into one. Telling it to call people the man,
+   the woman, he, she or they (and to mention clothes only when needed) kept them apart and cut the words.
 11. **Say what you want, not what you don't.** Asked to "mention lighting only if nothing else is happening", a small
    model mentioned lighting in every single line; given a list of impossible things to watch for, it recited
    "nothing appears or disappears" over and over. Whatever words your prompt holds, it repeats. "Focus on what people
@@ -243,6 +293,21 @@ What we learned, in case you try your own:
    the other, so typing doesn't pause it.
 13. **A model with no prompt (like Florence-2) needs the name net most.** Its short caption is all lower case, which
    the net can't recognize as a name: use its detailed caption, or rewrite its output with an instruction model.
+14. **No quoted phrases, no lists of examples.** Whatever a prompt holds, a small model repeats: a quoted phrase came
+   back on screen in quotation marks, a list of action words ("lifts, holds up, ...") put "lifts" in every line (even
+   "the man lifts the glowing fire"), and an old example list of people ("a man, a woman, a child") was followed by
+   "a child is present" in a scene with no child. Describe the rule; leave the examples out.
+15. **Say "fantasy" and you get fantasy.** Telling a model "this may be a sci-fi or fantasy story" turned an ordinary
+   stage into "a glowing, fiery entity" for one model. "Describe it exactly as it looks, even if it seems impossible"
+   keeps the door open without the invitation.
+16. **Old footage gets modern details.** A 1995 audience got "glowing phone screens" (lighters and camera flashes,
+   really). Models fill gaps with what's normal in their own training; a genre or show note helps.
+17. **Steady lighting helps more than simple action.** Silhouettes, glare and colored smoke take away the clothes
+   and faces a model uses to tell people apart; a brightly and evenly lit stage with three people went far better than
+   a hazy one with two.
+18. **A model's advice about itself is a hint, not a recipe.** Asked what instructions would help it, one model wrote
+   its own prompt; its lines got longer. It also explained that a man hanging upside down meant "the image is
+   rotated", which told us exactly why it misread him.
 
 ### What to expect (start with something easy)
 
@@ -250,6 +315,11 @@ A small model describes what's **there**, not what's **impossible**. We tested o
 of show there is: in one act, six volunteers and the magician circled a floating table while he talked at full speed,
 and the model tracked who was who, saw the tablecloth change hands, and never once noticed the table was floating,
 even on a shot from underneath. Magic is built to fool eyes; it fooled this one too.
+
+**For magic, the model reports and you gasp.** The model's job is to hand over faithful evidence: "she is in the left
+tower" now, "she is in the right tower" a few seconds later. Connecting the two ("wait, she's in both!") is for the
+people and agents watching, who are good at it. A model small enough to run at home that does the gasping itself may
+not exist yet.
 
 So try your setup first on something gentle: a cooking or crafts show, a nature documentary, a slow drama, your
 own home videos, a walk-through game. People in plain sight, doing visible things, one scene at a time. Save the
@@ -291,5 +361,6 @@ narration carried the history. Two things we measured on it:
 | "the vision server isn't on this computer" | Use `127.0.0.1`, or read Privacy and safety first and add `"remote_ok": true`. |
 | No `(seen)` lines for a program | It may be minimized, or draw in a way `PrintWindow` can't reach (some full-screen games). Use windowed mode, or show it from a browser tab (option 0). |
 | No `(seen)` lines for a shared tab | The tab must stay visible enough for the browser to draw it; a paused, blank or black picture is skipped on purpose. |
+| The same line keeps coming | Near-repeats of the last three lines are dropped already; lower the pace for a slow show. |
 | Names slip through | Check your own prompt keeps the no-names line; add the show's real names to `"words"` only if the show itself says them. |
-| Descriptions invent things | Try short lines only (`"long_every_s": 100000`), or another model. |
+| Descriptions invent things | Add a genre and show notes, lower the pace, or try the other setup's model. |

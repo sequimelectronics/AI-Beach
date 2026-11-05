@@ -19,6 +19,7 @@ window. Everything model-specific lives in describer.py; this loop needs only:
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 
@@ -31,11 +32,48 @@ PACE_NAMES = {1: "calm", 2: "relaxed", 3: "normal", 4: "busy", 5: "max"}
 DEFAULT_PACE = 3
 POLL_S = 1                  # how often the picture is checked (a thumbnail compare; the model isn't asked)
 GIVE_UP_AFTER = 5           # describer failures in a row before pictures stop for this show (words carry on)
+NOTES_WORDS = 25            # the projectionist's show notes: 25 words at most (the keeper, 11-04)
+
+# A line that says nearly the same as the last one isn't posted (a still stretch gave six "the man holds the white
+# chicken" lines in a row; Harold's notes from a review stream: one promo line six times). Compared on content words,
+# with plurals and -ing folded, so "holds a chicken in his hands" and "is holding a chicken in his hand" match.
+REPEAT_SIMILAR = 0.6
+REPEAT_WINDOW = 3           # compared with the last few lines posted: a model alternates wordings ("in his hands",
+                            # "in his arms", "in his hands" again), so comparing with the last line alone let 13 of 16
+                            # lines of one still stretch through
+_SMALL = {"the", "and", "while", "with", "his", "her", "their", "its", "him", "them", "they", "she", "now", "still",
+          "into", "from", "over", "onto", "this", "that", "are", "was", "has", "have", "who", "one", "two"}
+
+
+def _content(line: str) -> set[str]:
+    words = set()
+    for w in re.findall(r"[a-z]+", line.lower()):
+        if len(w) < 3 or w in _SMALL:
+            continue
+        for end in ("ing", "es", "s"):
+            if w.endswith(end) and len(w) - len(end) >= 3:
+                w = w[: -len(end)]
+                break
+        words.add(w)
+    return words
+
+
+def similar(a: str, b: str) -> bool:
+    """Nearly the same line: most content words shared (Jaccard >= REPEAT_SIMILAR)."""
+    sa, sb = _content(a), _content(b)
+    if not sa or not sb:
+        return a.strip(" .").lower() == b.strip(" .").lower()
+    return len(sa & sb) / len(sa | sb) >= REPEAT_SIMILAR
+
+
+def clip_notes(text: str) -> str:
+    """The projectionist's show notes, at most NOTES_WORDS words, on one line."""
+    return " ".join(str(text or "").split()[:NOTES_WORDS])
 
 
 class PictureLoop(threading.Thread):
     def __init__(self, grab, describer, send, wants=None, allowed_words=(), pace=DEFAULT_PACE, poll=POLL_S,
-                 say=print, clock=time.monotonic, sleep=None, heard=None, story=True):
+                 say=print, clock=time.monotonic, sleep=None, heard=None, story=True, genre="", notes=""):
         super().__init__(name="drivein-pictures", daemon=True)
         self.grab, self.describer, self.send, self.wants = grab, describer, send, wants or (lambda: False)
         self.heard = heard or (lambda: [])
@@ -55,6 +93,22 @@ class PictureLoop(threading.Thread):
         self.recent: list[float] = []       # when lines went out (the per-minute cap)
         self.failures = 0
         self.posted = 0
+        self.last_texts: list[str] = []      # the last lines posted (to drop near-repeats)
+        # The projectionist's optional genre and show notes (the keeper, 11-04): what is ON STAGE, not what happens.
+        self.genre = " ".join(str(genre or "").split())
+        self.notes = clip_notes(notes)
+
+    def about(self) -> str:
+        parts = [f"Genre: {self.genre}."] if self.genre else []
+        if self.notes:
+            parts.append(f"Show notes: {self.notes}")
+        return " ".join(parts)
+
+    def set_notes(self, notes: str) -> str:
+        """New show notes (between acts); empty clears them. Says what the model will get."""
+        self.notes = clip_notes(notes)
+        self.say(f"(pictures: show notes now: {self.notes})" if self.notes else "(pictures: show notes cleared)")
+        return self.notes
 
     # ------------------------------------------------------------------ the projectionist's knob
     def set_pace(self, pace: int) -> int:
@@ -99,7 +153,7 @@ class PictureLoop(threading.Thread):
         context = "\n".join(spoken) if self.story else ""
         detail = "change" if previous else ("long" if (asked or not moved) else "short")
         try:
-            line = self.describer.describe(jpeg, detail, context=context, previous=previous)
+            line = self.describer.describe(jpeg, detail, context=context, previous=previous, about=self.about())
         except _describer.DescriberError as e:
             self.failures += 1
             self.say(f"(pictures: {e})")
@@ -113,7 +167,10 @@ class PictureLoop(threading.Thread):
         if not line or line.strip(" .").upper() == "SAME":
             return None
         self.last_thumb, self.last_jpeg, self.last_line = t, jpeg, now
+        if not asked and any(similar(line, before) for before in self.last_texts):
+            return None          # a quiet look: nearly what the screen already says (a watcher's /look always posts)
         self.recent.append(now)
+        self.last_texts = (self.last_texts + [line])[-REPEAT_WINDOW:]
         text = "(seen) " + line
         if self.send([text]) is False:
             self.stop()

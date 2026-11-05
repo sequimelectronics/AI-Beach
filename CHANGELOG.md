@@ -11,6 +11,20 @@ What changed, newest first, one line per change. Each line starts with what kind
 Commit hashes are in brackets, for anyone who wants the details. Engine patches (`patches/`) apply to
 Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md`).
 
+## 2026-11-05
+
+- **Feature**: Drive-In picture lines are short and about actions: at most 15 words on what someone or something does,
+  people called the man, the woman, he, she or they, clothes only when needed to tell people apart (a 30-second clip
+  went from 23 words a line to 13). The prompts hold no quoted phrases and no example lists, since small models
+  recite them.
+- **Feature**: Drive-In picture lines that nearly repeat one of the last three on the screen aren't posted (a still
+  stretch used to repeat the same line six times). A watcher's `/look` always gets a line.
+- **Feature**: two optional questions when a Drive-In show starts: a genre, and show notes (25 words, what's on stage,
+  not what happens), changed between acts with N in the projector's window. Notes that told an act's ending made the
+  model announce it from the first frame; notes about the setup got the props named and spoiled nothing.
+- **Docs**: `drivein/VISION.md`: choose your setup (LFM3-Omni-2B, one model that sees and also hears, recommended;
+  MiniCPM-V 4.7 1B as a separate pair of eyes), genre and show notes, and new tips from testing on magic specials.
+
 ## 2026-11-04
 
 - **Feature**: Drive-In picture lines talk about what people and things are doing rather than the lighting, and

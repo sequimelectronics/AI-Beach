@@ -42,14 +42,23 @@ class TidyAndScrubTests(unittest.TestCase):
         self.assertEqual(s("Whatsit Doohicky waves.", {"whatsit doohicky"}), "Whatsit Doohicky waves.")
 
     def test_the_default_prompts_carry_the_no_names_rule(self):
-        # The keeper (11-03): "Don't use anyone's name", not "don't guess": a model that thinks it knows isn't guessing.
+        # The keeper (11-03): never name anyone, not "don't guess": a model that thinks it knows isn't guessing.
         for key, p in describer.DEFAULT_PROMPTS.items():
-            if key == "change":      # names the show just said are allowed there; recognized faces still never
-                self.assertIn("Never name anyone you recognize", p)
-            else:
-                self.assertIn("Don't use anyone's name, even if you recognize them", p)
+            self.assertIn("Never name anyone you recognize", p, key)
             self.assertNotIn("guess", p.lower())
             self.assertNotIn("surprising", p.lower())       # it made MiniCPM-V pad with "something unusual"
+
+    def test_the_default_prompts_hold_nothing_to_recite(self):
+        # The Rule of Doohicky (11-04): whatever a prompt holds, a small model repeats. No quoted phrases (a quoted
+        # "the same person" came back on screen in quotation marks), no example list of people ("a child is present"
+        # with no child there), no list of verbs ("lifts" on every line), no fantasy ("a glowing fiery entity").
+        for key, p in describer.DEFAULT_PROMPTS.items():
+            self.assertNotIn('"', p, key)
+            self.assertNotIn("'a ", p, key)
+            self.assertNotIn("child", p, key)
+            for word in ("lifts", "pulls", "waves", "fantasy", "sci-fi"):
+                self.assertNotIn(word, p.lower(), (key, word))
+            self.assertLessEqual(len(p.split()), 130, key)             # a guard against prompts creeping longer
 
 
 class _FakeServer(BaseHTTPRequestHandler):
@@ -174,18 +183,26 @@ class PictureLoopTests(unittest.TestCase):
         self.asked = [False]
         self.sent: list[str] = []
         self.calls: list[tuple] = []          # (detail, context, had a previous picture)
+        self.abouts: list[str] = []           # the genre + show notes each look got
         self.spoken: list[tuple] = []         # (time, line)
         loop_self = self
 
         class Fake:
             fail = 0
+            n = 0
+            same = False                     # True: every short line says the same thing (a still stretch)
+            VERBS = ["waves", "jumps", "turns", "bows", "spins", "sits", "kneels", "points", "climbs", "ducks"]
 
-            def describe(self, jpeg, detail, context="", previous=None):
+            def describe(self, jpeg, detail, context="", previous=None, about=""):
                 if Fake.fail:
                     Fake.fail -= 1
                     raise describer.DescriberError("no model")
                 loop_self.calls.append((detail, context, previous is not None))
-                return "Whatsit Doohicky waves." if detail == "long" else "A man waves."
+                loop_self.abouts.append(about)
+                if detail == "long":
+                    return "Whatsit Doohicky waves."
+                Fake.n += 1
+                return "A man holds a doohicky." if Fake.same else f"A man {Fake.VERBS[(Fake.n - 1) % 10]}."
 
         self.Fake = Fake
         self.loop = seeing.PictureLoop(grab=lambda: self.picture, describer=Fake(),
@@ -207,7 +224,7 @@ class PictureLoopTests(unittest.TestCase):
         self.assertIsNone(L.step())                                   # changed, but too soon after the last line
         self.spoken.append((3, "Watch the doohicky."))
         self.now[0] = 5
-        self.assertEqual(L.step(), "(seen) A man waves.")             # changed + 5 s: a two-picture look
+        self.assertEqual(L.step(), "(seen) A man jumps.")             # changed + 5 s: a two-picture look
         self.assertEqual(self.calls[-1], ("change", "Watch the doohicky.", True))
         self.now[0] = 11
         self.picture = self.scene(3)
@@ -284,6 +301,48 @@ class PictureLoopTests(unittest.TestCase):
         self.assertIn("for context only", p)
         self.assertEqual(describer.with_context("Describe it.", "  "), "Describe it.")
         self.assertLessEqual(len(describer.with_context("x", "y" * 5000)), describer.CONTEXT_MAX + 200)
+        # The projectionist's genre + show notes come first, labeled, and capped.
+        p = describer.with_context("Describe it.", "Watch the doohicky.", "Genre: Whatsit. Show notes: a doohicky.")
+        self.assertLess(p.index("About this show"), p.index("for context only"))
+        self.assertIn("describe only what is in the picture now", p)
+        self.assertLessEqual(len(describer.with_context("x", "", "z " * 1000)), describer.ABOUT_MAX + 200)
+
+    def test_near_repeats_are_not_posted(self):
+        # Harold's notes (11-04): one promo line six times on a still page; the chicken: six "holds the chicken" lines.
+        import seeing
+        self.assertTrue(seeing.similar("The man holds a white chicken in his hands while the woman looks at it.",
+                                       "The man is holding the white chicken in his hand while the woman looks at it."))
+        self.assertFalse(seeing.similar("The man holds a white chicken.", "The woman stands up and walks away."))
+        L = self.loop
+        self.Fake.same = True
+        L.set_pace(5)
+        posted = []
+        for i in range(8):                                            # the picture keeps changing, the line doesn't
+            self.now[0] = 3.0 * i
+            self.picture = self.scene(i + 1)
+            posted.append(L.step())
+        self.assertEqual([p for p in posted if p], ["(seen) A man holds a doohicky."])
+        self.assertEqual(len(self.calls), 8)                          # it did look each time; it just kept quiet
+        self.asked[0] = True                                          # a watcher's /look always gets a line
+        self.Fake.same = False
+        self.now[0] = 30
+        self.assertIsNotNone(L.step())
+
+    def test_genre_and_show_notes_reach_every_look(self):
+        import seeing
+        L = seeing.PictureLoop(grab=lambda: self.picture, describer=self.Fake(), send=lambda lines: True,
+                               clock=lambda: self.now[0], say=lambda m: None, genre="  Whatsit ",
+                               notes=" ".join(["doohicky"] * 40))
+        self.assertEqual(L.about(), "Genre: Whatsit. Show notes: " + " ".join(["doohicky"] * 25))   # 25 words at most
+        L.step()
+        self.assertEqual(self.abouts[-1], L.about())
+        L.set_notes("A doohicky stands on the stage.")                # between acts
+        self.now[0] = 31
+        self.picture = self.scene(9)
+        L.step()
+        self.assertEqual(self.abouts[-1], "Genre: Whatsit. Show notes: A doohicky stands on the stage.")
+        L.set_notes("")
+        self.assertEqual(L.about(), "Genre: Whatsit.")
 
     def test_the_change_prompt_has_no_example_people(self):
         # Tested 11-03: an example person in the prompt ("the woman in the red dress") was described 8 times in a show
@@ -292,7 +351,7 @@ class PictureLoopTests(unittest.TestCase):
         p = describer.DEFAULT_PROMPTS["change"]
         for word in ("dress", "shirt", "hat", "woman in", "man in"):
             self.assertIsNone(re.search(r"\b" + word + r"\b", p), word)
-        self.assertIn("SECOND", p)
+        self.assertIn("the second is now", p)
         self.assertIn("Never name anyone you recognize", p)
         self.assertEqual(describer.tidy("The second image shows a man jumping."), "A man jumping.")
         self.assertEqual(describer.tidy("In the second picture, a fire grows."), "A fire grows.")

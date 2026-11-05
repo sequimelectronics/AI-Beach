@@ -7,15 +7,15 @@ down from a burning rope." That line goes on the Drive-In screen as "(seen) ..."
 the keeper, in projector.json under "vision". Three ways, all ending in the same `describe()`:
 
   "llama-server"  (the default)  The projector starts llama.cpp's llama-server itself with a vision model + its mmproj
-                                 (the bake-off winner, MiniCPM-V 4.7 1B), on this computer only, and stops it after.
+                                 (we recommend LFM3-Omni-2B; MiniCPM-V 4.7 1B also does well: see VISION.md), on this
+                                 computer only, and stops it after.
   "openai"                       Any OpenAI-compatible chat server that takes images: llama-server you run yourself,
                                  Ollama, LM Studio, vLLM, KoboldCpp, ... Give its address and model name.
   "command"                      Your own program: it gets the JPEG on stdin and prints one line on stdout.
 
 Whatever runs, two things always happen here, so a swapped-in model gets them too:
-  - the default prompts carry the keeper's no-names rule ("Don't use anyone's name, even if you recognize them"). In the
-    bake-off, small models asked "who is this?" named the wrong famous person with full confidence; with this wording
-    none of them used a name;
+  - the default prompts carry the keeper's no-names rule (never name anyone you recognize). In the bake-off, small
+    models asked "who is this?" named the wrong famous person with full confidence; told not to, none used a name;
   - scrub() takes out anything that still looks like a person's name, as a safety net (a model like Florence-2 can't be
     given instructions at all).
 
@@ -37,29 +37,37 @@ import urllib.parse
 MAX_LINE = 300                  # characters of one description on the screen
 DEFAULT_TIMEOUT_S = 60
 
-# The keeper's rule (11-03): "Don't use anyone's name", not "don't guess": a model that thinks it KNOWS isn't guessing.
-NO_NAMES = ("Don't use anyone's name, even if you recognize them; say 'a man', 'a woman', 'a child' or 'the performer'. "
-            "Say only what you can see.")
+# The keeper's rule (11-03): never name anyone, not "don't guess": a model that thinks it KNOWS isn't guessing. Plain
+# words, no example list: an old version listed 'a man', 'a woman', 'a child', and a small model later reported "a child
+# is present" in a scene with no child (the keeper's Rule of Doohicky: whatever a prompt holds, a small model recites).
+NO_NAMES = "Never name anyone you recognize; use a name only if it is printed on the screen."
+# How people are referred to: short and plain (the keeper, 11-04: "if it's the same person, cut to he/she/they"), and
+# clothes only when needed to tell people apart. Measured on a 30-second clip: lines went from 23 words to 13, with the
+# clothes ("the man in the white shirt and dark pants...") gone from almost every line.
+_PEOPLE = ("Call people the man, the woman, he, she or they; mention clothes only if two people would otherwise be "
+           "confused. If something looks impossible, describe it exactly as it looks. ")
 DEFAULT_PROMPTS = {
-    "short": "Describe what is happening on screen in ONE short sentence of at most 15 words. " + NO_NAMES,
-    "long": "Describe what is happening on screen in two or three plain sentences, at most 50 words: who is there "
-            "and what they are doing. " + NO_NAMES,
-    # Two pictures (the one last described, and now). Tested 11-03 on 36 frames of a magic act ("version E"): it
-    # narrated the action ("swings upward, gripping a rope"; "now it's a massive fireball") where one picture at a time
-    # couldn't. NO EXAMPLE PEOPLE in this prompt on purpose: with "the woman in the red dress" as an example, the model
-    # described a woman in red eight times in a show that had none (the keeper's rule of placeholders, proven).
-    # The keeper (11-03, after the floating table): "talk rarely about lighting and more about the actions of the
-    # people or things on the screen", and "if something seems impossible go ahead and describe it, this could be
-    # sci-fi or fantasy". Phrased POSITIVELY on purpose: naming lighting ("mention lighting only if...") made every
-    # line mention lighting (36 of 36), and a list of impossible things made it recite "nothing appears or
-    # disappears". Whatever words the prompt holds, a small model repeats.
-    "change": "You see two pictures from a video, a few seconds apart: the FIRST is earlier, the SECOND is now. In one "
-              "or two short sentences (at most 25 words): first say what is happening in the SECOND picture, then "
-              "what changed since the first. Focus on what people and things are doing. Describe anything unusual "
-              "exactly as it looks, even if it seems impossible. If there is more than one person, tell them apart by "
-              "what they are wearing or how they look. Never name anyone you recognize; use a name only if the "
-              "show's words below just said it. Say only what you can see.",
+    "short": ("You see a frame from a visual story. In one short sentence of at most 15 words, say what is happening, "
+              "as an action: what someone or something does. If nobody is doing anything, say briefly what the scene "
+              "shows. " + _PEOPLE + NO_NAMES),
+    "long": ("You see a frame from a visual story. In two short sentences of at most 30 words, say who is there and "
+             "what they are doing. If nobody is doing anything, say what the scene shows. " + _PEOPLE + NO_NAMES),
+    # Two pictures (the one last described, and now): what happened in between ("swings upward, gripping a rope")
+    # instead of a still life. The wording, tested on the keeper's ladder of hard shows (11-03/04), each line kept for
+    # a reason:
+    #  - "a visual story": the keeper's framing; it stopped one model reading every stage as a rock concert;
+    #  - "as an action": the keeper's ideal is "The man pulls a chicken out and holds it up". A LIST of action verbs got
+    #    recited ("lifts" and "holds up" on every line, even "lifts the glowing fire"), so there is none here;
+    #  - "if nobody is doing anything": without it, crowd shots got a made-up action;
+    #  - "describe it exactly as it looks": "describe the impossible because it may be fantasy" made one model write
+    #    "a glowing fiery entity" over an ordinary stage; plain wording didn't;
+    #  - no examples, no quoted phrases: a quoted "the same person" came back on screen in quotation marks.
+    "change": ("You see two frames from a visual story, a few seconds apart: the first is earlier, the second is now. "
+               "In one short sentence of at most 15 words, say what is happening now, as an action: what someone or "
+               "something does. If a simple action must have happened in between, say that action. If nobody is "
+               "doing anything, say briefly what the scene shows. " + _PEOPLE + NO_NAMES),
 }
+ABOUT_MAX = 300      # characters of the projectionist's genre + show notes handed to the model (notes: 25 words)
 
 
 class DescriberError(Exception):
@@ -146,14 +154,25 @@ def names_in(lines) -> set[str]:
 CONTEXT_MAX = 800     # characters of "what happened just before" handed to the model with each picture
 
 
-def with_context(prompt: str, context: str) -> str:
+def with_context(prompt: str, context: str, about: str = "") -> str:
     """The prompt plus the story so far (the keeper, 11-03: "the poor thing would have to have a running narrative to make
-    sense of this": each picture alone never showed that the act was two people walking into a giant fan)."""
+    sense of this": each picture alone never showed that the act was two people walking into a giant fan), and the
+    projectionist's genre + show notes, if any (the keeper, 11-04).
+
+    Show notes say what is ON STAGE, not what HAPPENS. Tested 11-04 on 30 frames of an illusion: notes that told the
+    ending made the model announce it from the very first frame (13 times, even over the title card), and a "keep the
+    suspense" line didn't stop it; notes about the setup only ("a giant fan forms one wall of a lit box") got the prop
+    named in 21 of 30 frames and spoiled nothing."""
+    out = prompt
+    about = " ".join((about or "").split())[:ABOUT_MAX]
+    if about:
+        out += ("\n\nAbout this show, from the person running it (it may help you name what you see; describe only "
+                "what is in the picture now):\n" + about)
     context = (context or "").strip()[-CONTEXT_MAX:]
-    if not context:
-        return prompt
-    return (prompt + "\n\nWhat happened just before, for context only (describe what you see in THIS picture; "
-            "don't repeat these lines):\n" + context)
+    if context:
+        out += ("\n\nWhat was said just before, for context only (describe what you see in THIS picture; don't repeat "
+                "these lines):\n" + context)
+    return out
 
 
 # --------------------------------------------------------------------------------------------- the three ways
@@ -182,8 +201,10 @@ class OpenAIDescriber:
         self.prompts = {**DEFAULT_PROMPTS, **(prompts or {})}
         self.extra = extra or {}
 
-    def describe(self, jpeg: bytes, detail: str = "short", context: str = "", previous: bytes | None = None) -> str:
-        """`previous` (the picture last described) makes it a two-picture "what changed" look (detail "change")."""
+    def describe(self, jpeg: bytes, detail: str = "short", context: str = "", previous: bytes | None = None,
+                 about: str = "") -> str:
+        """`previous` (the picture last described) makes it a two-picture "what changed" look (detail "change").
+        `about`: the projectionist's genre + show notes (may be empty)."""
         pictures = ([previous] if previous else []) + [jpeg]
         if not previous and detail == "change":
             detail = "short"
@@ -191,7 +212,7 @@ class OpenAIDescriber:
                  for p in pictures]
         body = {
             "messages": [{"role": "user", "content": parts + [
-                {"type": "text", "text": with_context(self.prompts[detail], context)}]}],
+                {"type": "text", "text": with_context(self.prompts[detail], context, about)}]}],
             "max_tokens": 150, "temperature": 0.2,
             # Many servers pass this to the model's chat template: "answer, don't reason first" for thinking models.
             "chat_template_kwargs": {"enable_thinking": False},
@@ -275,7 +296,8 @@ class LlamaServerDescriber(OpenAIDescriber):
 
 class CommandDescriber:
     """Your own program: JPEG on stdin, the detail ("short" or "long") as its last argument, one line on stdout.
-    The story so far (recent lines, plain text) is in the environment variable DRIVEIN_CONTEXT, to use or ignore.
+    The story so far (recent lines, plain text) is in the environment variable DRIVEIN_CONTEXT, and the projectionist's
+    genre + show notes in DRIVEIN_ABOUT, to use or ignore.
     No shell is used; the program is a list of arguments, and it gets the timeout to answer."""
 
     def __init__(self, argv: list, timeout: float = DEFAULT_TIMEOUT_S):
@@ -286,12 +308,14 @@ class CommandDescriber:
         self.argv = argv
         self.timeout = timeout
 
-    def describe(self, jpeg: bytes, detail: str = "short", context: str = "", previous: bytes | None = None) -> str:
+    def describe(self, jpeg: bytes, detail: str = "short", context: str = "", previous: bytes | None = None,
+                 about: str = "") -> str:
         # One picture only through this way (stdin carries one JPEG); a "change" look becomes a "short" one here.
         if detail == "change":
             detail = "short"
         flags = 0x08000000 if os.name == "nt" else 0
-        env = {**os.environ, "DRIVEIN_CONTEXT": (context or "")[-CONTEXT_MAX:]}
+        env = {**os.environ, "DRIVEIN_CONTEXT": (context or "")[-CONTEXT_MAX:],
+               "DRIVEIN_ABOUT": " ".join((about or "").split())[:ABOUT_MAX]}
         try:
             r = subprocess.run(self.argv + [detail], input=jpeg, capture_output=True, timeout=self.timeout,
                                creationflags=flags, env=env)

@@ -1027,25 +1027,56 @@ def start_picture_loop(cfg: dict, token: str, describer_, grab, send, heard=None
     loop = seeing.PictureLoop(grab=grab, describer=describer_, send=send, wants=wants,
                               allowed_words=words if isinstance(words, list) else [words],
                               pace=int(cfg["vision"].get("pace", seeing.DEFAULT_PACE)),
-                              heard=lambda: list(heard_lines), story=story)
+                              heard=lambda: list(heard_lines), story=story,
+                              genre=cfg["vision"].get("_genre", cfg["vision"].get("genre", "")),
+                              notes=cfg["vision"].get("_notes", cfg["vision"].get("notes", "")))
     loop.set_pace(loop.pace)                     # says the pace in the window
-    print("    (Pictures: press + or - in this window to see more or fewer details.)")
+    print("    (Pictures: press + or - in this window to see more or fewer details, and N to give new show notes"
+          " between acts.)")
     loop.start()
     return loop
 
 
+_typing: dict = {"on": False, "text": ""}      # N pressed: the projectionist is typing new show notes
+
+
 def pace_keys(loop) -> None:
-    """The projectionist's live knob (the keeper, 11-03: "if they find themselves missing out on details"): + and -
-    in the projector's window change the picture pace while the show runs. Checked from the show's own loop."""
+    """The projectionist's live knobs, checked from the show's own loop (never blocking it, so the words keep going):
+    + and - change the picture pace (the keeper, 11-03: "if they find themselves missing out on details"); N starts new
+    show notes for the next act (the keeper, 11-04: "one piece at a time"), typed in this window: Enter sets them (an
+    empty Enter clears them), Esc cancels."""
     if loop is None or os.name != "nt":
         return
     import msvcrt
     while msvcrt.kbhit():
-        key = msvcrt.getwch()
-        if key in "+=":
-            loop.set_pace(loop.pace + 1)
-        elif key in "-_":
-            loop.set_pace(loop.pace - 1)
+        handle_key(loop, msvcrt.getwch())
+
+
+def handle_key(loop, key: str) -> None:
+    if _typing["on"]:
+        if key in "\r\n":
+            _typing["on"] = False
+            print()
+            loop.set_notes(_typing["text"])
+        elif key == "\x1b":
+            _typing["on"] = False
+            print("\n(pictures: show notes unchanged)")
+        elif key == "\b":
+            if _typing["text"]:
+                _typing["text"] = _typing["text"][:-1]
+                print("\b \b", end="", flush=True)
+        elif key.isprintable():
+            _typing["text"] += key
+            print(key, end="", flush=True)
+        return
+    if key in "+=":
+        loop.set_pace(loop.pace + 1)
+    elif key in "-_":
+        loop.set_pace(loop.pace - 1)
+    elif key in "nN":
+        _typing.update(on=True, text="")
+        print("\nNew show notes (what is on stage, not what happens; 25 words or less). Enter sets them, an empty "
+              "Enter clears them, Esc cancels:")
 
 
 def window_grabber(pid: int):
@@ -1080,6 +1111,8 @@ def run(cfg: dict, title: str | None) -> int:
             pics = None
         else:
             pics = make_pictures(cfg)
+        if pics is not None:
+            ask_about(cfg)
         show = {"title": title, "pictures": pics is not None}
         if choice.get("tab"):
             try:
@@ -1119,6 +1152,31 @@ def run(cfg: dict, title: str | None) -> int:
             pics.close()                       # the describer's model server stops with the show
         if helper is not None:
             helper.terminate()
+
+
+def ask_about(cfg: dict) -> None:
+    """Two optional questions for the picture describer (the keeper, 11-04): the genre, and show notes saying what is
+    ON STAGE (not what happens: notes that told an illusion's ending made the model announce it from the first frame).
+    projector.json's "genre" / "notes" under "vision" are the defaults; Enter keeps them, a single - clears them."""
+    vision = cfg["vision"]
+
+    def ask(question: str, key: str) -> None:
+        current = " ".join(str(vision.get(key, "") or "").split())
+        hint = f" [Enter keeps: {current}; - clears]" if current else " [Enter to skip]"
+        answer = input(question + hint + ": ").strip()
+        if answer == "-":
+            current = ""
+        elif answer:
+            current = answer
+        vision["_" + key] = current
+
+    print("\nFor the picture describer (both optional):")
+    ask("  Genre (for example: documentary, cooking, magic)", "genre")
+    ask("  Show notes: what is on stage, not what happens (25 words or less)", "notes")
+    words = vision.get("_notes", "").split()
+    if len(words) > 25:
+        vision["_notes"] = " ".join(words[:25])
+        print(f"  (Show notes kept to their first 25 words: {vision['_notes']})")
 
 
 def _end_on_close(cfg: dict, token: str) -> None:
