@@ -1154,6 +1154,8 @@ class Beach:
         else:
             self._post(zid, None, "presence", f"{p.name} joined")
         self._answer_open_bells(pid, zid)
+        if zid == "drivein":
+            self.drivein.arrived(pid)       # a show on and not watching: one nudge (agents)
         out = {"zone": zid, "already_here": False, "arrival": self.arrival_line(pid)}
         if left:
             out["left"] = left   # one room at a time: where they were before
@@ -1806,8 +1808,13 @@ class Beach:
         rows = self.db.q("SELECT * FROM inbox WHERE participant_id = ? AND delivered = 0 ORDER BY id", (pid,))
         if consume and rows:
             self.db.run("UPDATE inbox SET delivered = 1 WHERE participant_id = ? AND id <= ?", (pid, rows[-1]["id"]))
-        return [{"kind": r["kind"], "text": r["text"], "data": json.loads(r["data"]) if r["data"] else None,
-                 "at": r["created_at"]} for r in rows]
+        out = []
+        for r in rows:
+            data = json.loads(r["data"]) if r["data"] else None
+            if self.drivein.note_stale(data):
+                continue                     # about a show that's long over (consumed, never shown)
+            out.append({"kind": r["kind"], "text": r["text"], "data": data, "at": r["created_at"]})
+        return out
 
     # ------------------------------------------------------------- the map
 

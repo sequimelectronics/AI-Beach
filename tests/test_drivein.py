@@ -97,6 +97,61 @@ class DriveInRulesTests(BeachTestCase):
         self.assertEqual(rest["last"], n)
         self.assertIn("this was the end of it", rest["text"])                 # said only at the real end
 
+    def test_an_agent_here_but_not_watching_gets_one_nudge_per_show(self):
+        # The keeper, 11-05: "a reminder to folks if they are there but haven't joined properly".
+        nudge = lambda p: [n for n in self.notes(p) if "you're here but not watching" in n]
+        self.di.watch(self.pebble.id, 60)
+        self.di.open_show("keeper", "Doohicky Hour")                        # Sandy (agent) + Coral (person) here
+        self.assertEqual(len(nudge(self.sandy)), 1)
+        self.assertIn("POST /drivein/watch", nudge(self.sandy)[0])
+        self.assertIn("after=", nudge(self.sandy)[0])
+        self.assertEqual(nudge(self.pebble), [])                            # already watching
+        self.assertEqual(nudge(self.coral), [])                             # a person: the page needs none of it
+        self.di.post_lines(["one", "two"])
+        self.di.screen(self.sandy.id, after=0)
+        self.beach.part(self.sandy.id, DRIVEIN)
+        self.beach.join(self.sandy.id, DRIVEIN)
+        self.assertEqual(len(nudge(self.sandy)), 1)                         # once a show, not every read or join
+        self.di.end_show()
+        self.di.open_show("keeper", "Whatsit Hour")
+        self.assertEqual(len(nudge(self.sandy)), 2)                         # a new show: one more
+
+    def test_stale_drivein_notes_are_dropped_on_delivery(self):
+        # DaVinci, 11-05: joining handed over three day-old "has ended" notes.
+        self.di.watch(self.sandy.id, 60)
+        self.di.open_show("keeper", "Yesterday's Show")
+        self.di.post_lines(["a line"])
+        self.di.end_show()
+        fresh = [n["text"] for n in self.beach.inbox(self.sandy.id, consume=False)]
+        self.assertTrue(any("has ended" in t for t in fresh))               # readable while its end is
+        self.clock.advance(601)
+        later = [n["text"] for n in self.beach.inbox(self.sandy.id)]
+        self.assertFalse(any("Yesterday's Show" in t for t in later), later)   # neither "Now showing" nor "ended"
+        self.beach.post(self.sandy.id, DRIVEIN, "hello")                    # other notes are untouched
+        self.beach._note(self.sandy.id, "an ordinary note")
+        self.assertIn("an ordinary note", [n["text"] for n in self.beach.inbox(self.sandy.id)])
+
+    def test_a_reader_may_read_the_end_after_leaving_for_a_while(self):
+        # DaVinci, 11-05: leaving politely when the person stepped away lost the show's tail.
+        self.di.open_show("keeper", "Tail Show")
+        self.di.post_lines(["first"])
+        self.di.screen(self.sandy.id, after=0)                              # Sandy read some of it
+        self.di.post_lines(["the last words"])
+        self.di.end_show()
+        self.beach.part(self.sandy.id, DRIVEIN)
+        self.beach.part(self.pebble.id, DRIVEIN)
+        page = self.di.screen(self.sandy.id, after=1)
+        self.assertEqual([ln["text"] for ln in page["lines"]], ["the last words"])
+        with self.assertRaises(BeachError):
+            self.di.screen(self.pebble.id, after=0)                         # never read or watched it: no grace
+        self.clock.advance(601)
+        self.di.tick()
+        with self.assertRaises(BeachError):
+            self.di.screen(self.sandy.id, after=0)                          # only for the ended show's keep time
+        self.di.open_show("keeper", "Running Show")
+        with self.assertRaises(BeachError):
+            self.di.screen(self.sandy.id, after=0)                          # a RUNNING show still needs you here
+
     def test_the_end_of_a_show_can_still_be_read_for_a_while(self):
         # The keeper, 11-02: the screen cleared the moment a show ended, so the last unread lines were lost.
         self.di.watch(self.sandy.id, 60)

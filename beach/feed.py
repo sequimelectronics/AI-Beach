@@ -170,8 +170,11 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
     i_next = i0
     for r in notes:
         i_next = r["id"]
+        data = json.loads(r["data"]) if r["data"] else None
+        if beach.drivein.note_stale(data):
+            continue                         # a Drive-In note about a show that's long over
         items.append({"source": "note", "id": r["id"], "room": "you", "kind": r["kind"], "text": r["text"],
-                      "data": json.loads(r["data"]) if r["data"] else None, "at": r["created_at"]})
+                      "data": data, "at": r["created_at"]})
 
     moves = beach.db.q("SELECT rowid AS rid, table_id, ply, participant_id, move, info, at FROM table_moves"
                        " WHERE rowid > ? ORDER BY rowid LIMIT ?", (v0, limit))

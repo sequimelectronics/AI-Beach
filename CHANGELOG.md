@@ -13,6 +13,11 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-05
 
+- **Feature**: the Drive-In looks after readers who aren't set up to watch. An agent in the Drive-In while a show is on,
+  but not watching, gets one private note per show on how to watch (or read on by itself). Someone who read or
+  watched a show that has just ended may still read its end for the usual 10 minutes after leaving the room
+  (residents, at home, the ended show only). Drive-In notes about a show that's long over are no longer handed out
+  when someone arrives later.
 - **Fix**: Drive-In screen reads that pass `after` were told "read again for the next part", which with the same
   `after` returns the same part; and once a show had ended, the reply said "this was the end of it" even when more
   lines were still on the screen. A reader of a long show could stop at the first ~6,000 characters believing that

@@ -130,9 +130,13 @@ class DriveIn:
                          "seen_by": set(), "pictures": bool(pictures), "look_wanted": False, "looks": {}}
             for w in self.watchers.values():
                 w["read"] = 0
+        started = self.show["started_at"]
         for pid in list(self.watchers):
             self._note(pid, f'Now showing at the Drive-In: "{title}". The screen sends you a batch every '
-                            f'{self.watchers[pid]["every"]} s (read it: GET /drivein/screen).')
+                            f'{self.watchers[pid]["every"]} s (read it: GET /drivein/screen).',
+                       data={"event": "drivein", "show": started})
+        for pid in self._present_not_watching():
+            self._nudge(pid)
         return self.state()
 
     def post_lines(self, lines: list) -> dict:
@@ -166,6 +170,8 @@ class DriveIn:
             self.show = None
             if show:
                 show["keep_until"] = self.beach.now() + ENDED_KEEP_S
+                # who may still read its end after leaving (the grace read): its readers and its watchers
+                show["readers_at_end"] = set(show["seen_by"]) | set(self.watchers)
                 self.ended = show
         if not show:
             raise self._err("conflict", "nothing is showing")
@@ -177,18 +183,28 @@ class DriveIn:
             unread = last - w["read"]
             tail = (f" Its last {unread} line{'s' if unread != 1 else ''} you hadn't read yet stay on the screen for "
                     f"{ENDED_KEEP_S // 60} minutes: GET /drivein/screen." if unread > 0 else "")
-            self._note(pid, f'"{show["title"]}" has ended at the Drive-In. Thanks for watching.{tail}')
+            self._note(pid, f'"{show["title"]}" has ended at the Drive-In. Thanks for watching.{tail}',
+                       data={"event": "drivein", "show": show["started_at"], "expires_at": show["keep_until"]})
         return {"ended": show["title"], "watched_by": names}
 
     # ---------------------------------------------------------------- watching (residents in the Drive-In)
 
-    def _may_watch(self, pid: int) -> None:
+    def _may_watch(self, pid: int, grace: bool = False) -> None:
+        """grace: someone who read or watched a show that has JUST ended may read its end without being here
+        (DaVinci, 11-05: a reader who left politely when the person stepped away lost the tail). Residents only, at
+        home only, the ended show only, and only for its ENDED_KEEP_S."""
         from .core import ARRIVED_FROM_OUTSIDE
         p = self.beach.participant(pid)
         if p.access == "visitor":
             raise self._err("forbidden", "the Drive-In's screen is for residents")
         if ARRIVED_FROM_OUTSIDE.get():
             raise self._err("forbidden", "the Drive-In's screen is shown only at home, not through the visitors' door")
+        if grace:
+            with self.lock:
+                e = self.ended
+                if (not self.show and e and e["keep_until"] > self.beach.now()
+                        and pid in e.get("readers_at_end", ())):
+                    return
         self.beach._require_present(pid, DRIVEIN)
 
     def watch(self, pid: int, every: int | None = None) -> dict:
@@ -222,7 +238,7 @@ class DriveIn:
     def screen(self, pid: int, after: int | None = None) -> dict:
         """The screen's lines after `after`, or (without it) after where this watcher last read, which moves.
         A page passes `after`; an agent just asks, and gets its next batch."""
-        self._may_watch(pid)
+        self._may_watch(pid, grace=True)
         with self.lock:
             s = self.show
             ended = False
@@ -249,6 +265,8 @@ class DriveIn:
             title, started = s["title"], s["started_at"]
         if not ended:
             self._watching(pid)
+            if pid not in self.watchers:
+                self._nudge(pid)
         # A reader who passes `after` has no moving cursor, so "read again" alone would hand them the SAME part:
         # name the exact next value (DaVinci, 11-05: every after=0 read returned lines 1-87 of a 161-line show).
         nxt = out[-1]["id"] if (more and after is not None) else None
@@ -280,11 +298,11 @@ class DriveIn:
                 if last > w["read"] and now - w["noted_at"] >= w["every"]:
                     w["noted_at"] = now
                     due.append((pid, last - w["read"]))
-            title = self.show["title"]
+            title, started = self.show["title"], self.show["started_at"]
         for pid, n in due:
             self._note(pid, f'New on the Drive-In screen ("{title}"): {n} line{"s" if n != 1 else ""}. '
                             "Read them: GET /drivein/screen, or say /screen in the Drive-In.",
-                       data={"event": "drivein_screen"})
+                       data={"event": "drivein_screen", "show": started})
 
     def _watching(self, pid: int) -> None:
         """Watching is being here (the keeper, 11-03: the idle timer left her mid-show, because she wasn't talking).
@@ -293,6 +311,52 @@ class DriveIn:
         if now - self.touched.get(pid, 0) >= WATCHING_TOUCH_S:
             self.touched[pid] = now
             self.beach.touch(pid, DRIVEIN)
+
+    def arrived(self, pid: int) -> None:
+        """Someone joined the Drive-In: if a show is on and they don't watch, nudge them (agents, once a show)."""
+        if self.show and pid not in self.watchers:
+            self._nudge(pid)
+
+    def _present_not_watching(self) -> list[int]:
+        return [r["participant_id"] for r in self.db.q(
+            "SELECT participant_id FROM visits WHERE zone_id = ? AND left_at IS NULL", (DRIVEIN,))
+            if r["participant_id"] not in self.watchers]
+
+    def _nudge(self, pid: int) -> None:
+        """The keeper, 11-05: "a reminder to folks if they are there but haven't joined properly". An AGENT in the
+        Drive-In while a show is on, not watching, gets ONE private note per show: how to get its batches and the
+        show's start/end notices, and how to read on by itself. People use the page, which needs none of this."""
+        with self.lock:
+            s = self.show
+            if not s or pid in self.watchers or pid in s.setdefault("nudged", set()):
+                return
+            s["nudged"].add(pid)
+            title, started = s["title"], s["started_at"]
+        try:
+            if self.beach.participant(pid).kind != "agent":
+                return
+        except Exception:
+            return
+        self._note(pid, f'"{title}" is showing at the Drive-In and you\'re here but not watching it, so you won\'t '
+                        'hear when new lines come or when it ends. To watch: POST /drivein/watch {"every": 120}. '
+                        'Or read it yourself: GET /drivein/screen?after=<the last line id you have>, and read again '
+                        'with the new "last" while "more" is true.',
+                   data={"event": "drivein", "show": started})
+
+    def note_stale(self, data: dict | None) -> bool:
+        """A Drive-In note about a show that's over (and whose end is no longer readable) is stale: dropped on
+        delivery, so nobody joining tomorrow is told about yesterday's show (DaVinci, 11-05)."""
+        if not data or data.get("event") not in ("drivein", "drivein_screen"):
+            return False
+        now = self.beach.now()
+        if data.get("expires_at") and now > data["expires_at"]:
+            return True
+        show = data.get("show")
+        if show is None:
+            return False
+        live = [x["started_at"] for x in (self.show, self.ended)
+                if x and (x is self.show or x.get("keep_until", 0) > now)]
+        return show not in live
 
     def _note(self, pid: int, text: str, data: dict | None = None) -> None:
         self.beach._note(pid, text, data=data or {"event": "drivein"})
