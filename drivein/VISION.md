@@ -17,6 +17,7 @@ It's optional. Without a `"vision"` section in `projector.json`, the Drive-In wo
 - [How it works](#how-it-works)
 - [Choose your setup (one model, or two)](#choose-your-setup)
 - [Genre and show notes (optional)](#genre-and-show-notes)
+- [Listening: sounds, and voice changes (optional)](#listening)
 - [Using your own model instead](#using-your-own-model-instead)
 - [Settings reference](#settings-reference)
 - [Tips from the bake-off](#tips-from-the-bake-off)
@@ -81,10 +82,8 @@ Two ways, both on this computer only. Start with the first unless you have a rea
 
 ### 1. One model that sees (recommended): LFM3-Omni-2B
 
-One small model for the whole Drive-In. It **sees** (the `(seen)` lines), and it also **hears**: in our listening
-test it was the only small model that noticed when the speaker changed, and it caught laughter and music. (The
-Drive-In's listening part isn't built yet; when it is, this same model does both.) Video memory is precious on a home
-computer, so one model is the default.
+One small model for the whole Drive-In. It **sees** (the `(seen)` lines), and it can also **hear** (see
+[Listening](#listening)): one model for both, and video memory is precious on a home computer, so it's the default.
 
 - About **1.6 GB** to download; **about 2.7 GB of video memory** in use; **0.2 to 0.3 seconds** a line on our
   16 GB NVIDIA card. Processor-only speed: not measured yet.
@@ -122,8 +121,7 @@ password each time and its web page switched off. It stops it when the show ends
 
 The winner of our first bake-off, and still a very good pair of eyes: plainer, shorter lines, and fewer vivid
 mistakes on hard frames. It **runs on the processor alone** too (about 8 seconds a line: fine at pace 1 or 2). It
-only sees; when the Drive-In's listening part arrives, you'd run LFM3-Omni-2B beside it for the sound (two models,
-about 4.7 GB of video memory together).
+only sees; for listening, use the small sound-event model (no video memory at all, see [Listening](#listening)).
 
 - Files from [openbmb/MiniCPM-V-4.7-1B-gguf](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf):
   `MiniCPM-V-4_7-1B-Q4_K_M.gguf` and `mmproj-model-f16.gguf`. llama.cpp b12024 or newer (a June 2026 build couldn't
@@ -148,6 +146,67 @@ and reappear in the audience") made the model announce the ending from the very 
 the title card, and adding "keep the suspense" didn't stop it. Notes about the setup only ("A giant rotating fan forms
 one wall of a lit box; two dancers.") got the fan named in most lines and spoiled nothing. Write them like a stage
 direction, not a plot summary.
+
+## Listening
+
+Optional, and separate from the words (which come from the speech helper either way). The listener hears the same
+pieces of the show's sound the words come from and adds two kinds of line:
+
+```
+[10:20] (sound) laughter
+[11:18] (sound) applause and music
+[11:18] Elvis has left the building.
+```
+
+- **`(sound) ...`** when a sound **starts**: laughter, applause, cheering, music, singing or crying. A long song gets
+  one line, not one every few seconds. It runs beside the words and never holds them up.
+- **`(new voice)`** in front of a line when the person speaking changes. **Off by default**: see below.
+
+Two ways to listen, and you can use both:
+
+| | What it is | Good at | Cost |
+|---|---|---|---|
+| **The sound-event model** (CED-Base) | A small model made for this, 87 MB, run on the processor in its own Python | Applause and music (all of ours), laughter with a low cutoff | ~0.7 s per piece on the processor, no video memory |
+| **The picture model listening too** (`"llm": "vision"`) | LFM3-Omni-2B, the same server the pictures use | Sounds when there's no event model; voice changes | ~0.2 s per question on the graphics card |
+
+What we measured (a magic special and a documentary, checked against a person listening to every clip): the event
+model got applause and music every time and most laughter (a single quiet chuckle slipped past); every model found
+laughter the hardest. For **voice changes**, the picture model heard 9 of 12 known changes and non-changes in clean
+speech, but with a laughing audience between the lines it marked a "new voice" on almost every piece of one man
+talking. So `"voices"` is off unless you turn it on, and it's best tried on shows without an audience.
+
+**Setting it up.** The event model needs `onnxruntime` and `numpy`, which the projector itself doesn't, so it gets a
+Python of its own:
+
+1. Make a separate Python environment just for it, and install exactly these, hash-checked:
+   `python -m venv C:/DriveIn/sound-venv`, then
+   `C:/DriveIn/sound-venv/Scripts/python.exe -m pip install --require-hashes -r requirements.txt` with a
+   requirements file that pins `onnxruntime`, `numpy` and their dependencies to exact versions and hashes.
+2. Download the model from [mispeech/ced-base](https://huggingface.co/mispeech/ced-base): `model.onnx` and
+   `config.json` (the labels).
+3. A `"hearing"` section in `projector.json`, with full paths:
+
+```json
+"hearing": {
+  "llm": "vision",
+  "voices": false,
+  "events": {
+    "python": "C:/DriveIn/sound-venv/Scripts/python.exe",
+    "model": "C:/DriveIn/models/ced-base/model.onnx",
+    "labels": "C:/DriveIn/models/ced-base/config.json"
+  }
+}
+```
+
+Leave out `"events"` to listen with the picture model alone (one model for everything), or leave out `"llm"` to use
+the event model alone (no pictures needed). The window says "Listening: on" when it's ready, or why it's off.
+
+**Privacy.** The listener hears only the show's own sound, the same capture the words come from: never the
+microphone. Pieces stay in memory (the current one, and the last 4 seconds of the one before, for voice changes) and
+are dropped when the show ends: nothing is saved, and nothing leaves this computer. No voiceprints are made: the model
+just hears the moment where one piece meets the next, and nothing about a voice is kept or compared across shows. The
+lines name nobody. The event model runs on the processor only, loaded from its exact path, and a model that points at
+another file for its weights is refused.
 
 ## Using your own model instead
 
@@ -237,6 +296,15 @@ All under `"vision"` in `projector.json`.
 | `pace` | all | `3` | 1 (calm) to 5 (max); see the table above. **+**/**−** in the window during a show |
 | `story_so_far` | all | `true` | Two pictures per look, plus the words said since the last look |
 | `genre`, `notes` | all | (none) | Starting answers to the two show-start questions (notes: 25 words, what's on stage) |
+
+Listening, under `"hearing"` (see [Listening](#listening)):
+
+| Setting | Default | What it does |
+|---|---|---|
+| `llm` | (none) | `"vision"`: the picture model's server listens too (sounds when there's no event model; voice changes) |
+| `voices` | `false` | `true` marks `(new voice)` when the speaker changes (needs `llm`; see the measurements first) |
+| `events` | (none) | `{"python": ..., "model": ..., "labels": ...}`: the sound-event model, its own Python, full paths |
+| `off` | `false` | `true` turns listening off without deleting the section |
 | `off` | all | `false` | `true` turns pictures off without deleting the section |
 
 ## Tips from the bake-off

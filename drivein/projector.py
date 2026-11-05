@@ -996,6 +996,58 @@ def _picture_modules():
     return _sibling("describer"), _sibling("frames"), _sibling("seeing")   # this order: seeing imports the first two
 
 
+def start_sound_worker(ears, send, maxsize: int = 4):
+    """A thread that hears each piece for sounds and posts "(sound) ..." lines. Pieces wait in a short queue; if it
+    falls behind, the oldest are dropped (a sound line is only worth it near its moment). None in the queue stops it."""
+    import queue
+    import threading
+    q: "queue.Queue" = queue.Queue(maxsize=maxsize)
+
+    class Q:                                         # put() that never blocks the show's own loop
+        @staticmethod
+        def put(piece):
+            while True:
+                try:
+                    q.put_nowait(piece)
+                    return
+                except queue.Full:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        pass
+
+    def work():
+        while True:
+            piece = q.get()
+            if piece is None:
+                return
+            try:
+                lines = ears.sounds(piece)
+                if lines:
+                    send(lines)
+            except Exception as e:                   # never takes the show down
+                print(f"(listening: {type(e).__name__}: {e})")
+
+    threading.Thread(target=work, name="drivein-sounds", daemon=True).start()
+    return Q
+
+
+def make_listener(cfg: dict, pics):
+    """The listener projector.json asks for ("hearing"), or None (none set, or it couldn't start: words carry on).
+    "llm": "vision" listens with the picture model's own server, so it needs pictures on."""
+    hearing = cfg.get("hearing")
+    if not hearing or (isinstance(hearing, dict) and hearing.get("off")):
+        return None
+    try:
+        listener = _sibling("hearing").make_listener(hearing, pics, say=print)
+        what = [w for w, on in (("sounds", True), ("voice changes", listener.voices)) if on]
+        print(f"Listening: on ({' and '.join(what)}; lines marked (sound) and (new voice)).")
+        return listener
+    except Exception as e:          # never costs the keeper the show
+        print(f"(Listening is off for this show: {e})")
+        return None
+
+
 def make_pictures(cfg: dict):
     """The describer projector.json asks for, or None (no "vision" section, or it couldn't start: words only)."""
     vision = cfg.get("vision")
@@ -1091,7 +1143,7 @@ def run(cfg: dict, title: str | None) -> int:
     token = read_token(cfg)
     deny = cfg["_deny"]
     helper = start_helper(cfg)
-    pics = None
+    pics = ears = None
     try:
         title = title or input("Title of the show: ").strip()
         if not title:
@@ -1113,6 +1165,7 @@ def run(cfg: dict, title: str | None) -> int:
             pics = make_pictures(cfg)
         if pics is not None:
             ask_about(cfg)
+        ears = make_listener(cfg, pics)
         show = {"title": title, "pictures": pics is not None}
         if choice.get("tab"):
             try:
@@ -1128,7 +1181,7 @@ def run(cfg: dict, title: str | None) -> int:
                 print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
                 return 1
             try:
-                return _on_air(cfg, token, deny, choice, cap, pics, cap.latest_frame)
+                return _on_air(cfg, token, deny, choice, cap, pics, cap.latest_frame, ears=ears)
             finally:
                 cap.close()
         captions = caption_source(cfg) if choice["name"].lower() == "vlc.exe" else None
@@ -1146,8 +1199,11 @@ def run(cfg: dict, title: str | None) -> int:
             cap.close()
             print(f"The Beach refused: {r.get('message') or r.get('detail') or st}")
             return 1
-        return _on_air(cfg, token, deny, choice, cap, pics, window_grabber(choice["pid"]) if pics else None)
+        return _on_air(cfg, token, deny, choice, cap, pics, window_grabber(choice["pid"]) if pics else None,
+                       ears=ears)
     finally:
+        if ears is not None:
+            ears.close()                       # its sound helper stops; the last pieces it held are dropped
         if pics is not None:
             pics.close()                       # the describer's model server stops with the show
         if helper is not None:
@@ -1217,7 +1273,7 @@ def join_unfinished(held: str | None, lines: list[str]) -> tuple[list[str], str 
 
 
 def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCapture", pics=None,
-            grab=None) -> int:
+            grab=None, ears=None) -> int:
     _end_on_close(cfg, token)
     ctypes.windll.kernel32.SetConsoleTitleW("ON AIR - Drive-In projector")
     print(f"\n*** ON AIR: listening to {choice['name']} only. Press Play whenever you're ready. ***")
@@ -1245,6 +1301,7 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
         return True
 
     loop = start_picture_loop(cfg, token, pics, grab, send, heard) if grab else None
+    sound_q = start_sound_worker(ears, send) if ears is not None else None
     try:
         while True:
             pace_keys(loop)
@@ -1264,6 +1321,8 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
             if cut:
                 piece, buf = buf[:cut], buf[cut:]
                 if rms(piece) >= QUIET_RMS / 3:
+                    if sound_q is not None:
+                        sound_q.put(piece)               # sounds are heard beside the words, never holding them up
                     try:
                         lines = transcribe(cfg, piece)
                     except (OSError, RuntimeError) as e:
@@ -1273,6 +1332,13 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
                         break
                     if lines:
                         last_speech = time.monotonic()
+                        if ears is not None and ears.new_voice(piece):
+                            if held:                     # the unfinished line was someone else's: it goes alone
+                                if not send([held]):
+                                    held, beach_ended = None, True
+                                    break
+                                held = None
+                            lines[0] = "(new voice) " + lines[0]
                         out, held = join_unfinished(held, lines)
                         held_at = time.monotonic()
                         if not send(out):
@@ -1292,6 +1358,8 @@ def _on_air(cfg: dict, token: str, deny: set[str], choice: dict, cap: "ProcessCa
     finally:
         if loop is not None:
             loop.stop()
+        if sound_q is not None:
+            sound_q.put(None)                        # the sound worker finishes what it has and stops
         cap.close()
         ctypes.windll.kernel32.SetConsoleTitleW("Drive-In projector")
     # The last words still held (up to a piece's length) go out before the show ends; found in rehearsal (11-01): a

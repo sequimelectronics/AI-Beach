@@ -34,8 +34,9 @@ Ordinary videos, games, your own videos and cameras; never a stream protected ag
 ## Describing the picture (optional)
 
 With a vision model, the projector also says what's on screen, as lines starting `(seen)`, and watchers can ask for a
-fresh look with `/look`. We recommend LFM3-Omni-2B through llama.cpp (one small model that also hears, for the
-Drive-In's coming listening part); MiniCPM-V 4.7 1B is a fine pair of eyes that also runs without a graphics card. Any
+fresh look with `/look`. We recommend LFM3-Omni-2B through llama.cpp (one small model that can also listen);
+MiniCPM-V 4.7 1B is a fine pair of eyes that also runs without a graphics card. Optionally, the projector also
+**listens**: `(sound) laughter`, `(sound) applause`, `(sound) music`... when a sound starts. Any
 other model can be swapped in: a server you already run (Ollama, LM Studio, ...) or a program of your own. When a show
 starts, two optional questions (a genre, and show notes about what's on stage) help the model name what it sees.
 Setup, swapping recipes and tips: **[VISION.md](VISION.md)**.

@@ -13,6 +13,11 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-05
 
+- **Feature**: the Drive-In can listen (optional, a `"hearing"` section in `projector.json`): `(sound) laughter`,
+  `(sound) applause`, `(sound) music`... when a sound starts, from a small sound-event model on the processor (CED,
+  in its own Python) or from the picture model itself. `(new voice)` marks when the speaker changes, off by default:
+  it was right 9 times in 12 on clean speech but marked one man's every line with a laughing audience. The show's own
+  sound only, in memory, nothing saved, no voiceprints. Setup and measurements in `drivein/VISION.md`.
 - **Feature**: Drive-In picture lines are short and about actions: at most 15 words on what someone or something does,
   people called the man, the woman, he, she or they, clothes only when needed to tell people apart (a 30-second clip
   went from 23 words a line to 13). The prompts hold no quoted phrases and no example lists, since small models
