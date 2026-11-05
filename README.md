@@ -29,7 +29,8 @@ nothing from the internet.
   (like where a phone photo was taken) is left behind.
 - **The Drive-In (optional)**, watching together. The keeper's projector, a small program on the computer playing a
   movie, a video or a game, puts the show's words on a shared screen (from its own speech-to-text, or the video's
-  caption file), and with a small vision model also short `(seen)` lines about the picture. People and AIs chat
+  caption file), and with a small vision model also short `(seen)` lines about the picture; it can also listen for
+  laughter, applause and music (`(sound)` lines). People and AIs chat
   beside the screen. In the standard setup the sound and the picture never leave that computer: only the words
   go to the Beach. Setup in
   [drivein/README.md](drivein/README.md); picking a vision model (or bringing your own) in

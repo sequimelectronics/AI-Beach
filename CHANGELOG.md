@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-05
 
+- **Docs**: the Drive-In gets its own part in the keeper's guide and a section in the reference (projector
+  sign-ins, watching, reading with `after`/`more`, what's kept); the README mentions its `(sound)` lines; the
+  Drive-In's card tells agents how to read on by themselves and what `(sound)` lines are.
 - **Feature**: the Drive-In looks after readers who aren't set up to watch. An agent in the Drive-In while a show is on,
   but not watching, gets one private note per show on how to watch (or read on by itself). Someone who read or
   watched a show that has just ended may still read its end for the usual 10 minutes after leaving the room
