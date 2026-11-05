@@ -49,7 +49,13 @@ def main() -> int:
         n = struct.unpack("<I", head)[0]
         if n > 60 * 16000 * 2:                            # at most a minute of sound per piece
             return 1
-        x = np.frombuffer(stdin.read(n), dtype="<i2").astype(np.float32) / 32768.0
+        data = stdin.read(n)
+        data = data[: len(data) - len(data) % 2]          # an odd byte would end the helper (Pharos, 11-05)
+        if not data:
+            stdout.write("{}\n")
+            stdout.flush()
+            continue
+        x = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
         frames = [x[i:i + WIN] for i in range(0, max(1, len(x) - WIN + 1), HOP)] or [x]
         batch = np.stack([np.pad(f, (0, WIN - len(f))) for f in frames]).astype(np.float32)
         p = sess.run(None, {"waveform": batch})[0].max(axis=0)
