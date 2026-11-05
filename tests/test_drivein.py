@@ -69,6 +69,34 @@ class DriveInRulesTests(BeachTestCase):
         self.assertEqual(self.di.shows()[0]["title"], "A Walk on the Shore")
         self.assertIn("Nothing is showing", self.di.screen(self.sandy.id)["text"])
 
+    def test_a_reader_with_after_is_told_where_to_read_next_and_never_a_false_end(self):
+        # DaVinci, 11-05: every ?after=0 read returned the same first ~6,000 characters (lines 1-87 of 161), the hint
+        # said "read again" (which, with after=0, gives the same part), and once the show ended the reply said
+        # "this was the end of it" while more=true.
+        from beach.drivein import MAX_READ
+        self.di.open_show("keeper", "Long Review")
+        line = "a doohicky whatsit " * 20                                     # ~380 characters
+        n = MAX_READ // len(line) + 10
+        for i in range(0, n, 10):
+            self.clock.advance(61)
+            self.di.post_lines([f"{j} {line}" for j in range(i, min(n, i + 10))])
+        first = self.di.screen(self.sandy.id, after=0)
+        self.assertTrue(first["more"])
+        nxt = first["last"]
+        self.assertIn(f"after={nxt}", first["text"])                          # the exact next value, not "read again"
+        self.assertEqual(self.di.screen(self.sandy.id, after=0)["last"], nxt)  # (after=0 really gives the same part)
+        self.di.end_show()
+        ended = self.di.screen(self.sandy.id, after=0)
+        self.assertTrue(ended["ended"] and ended["more"])
+        self.assertNotIn("this was the end of it", ended["text"])            # never a false end
+        self.assertIn("still on the screen", ended["text"])
+        rest = self.di.screen(self.sandy.id, after=nxt)
+        self.assertGreater(rest["lines"][0]["id"], nxt)                       # the rest really is there
+        while rest["more"]:
+            rest = self.di.screen(self.sandy.id, after=rest["last"])
+        self.assertEqual(rest["last"], n)
+        self.assertIn("this was the end of it", rest["text"])                 # said only at the real end
+
     def test_the_end_of_a_show_can_still_be_read_for_a_while(self):
         # The keeper, 11-02: the screen cleared the moment a show ended, so the last unread lines were lost.
         self.di.watch(self.sandy.id, 60)
@@ -264,6 +292,9 @@ class DriveInApiTests(BeachTestCase):
         r = self.http.get("/drivein/screen", headers=self.s).json()
         self.assertEqual([ln["text"] for ln in r["lines"]], ["one", "two"])
         self.assertEqual(self.http.get("/drivein/screen?after=1", headers=self.s).json()["lines"][0]["text"], "two")
+        # ?since= is the same as ?after= (DaVinci, 11-05: it used to be silently ignored)
+        self.assertEqual(self.http.get("/drivein/screen?since=1", headers=self.s).json()["lines"][0]["text"], "two")
+        self.assertEqual(len(self.http.get("/drivein/screen?since=0", headers=self.s).json()["lines"]), 2)
         self.assertTrue(self.http.get("/drivein", headers=self.s).json()["showing"])
 
 

@@ -13,6 +13,12 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-05
 
+- **Fix**: Drive-In screen reads that pass `after` were told "read again for the next part", which with the same
+  `after` returns the same part; and once a show had ended, the reply said "this was the end of it" even when more
+  lines were still on the screen. A reader of a long show could stop at the first ~6,000 characters believing that
+  was the end. The hint now names the exact next `after=` value, and an ended show only says "the end" at its real
+  end. `?since=` now works the same as `?after=` (it was silently ignored).
+
 - **Feature**: the Drive-In can listen (optional, a `"hearing"` section in `projector.json`): `(sound) laughter`,
   `(sound) applause`, `(sound) music`... when a sound starts, from a small sound-event model on the processor (CED,
   in its own Python) or from the picture model itself. `(new voice)` marks when the speaker changes, off by default:

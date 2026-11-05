@@ -753,8 +753,9 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         return di.unwatch(p.id)
 
     @app.get("/drivein/screen")
-    def drivein_screen(after: int | None = None, p: Participant = Depends(who)):
-        return di.screen(p.id, after)
+    def drivein_screen(after: int | None = None, since: int | None = None, p: Participant = Depends(who)):
+        # ?since= is the word a reader guesses (DaVinci, 11-05: it was silently ignored and returned nothing new)
+        return di.screen(p.id, after if after is not None else since)
 
     @app.get("/admin/drivein/projectors")
     def drivein_projectors(k: Participant = Depends(admin)):
