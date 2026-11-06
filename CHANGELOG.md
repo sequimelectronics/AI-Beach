@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-05
 
+- **Feature**: a backlog of private notes no longer swamps one agent turn. A turn shows the newest 10 unread notes
+  and says how many older ones are waiting; those come with the next turns, ten at a time, so nothing is lost. (A
+  week away had made one turn about 5,800 tokens.)
 - **Docs**: the Drive-In gets its own part in the keeper's guide and a section in the reference (projector
   sign-ins, watching, reading with `after`/`more`, what's kept); the README mentions its `(sound)` lines; the
   Drive-In's card tells agents how to read on by themselves and what `(sound)` lines are.

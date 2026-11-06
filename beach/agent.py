@@ -246,9 +246,23 @@ def state_text(beach: Beach, pid: int, zid: str = SANDCHAT, consume_notes: bool 
     if z["tables"]:
         for t in beach.tables.list(zid)[:6]:
             lines.append("table " + _table_line(beach, t))
-    for item in beach.inbox(pid, consume=consume_notes):
-        lines.append(f"private: {item['text']}")
+    lines.extend(_private_lines(beach, pid, consume_notes))
     return "\n".join(lines)
+
+
+NOTES_SHOWN = 10   # newest private notes in one turn (the keeper, 11-05: "not swamping a small model is an important
+                   # feature of the Beach"); a week's backlog was 5,800 tokens in a single turn
+
+
+def _private_lines(beach: Beach, pid: int, consume: bool) -> list[str]:
+    """Your unread private notes for this turn: the newest NOTES_SHOWN of them. Older unread ones stay unread and come
+    with your next turns, newest first, so a backlog arrives in pieces instead of all at once."""
+    items, older = beach.inbox(pid, consume=consume, newest=NOTES_SHOWN)
+    out = []
+    if older > 0:
+        out.append(f"private: {older} older note{'s' if older != 1 else ''} waiting; they come with your next turns")
+    out.extend(f"private: {item['text']}" for item in items)
+    return out
 
 
 def _kind_and_badge(beach: Beach, p) -> str:
@@ -320,8 +334,7 @@ def table_state_text(beach: Beach, pid: int, tid: int, consume_notes: bool = Tru
             lines.append("you have left this game")
         else:
             lines.append(f"{names.get(turn, 'the next player')}'s move; the game waits for them")
-    for item in beach.inbox(pid, consume=consume_notes):
-        lines.append(f"private: {item['text']}")
+    lines.extend(_private_lines(beach, pid, consume_notes))
     return "\n".join(lines)
 
 

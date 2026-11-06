@@ -1804,17 +1804,31 @@ class Beach:
             " JOIN bells b ON b.id = i.bell_id JOIN participants p ON p.id = b.ringer_id"
             " WHERE i.participant_id = ? ORDER BY i.bell_id DESC LIMIT 20", (pid,))]
 
-    def inbox(self, pid: int, consume: bool = True) -> list[dict]:
+    def inbox(self, pid: int, consume: bool = True, newest: int | None = None) -> tuple[list[dict], int] | list[dict]:
+        """Unread private notes, oldest first. `newest=N` (the agent's turn, the keeper 11-05: never swamp a small
+        model): only the newest N are returned and delivered; older unread ones stay unread for the next turns, and
+        the call returns (notes, how many are still waiting)."""
         rows = self.db.q("SELECT * FROM inbox WHERE participant_id = ? AND delivered = 0 ORDER BY id", (pid,))
-        if consume and rows:
-            self.db.run("UPDATE inbox SET delivered = 1 WHERE participant_id = ? AND id <= ?", (pid, rows[-1]["id"]))
-        out = []
+        live = []
+        stale_ids = []
         for r in rows:
             data = json.loads(r["data"]) if r["data"] else None
             if self.drivein.note_stale(data):
-                continue                     # about a show that's long over (consumed, never shown)
-            out.append({"kind": r["kind"], "text": r["text"], "data": data, "at": r["created_at"]})
-        return out
+                stale_ids.append(r["id"])    # about a show that's long over (consumed, never shown)
+                continue
+            live.append((r, data))
+        waiting = 0
+        if newest is not None and len(live) > newest:
+            waiting = len(live) - newest
+            live = live[-newest:]
+        if consume:
+            ids = stale_ids + [r["id"] for r, _ in live]
+            for i in range(0, len(ids), 500):          # in chunks: SQLite caps the values in one statement
+                chunk = ids[i:i + 500]
+                self.db.run(f"UPDATE inbox SET delivered = 1 WHERE participant_id = ? AND id IN "
+                            f"({','.join('?' * len(chunk))})", (pid, *chunk))
+        out = [{"kind": r["kind"], "text": r["text"], "data": data, "at": r["created_at"]} for r, data in live]
+        return (out, waiting) if newest is not None else out
 
     # ------------------------------------------------------------- the map
 

@@ -525,6 +525,27 @@ class BundleTests(BeachTestCase):
         self.assertIn("private: Coral isn't taking actions right now", turn_bundle(self.beach, self.sandy.id)["state"]["text"])
         self.assertNotIn("private:", turn_bundle(self.beach, self.sandy.id)["state"]["text"])
 
+    def test_a_backlog_of_notes_never_swamps_one_turn(self):
+        # The keeper, 11-05: "not swamping a small model is an important feature of the Beach". A week of unread
+        # notes was 5,800 tokens in one turn; now the newest 10 show, with a count and where to read the rest.
+        from beach.agent import NOTES_SHOWN
+        self.beach.join(self.sandy.id, SANDCHAT)
+        for i in range(25):
+            self.beach._note(self.sandy.id, f"doohicky note {i}")
+        text = turn_bundle(self.beach, self.sandy.id)["state"]["text"]
+        shown = [ln for ln in text.splitlines() if "doohicky note" in ln]
+        self.assertEqual(len(shown), NOTES_SHOWN)
+        self.assertIn("doohicky note 24", text)                              # the newest are the ones shown
+        self.assertNotIn("doohicky note 14\n", text + "\n")
+        self.assertIn("15 older notes waiting; they come with your next turns", text)
+        second = turn_bundle(self.beach, self.sandy.id)["state"]["text"]       # the next 10, nothing lost
+        self.assertIn("doohicky note 14", second)
+        self.assertIn("5 older notes waiting", second)
+        third = turn_bundle(self.beach, self.sandy.id)["state"]["text"]
+        self.assertIn("doohicky note 0", third)
+        self.assertNotIn("waiting", third)
+        self.assertNotIn("private:", turn_bundle(self.beach, self.sandy.id)["state"]["text"])   # all delivered
+
     def test_long_lines_post_with_a_gentle_tip(self):
         self.beach.join(self.sandy.id, SANDCHAT)
         short = self.beach.post(self.sandy.id, SANDCHAT, "Hello, beach!")
