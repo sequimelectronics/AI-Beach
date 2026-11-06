@@ -135,5 +135,64 @@ class BellListeningApiTests(BeachTestCase):
                          .status_code, 404)
 
 
+class SoloBellTests(BeachTestCase):
+    """The keeper, 11-06: a keeper's bell for chosen residents only. Keeper-only and residents-only to start."""
+
+    def invited(self, bid):
+        return [r["name"] for r in self.beach.db.q("SELECT p.name FROM invites i JOIN participants p"
+                                                   " ON p.id = i.participant_id WHERE i.bell_id = ? ORDER BY p.name",
+                                                   (bid,))]
+
+    def test_exactly_the_chosen_are_invited(self):
+        self.beach.update_settings({"bell_agent_seats": 1})          # turns don't apply to a solo bell
+        r = self.beach.ring_solo(self.keeper.id, [self.pebble.id])
+        self.assertEqual(self.invited(r["bell_id"]), ["Pebble"])     # not Coral (a person), not Sandy
+        self.assertEqual(r["invited"], ["Pebble"])
+
+    def test_keeper_only_and_residents_only(self):
+        with self.assertRaises(BeachError):
+            self.beach.ring_solo(self.sandy.id, [self.pebble.id])   # a resident can't (for now)
+        visitor = self.beach.add_participant("Gull", "person")[0]
+        self.beach.db.run("UPDATE participants SET access = 'visitor' WHERE id = ?", (visitor.id,))
+        with self.assertRaises(BeachError):
+            self.beach.ring_solo(self.keeper.id, [visitor.id])      # no visitors on a solo bell
+        for bad in ([], [999999], [self.keeper.id], ["x"], list(range(1, 30))):
+            with self.assertRaises(BeachError):
+                self.beach.ring_solo(self.keeper.id, bad)
+
+    def test_it_and_an_ordinary_ring_dont_hold_each_other_up(self):
+        self.beach.join(self.sandy.id, SANDCHAT)
+        self.beach.ring_bell(self.sandy.id)                          # an ordinary bell is open
+        self.beach.ring_solo(self.keeper.id, [self.pebble.id])      # a solo bell still rings
+        self.beach.ring_solo(self.keeper.id, [self.coral.id])       # and again: no keeper wait
+        self.clock.advance(400)                                      # the ordinary bell has closed
+        self.beach.join(self.pebble.id, SANDCHAT)
+        self.beach.ring_bell(self.pebble.id)                         # solo rings didn't start the beach-wide gap
+
+    def test_its_invite_list_is_the_keepers_and_the_invitees(self):
+        bid = self.beach.ring_solo(self.keeper.id, [self.pebble.id])["bell_id"]
+        self.assertEqual([x["name"] for x in self.beach.bell_invited(self.keeper.id, bid)["invited"]], ["Pebble"])
+        self.assertEqual([x["name"] for x in self.beach.bell_invited(self.pebble.id, bid)["invited"]], ["Pebble"])
+        with self.assertRaises(BeachError):
+            self.beach.bell_invited(self.sandy.id, bid)              # not invited: not theirs to see
+
+    def test_an_invitee_answers_and_comes_as_with_any_bell(self):
+        bid = self.beach.ring_solo(self.keeper.id, [self.pebble.id])["bell_id"]
+        self.beach.join(self.pebble.id, SANDCHAT)
+        row = self.beach.db.one("SELECT status FROM invites WHERE bell_id = ? AND participant_id = ?",
+                                (bid, self.pebble.id))
+        self.assertEqual(row["status"], "came")
+
+    @unittest.skipUnless(HAVE_FASTAPI, "needs fastapi")
+    def test_over_http_keeper_only(self):
+        http = TestClient(create_app(self.beach, upkeep_interval=None))
+        body = {"invite": [self.pebble.id]}
+        self.assertEqual(http.post("/admin/bell/ring", json=body,
+                                   headers={"Authorization": f"Bearer {self.sandy_tok}"}).status_code, 403)
+        r = http.post("/admin/bell/ring", json=body, headers={"Authorization": f"Bearer {self.admin_token}"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["invited"], ["Pebble"])
+
+
 if __name__ == "__main__":
     unittest.main()

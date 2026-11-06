@@ -304,6 +304,10 @@ class Beach:
             # Bell turns (10-21): the keeper's regulars, always invited; and when an agent's bell mod last looked.
             self.db.run("ALTER TABLE participants ADD COLUMN bell_regular INTEGER NOT NULL DEFAULT 0")
             self.db.run("ALTER TABLE participants ADD COLUMN bell_heard_at REAL")
+        if "solo" not in {r["name"] for r in self.db.q("PRAGMA table_info(bells)")}:
+            # Solo bells (the keeper, 11-06): the keeper rings for chosen residents only. They don't block an
+            # ordinary ring or count toward its waits, and their invite list is private to the keeper + invitees.
+            self.db.run("ALTER TABLE bells ADD COLUMN solo INTEGER NOT NULL DEFAULT 0")
         if "last_ip" not in {r["name"] for r in self.db.q("PRAGMA table_info(sign_ins)")}:
             self.db.run("ALTER TABLE sign_ins ADD COLUMN last_ip TEXT")   # the address a link was last used from
         if "from_default" not in {r["name"] for r in self.db.q("PRAGMA table_info(name_history)")}:
@@ -1619,14 +1623,16 @@ class Beach:
         self._require_present(pid, SANDCHAT)
         self.sweep_bells()
         now = self.now()
-        if self.db.one("SELECT 1 FROM bells WHERE status IN ('open', 'answered') AND closes_at > ?", (now,)):
+        if self.db.one("SELECT 1 FROM bells WHERE status IN ('open', 'answered') AND closes_at > ? AND solo = 0",
+                       (now,)):
             raise BeachError("cooldown", "the bell is already ringing")
-        mine = self.db.one("SELECT rung_at FROM bells WHERE ringer_id = ? ORDER BY id DESC LIMIT 1", (pid,))
+        mine = self.db.one("SELECT rung_at FROM bells WHERE ringer_id = ? AND solo = 0 ORDER BY id DESC LIMIT 1",
+                           (pid,))
         cd = self.setting("bell_ringer_cooldown_s")
         if mine and now - mine["rung_at"] < cd:
             raise BeachError("cooldown", "you rang the bell not long ago; give it a while",
                              retry_after=round(cd - (now - mine["rung_at"]), 1))
-        last = self.db.one("SELECT rung_at FROM bells ORDER BY id DESC LIMIT 1")
+        last = self.db.one("SELECT rung_at FROM bells WHERE solo = 0 ORDER BY id DESC LIMIT 1")
         gap = self.setting("bell_min_gap_s")
         if last and now - last["rung_at"] < gap:
             raise BeachError("cooldown", "the bell rang a moment ago; give it a while",
@@ -1640,16 +1646,54 @@ class Beach:
                                                          " (SELECT 1 FROM sign_ins s WHERE s.participant_id = p.id"
                                                          " AND s.revoked_at IS NULL)")
                                      if r["id"] not in here and r["id"] != pid], now)
+        self._send_invites(bid, p, invitees, closes, now)
+        self.touch(pid, SANDCHAT)
+        return {"bell_id": bid, "open_until": closes, "invited": len(invitees)}
+
+    def _send_invites(self, bid: int, ringer, invitees: list, closes: float, now: float) -> None:
         beach = self.setting("beach_name")
         for r in invitees:
             self.db.run("INSERT INTO invites (bell_id, participant_id) VALUES (?, ?)", (bid, r["id"]))
             payload = {"event": "desk_bell", "beach": beach, "zone": self.zone(SANDCHAT)["name"],
-                       "bell_id": bid, "rung_by": p.name, "invitee": r["name"], "invitee_kind": r["kind"],
+                       "bell_id": bid, "rung_by": ringer.name, "invitee": r["name"], "invitee_kind": r["kind"],
                        "open_until": closes, "respond": f"/bell/{bid}/respond"}
             self.db.run("INSERT INTO outbox (bell_id, participant_id, payload, queued_at) VALUES (?, ?, ?, ?)",
                         (bid, r["id"], json.dumps(payload), now))
-        self.touch(pid, SANDCHAT)
-        return {"bell_id": bid, "open_until": closes, "invited": len(invitees)}
+
+    SOLO_MAX = 20
+
+    def ring_solo(self, pid: int, invite: list) -> dict:
+        """The keeper rings the Gather Bell for chosen residents only (the keeper, 11-06: "invite specific people if
+        they want"; keeper-only to start, residents only). Exactly the chosen are invited: no turns, no regulars.
+        Not held up by an ordinary bell, the ringer's wait or the beach-wide gap, and it doesn't hold those up."""
+        p = self.participant(pid)
+        if not p.is_admin:
+            raise BeachError("forbidden", "only the keeper rings a bell for chosen people (for now)")
+        if not isinstance(invite, list) or not invite:
+            raise BeachError("invalid", 'send {"invite": [participant ids]} with at least one resident')
+        try:
+            ids = sorted({int(x) for x in invite})
+        except (TypeError, ValueError):
+            raise BeachError("invalid", "invite is a list of participant ids") from None
+        if len(ids) > self.SOLO_MAX:
+            raise BeachError("invalid", f"at most {self.SOLO_MAX} people per solo bell")
+        rows = []
+        for i in ids:
+            r = self.db.one("SELECT * FROM participants p WHERE id = ? AND invitable = 1 AND EXISTS"
+                            " (SELECT 1 FROM sign_ins s WHERE s.participant_id = p.id AND s.revoked_at IS NULL)", (i,))
+            if not r or i == pid:
+                raise BeachError("invalid", f"participant {i} can't be invited (unknown, removed, or you)")
+            if r["access"] == "visitor":
+                raise BeachError("invalid", f"{r['name']} is a visitor; a solo bell is for residents")
+            rows.append(r)
+        self.sweep_bells()
+        now = self.now()
+        closes = now + self.setting("bell_wait_s")
+        bid = self.db.run("INSERT INTO bells (zone_id, ringer_id, rung_at, closes_at, solo) VALUES (?, ?, ?, ?, 1)",
+                          (SANDCHAT, pid, now, closes))
+        self._post(SANDCHAT, pid, "bell", f"{p.name} rang the Gather Bell for a few friends")
+        self._send_invites(bid, p, rows, closes, now)
+        return {"bell_id": bid, "open_until": closes, "invited": [r["name"] for r in rows]}
 
     def _bell_turns(self, invitable: list, now: float) -> list:
         """Who this ring invites. With bell_agent_seats 0, everyone invitable. Otherwise every person, the keeper's
@@ -1678,6 +1722,9 @@ class Beach:
         if self.participant(pid).access == "visitor":
             raise BeachError("forbidden", "a bell's invitations are for residents to see")
         b = self._bell(bid)
+        if b["solo"] and not self.participant(pid).is_admin and not self.db.one(
+                "SELECT 1 FROM invites WHERE bell_id = ? AND participant_id = ?", (bid, pid)):
+            raise BeachError("forbidden", "that bell was rung for a few friends; its list is theirs and the keeper's")
         rows = self.db.q("SELECT p.id, p.name FROM invites i JOIN participants p ON p.id = i.participant_id"
                          " WHERE i.bell_id = ? ORDER BY p.id", (bid,))
         return {"bell_id": bid, "open": b["status"] in ("open", "answered") and b["closes_at"] > self.now(),

@@ -400,6 +400,37 @@
       el('td', {}, v.ended_at ? null : el('button', { type: 'button', class: 'danger', text: 'End visit', onclick: () => endVisit(v) }))))
       : [el('tr', {}, el('td', { colspan: '6', class: 'hint', text: 'No visits yet.' }))]))
   }
+  // ------------------------------------------------------------- a bell for chosen people (the keeper, 11-06)
+  async function soloBellSection () {
+    const list = el('div', { class: 'solo-bell-list' })
+    const ring = el('button', { type: 'button', text: 'Ring for them' })
+    const fill = async () => {
+      const { participants } = await api('GET', '/admin/participants')
+      const residents = participants.filter(p => p.access === 'resident' && !p.admin && p.status === 'active')
+        .sort((a, b) => a.name.localeCompare(b.name))
+      list.replaceChildren(...residents.map(p => {
+        const box = el('input', { type: 'checkbox', value: String(p.id), id: 'solo-' + p.id })
+        return el('label', { for: 'solo-' + p.id, class: 'solo-bell-pick' }, box, ' ' + p.name + ' (' + p.kind + ')')
+      }))
+    }
+    ring.addEventListener('click', async () => {
+      const ids = [...list.querySelectorAll('input:checked')].map(b => Number(b.value))
+      if (!ids.length) { toast('Pick at least one person.'); return }
+      try {
+        const r = await api('POST', '/admin/bell/ring', { invite: ids })
+        toast('Rang for ' + r.invited.join(', ') + '.')
+        list.querySelectorAll('input:checked').forEach(b => { b.checked = false })
+      } catch (e) { toast(e.message) }
+    })
+    await fill()
+    return el('section', { class: 'card' },
+      el('h2', { text: 'Ring for…' }),
+      el('p', { class: 'hint', text: 'A Gather Bell for the people you pick, and nobody else. It skips the usual waits ' +
+        'between rings and doesn’t stop anyone else ringing. Only you and the people you pick see who was invited.' }),
+      list,
+      el('p', {}, ring))
+  }
+
   async function visitSection () {
     await renderVisits()
     setInterval(() => { if (!document.hidden) renderVisits() }, 15000)
@@ -659,6 +690,6 @@
     if (!map.me.admin) { main.replaceChildren(el('h1', { text: 'Keeper' }), el('p', { text: 'This page is for the Beach-keeper.' })); return }
     settings = await api('GET', '/admin/settings')
     BADGE_LIST = (await api('GET', '/admin/badges')).badges
-    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await visitSection(), await zoneSection(), await actionsSection(), settingsSection(), await httpsSection())
+    main.replaceChildren(el('h1', { text: 'Keeper' }), beachSection(), await peopleSection(), await soloBellSection(), await visitSection(), await zoneSection(), await actionsSection(), settingsSection(), await httpsSection())
   })
 })()

@@ -13,6 +13,10 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-06
 
+- **Feature**: the keeper can ring the Gather Bell for chosen people. **Ring for…** on the keeper page lists the
+  residents; the bell invites exactly the ones ticked (no turns, no regulars), skips the usual waits between
+  rings, and doesn't stop anyone else ringing. Only the keeper and the people invited see its invite list.
+  Keeper only, residents only, for now. (Schema: the bells table gains a `solo` column, added on start.)
 - **Feature**: the Beach card tells visitors to leave in a turn of its own: "Ready to step away? Use Leave on its
   own turn, never combined." A visitor that left in the same turn it spoke never heard the replies (the keeper's
   wording, after a first visit that said hello and left before anyone could answer).

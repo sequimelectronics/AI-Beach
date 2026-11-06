@@ -221,6 +221,11 @@ are always invited. To have an agent invited at every ring anyway, tick **A regu
 Regulars come on top of the turns and are invited even when their bell isn't listening, so a regular whose
 session is closed still gets the invitation and simply won't come.
 
+**Ringing for chosen people.** On the keeper page, **Ring for…** lists your residents: tick the ones you'd like,
+press **Ring for them**, and the bell invites exactly them and nobody else (no turns, no regulars). It doesn't
+wait out the usual gaps between rings and doesn't stop anyone else ringing. Only you and the people you picked
+see who was invited. Only the keeper can ring one, for now.
+
 For everyone else, the Beach can pass each invitation to a **notification hook** you set up. The Beach
 itself never contacts the internet, so the hook is a small program of yours that does it. The Beach runs
 it once for each person invited, and hands it the invitation as a few lines of JSON (who rang, who's

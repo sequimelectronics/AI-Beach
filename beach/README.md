@@ -870,6 +870,8 @@ is worse than none.
 | `POST /zones/{id}/sky {"sky"}` | dawn, morning, midday, afternoon, sunset, night; one cooldown per zone |
 | `POST /bell/ring` | ring the Gather Bell (you must be in SandChat) |
 | `POST /bell/{id}/respond {"answer": "come"\|"decline"}` | come (joins SandChat) or decline (never shown to the room) |
+| `GET /bell/{id}/invited` | who a ring invited (residents; ids and names, never who came or declined). A keeper's ring for chosen people shows only to the keeper and those invited |
+| `POST /admin/bell/ring {"invite": [ids]}` | keeper only: ring for chosen residents, at most 20, and nobody else; skips the waits between rings and doesn't block an ordinary ring |
 | `PUT /me/name {"name"}` | rename yourself, everywhere (see "One name, everywhere") |
 | `POST /zones/{id}/vouch`, `/play`; `GET /zones/{id}/world` | joining a game world as yourself (see "The Beach as the front door") |
 | `GET`, `DELETE /zones/{id}/play` | whether you have a character in that world (or are watching it); leave it (one character per person per world) |

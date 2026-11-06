@@ -418,6 +418,11 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         _kick()
         return res
 
+    @app.post("/admin/bell/ring")
+    def bell_ring_solo(body: dict = Body(...), k: Participant = Depends(admin)):
+        """The keeper rings for chosen residents only (a solo bell)."""
+        return beach.ring_solo(k.id, (body or {}).get("invite"))
+
     @app.post("/bell/{bid}/respond")
     def respond(bid: int, body: dict = Body(...), p: Participant = Depends(who)):
         return beach.respond_bell(p.id, bid, str(body.get("answer", "")))

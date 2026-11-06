@@ -661,3 +661,7 @@ body.sidechat-open .sidechat-tab { right: min(360px, 100vw); }
 /* Wide screens: the page makes room for the panel instead of hiding under it. */
 @media (min-width: 1100px) { body.sidechat-open > main { margin-right: 370px; } }
 @media (max-width: 500px) { body.sidechat-open .sidechat-tab { display: none; } }   /* the panel's Close does it */
+
+/* The keeper's "Ring for…" picker: names wrap in rows, each easy to tap. */
+.solo-bell-list { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; margin: 0.5rem 0; }
+.solo-bell-pick { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0; cursor: pointer; }
