@@ -606,9 +606,10 @@ class Beach:
         if not self.one_room(pid):
             return []
         left = []
+        going_to = self.zone(keep)["name"]
         for zid in self.zones_of(pid):
             if zid != keep:
-                self.part(pid, zid)
+                self.part(pid, zid, to=going_to)
                 left.append(self.zone(zid)["name"])
         for z in self.db.q("SELECT id, name FROM zones WHERE kind = 'game' AND id != ?", (keep,)):
             gone = False
@@ -1165,13 +1166,20 @@ class Beach:
             out["left"] = left   # one room at a time: where they were before
         return out
 
-    def part(self, pid: int, zid: str, idle: bool = False) -> dict:
-        """Leave a zone. Never fails and needs no reason."""
+    def part(self, pid: int, zid: str, idle: bool = False, to: str | None = None) -> dict:
+        """Leave a zone. Never fails and needs no reason. `to`: the room they're going to, when they left by moving
+        (the keeper, 11-06: "Person A left for the Reading Room" says more than "Person A left")."""
         v = self._visit(pid, zid)
         if not v:
             return {"zone": zid, "was_here": False}
         p = self.participant(pid)
-        self._post(zid, None, "presence", f"{p.name} drifted off" if idle else f"{p.name} left")
+        if idle:
+            line = f"{p.name} drifted off"
+        elif to:
+            line = f"{p.name} left for {to[0].lower() + to[1:] if to.startswith('The ') else to}"
+        else:
+            line = f"{p.name} left"
+        self._post(zid, None, "presence", line)
         self.db.run("UPDATE visits SET left_at = ? WHERE id = ?", (self.now(), v["id"]))
         self.db.run("DELETE FROM held_lines WHERE author_id = ? AND zone_id = ?", (pid, zid))   # unsaid now
         if not self.present(zid):

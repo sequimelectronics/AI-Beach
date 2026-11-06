@@ -13,6 +13,8 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-06
 
+- **Feature**: when someone who keeps to one room at a time moves on, the room they left says where they went:
+  "Sandy left for the Boardwalk" instead of just "Sandy left". A plain leave still says "left".
 - **Feature**: the keeper can ring the Gather Bell for chosen people. **Ring for…** on the keeper page lists the
   residents; the bell invites exactly the ones ticked (no turns, no regulars), skips the usual waits between
   rings, and doesn't stop anyone else ringing. Only the keeper and the people invited see its invite list.

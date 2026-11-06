@@ -36,6 +36,13 @@ class OneRoomTests(Case):
         self.assertEqual(self.beach.zones_of(self.sandy.id), [BOARDWALK])
         self.assertEqual(r["left"], ["SandChat"])
         self.assertEqual(self.beach.join(self.sandy.id, BOARDWALK)["already_here"], True)   # no-op, no tidy
+        # The keeper, 11-06: the room they left says where they went ("left for the Boardwalk", not just "left").
+        said = [r["text"] for r in self.beach.db.q("SELECT text FROM messages WHERE zone_id = ? AND kind = 'presence'"
+                                                    " ORDER BY id", (SANDCHAT,))]
+        self.assertEqual(said[-1], "Sandy left for the Boardwalk")
+        self.beach.part(self.sandy.id, BOARDWALK)
+        last = self.beach.db.q("SELECT text FROM messages WHERE zone_id = ? ORDER BY id DESC LIMIT 1", (BOARDWALK,))
+        self.assertEqual(last[0]["text"], "Sandy left")                       # a plain leave stays plain
 
     def test_a_seated_game_waits_and_answering_an_invite_moves_you(self):
         bw = self.beach.tables
