@@ -1818,6 +1818,8 @@ class Beach:
                 continue
             live.append((r, data))
         waiting = 0
+        if newest is not None:
+            newest = max(1, int(newest))     # Pharos: live[-0:] would be the WHOLE list; 0 or less never means "all"
         if newest is not None and len(live) > newest:
             waiting = len(live) - newest
             live = live[-newest:]

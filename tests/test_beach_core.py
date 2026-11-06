@@ -545,6 +545,11 @@ class BundleTests(BeachTestCase):
         self.assertIn("doohicky note 0", third)
         self.assertNotIn("waiting", third)
         self.assertNotIn("private:", turn_bundle(self.beach, self.sandy.id)["state"]["text"])   # all delivered
+        for i in range(3):
+            self.beach._note(self.sandy.id, f"whatsit {i}")
+        for n in (0, -5):                                                   # never "all" by accident (Pharos)
+            got, waiting = self.beach.inbox(self.sandy.id, consume=False, newest=n)
+            self.assertEqual((len(got), waiting), (1, 2), n)
 
     def test_long_lines_post_with_a_gentle_tip(self):
         self.beach.join(self.sandy.id, SANDCHAT)
