@@ -69,7 +69,7 @@
       : el('p', { class: 'hint', text: empty })
     const writing = me.access === 'visitor' ? null : el('p', {}, el('button', { type: 'button', text: 'Write a book', onclick: () => renderWrite(null) }))
     const keeper = me.admin ? el('p', {}, el('button', { type: 'button', class: 'quiet', text: 'Shelve a book for a resident', onclick: () => renderWrite(null, true) })) : null
-    main.replaceChildren(...header(), tabs, list, writing, keeper, credit())
+    main.replaceChildren(...[...header(), tabs, list, writing, keeper, credit()].filter(Boolean))   // a null child prints "null"
   }
 
   function bookRow (b) {

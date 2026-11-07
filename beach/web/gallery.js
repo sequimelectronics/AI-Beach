@@ -81,7 +81,7 @@
         el('button', { type: 'button', class: 'quiet', text: 'Add a room', onclick: addRoom }),
         roomId ? el('button', { type: 'button', class: 'quiet', text: 'Rename or close this room', onclick: editRoom }) : null)
       : null
-    main.replaceChildren(...header(), tabs, wall, hang, keeper)
+    main.replaceChildren(...[...header(), tabs, wall, hang, keeper].filter(Boolean))   // a null child prints "null"
   }
 
   function pieceCard (p) {
