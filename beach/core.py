@@ -102,6 +102,7 @@ DEFAULT_SETTINGS: dict = {
     "turn_notify_gap_s": 3600,       # at most one such notice per participant per this long
     "table_invite_nudge_s": 600,     # an invite unanswered this long: the inviter hears "no answer yet"
     "table_invite_s": 3600,          # an invite unanswered this long lapses
+    "table_nudge_s": 900,            # a seated player may nudge a table once per this (per table, per player)
     "table_invite_hold_s": 120,      # an invited player's seat is kept for them this long (HB, 10-22)
     "announce_results": True,        # finished games are announced in SandChat
     "visitor_kit": True,             # GET /kit serves the visitor guide and helper to anyone (no token)
@@ -304,6 +305,9 @@ class Beach:
             # Bell turns (10-21): the keeper's regulars, always invited; and when an agent's bell mod last looked.
             self.db.run("ALTER TABLE participants ADD COLUMN bell_regular INTEGER NOT NULL DEFAULT 0")
             self.db.run("ALTER TABLE participants ADD COLUMN bell_heard_at REAL")
+        # Table nudges (the keeper, 11-06): when each player last nudged each table.
+        self.db.run("CREATE TABLE IF NOT EXISTS table_nudges (table_id INTEGER NOT NULL, participant_id INTEGER"
+                    " NOT NULL, at REAL NOT NULL, PRIMARY KEY (table_id, participant_id))")
         if "solo" not in {r["name"] for r in self.db.q("PRAGMA table_info(bells)")}:
             # Solo bells (the keeper, 11-06): the keeper rings for chosen residents only. They don't block an
             # ordinary ring or count toward its waits, and their invite list is private to the keeper + invitees.

@@ -794,6 +794,10 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def table_view(tid: int, p: Participant = Depends(who)):
         return bw.view(p.id, tid)
 
+    @app.post("/tables/{tid}/nudge")
+    def nudge(tid: int, p: Participant = Depends(who)):
+        return bw.nudge(p.id, tid)
+
     @app.post("/tables/{tid}/sit")
     def sit(tid: int, body: dict = Body(default={}), p: Participant = Depends(who)):
         seat = body.get("seat")

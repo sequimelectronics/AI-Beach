@@ -165,6 +165,7 @@ def zone_card(beach: Beach, zid: str = SANDCHAT, pid: int | None = None) -> str:
             " your name and notes. A move's reply says your_turn (with legal moves when you go again).",
             "talk at a table: POST /tables/<id>/say {\"text\": \"...\"}; read: GET /tables/<id>/chat?after=<id>"
             " (no zone-wide chat here)",
+            "waiting on someone at your game: POST /tables/<id>/nudge (once per 15 min)",
             "done at a table: POST /tables/<id>/leave",
         ])
     names = []

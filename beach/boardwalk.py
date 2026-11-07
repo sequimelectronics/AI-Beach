@@ -365,6 +365,54 @@ class Boardwalk:
                 pass
         return {"invited": them.name, "invite": iid, "table": tid}
 
+    def nudge(self, pid: int, tid: int) -> dict:
+        """A seated player nudges everyone else seated at this game back to the table (the keeper, 11-06: "a table
+        bell ring to nudge the other player back to the table"). The Gather Bell stays "come to SandChat"; this is
+        the table's own small bell. Each player may nudge a table once per table_nudge_s (per table, per player: a
+        slow game shouldn't be rushed by its quicker side). Each nudged player gets a private note (kind
+        table_nudge, with the table) and, when away, their notification hook. Someone already at the Boardwalk is
+        told too: being there isn't the same as watching this table."""
+        row = self.table(tid)
+        if self.seat_of(tid, pid) is None:
+            raise self._err("forbidden", "only someone seated at this table can nudge it")
+        if row["status"] != "playing":
+            raise self._err("conflict", "this game isn't under way; a waiting table uses invites")
+        now = self.beach.now()
+        gap = self.beach.setting("table_nudge_s")
+        last = self.db.one("SELECT at FROM table_nudges WHERE table_id = ? AND participant_id = ?", (tid, pid))
+        if last and now - last["at"] < gap:
+            raise self._err("rate_limited", "you nudged this table not long ago; give them a while",
+                            retry_after=round(gap - (now - last["at"]), 1))
+        others = [q for s, q in self.seats(tid).items() if q != pid]
+        if not others:
+            raise self._err("conflict", "nobody else is seated here")
+        self.db.run("INSERT OR REPLACE INTO table_nudges (table_id, participant_id, at) VALUES (?, ?, ?)",
+                    (tid, pid, now))
+        me = self.beach.participant(pid)
+        g = self.game(row)
+        zone = self.beach.zone(row["zone_id"])["name"]
+        state = self.state(row)
+        turn_pid = self.seats(tid).get(g.to_move(state)) if g.to_move(state) is not None else None
+        names = []
+        for q in others:
+            them = self.beach.participant(q)
+            names.append(them.name)
+            whose = " It's your turn." if q == turn_pid else ""
+            self.beach._note(q, f"{me.name} would like you back at {g.title}, {zone} table {tid}.{whose}"
+                             f" GET /agent/turn?table={tid}",
+                             kind="event", data={"event": "table_nudge", "table": tid, "from": me.name,
+                                                 "game": g.title, "your_turn": q == turn_pid})
+            if them.invitable and not self.beach._visit(q, row["zone_id"]) and self.beach.sender:
+                try:
+                    self.beach.sender({"event": "table_nudge", "beach": self.beach.setting("beach_name"),
+                                       "zone": zone, "table": tid, "game": g.title, "from": me.name,
+                                       "invitee": them.name, "invitee_kind": them.kind,
+                                       "turn": f"/agent/turn?table={tid}"})
+                except Exception:   # a hook failure never breaks the Beach
+                    pass
+        self._line(row, f"{me.name} rang the table bell", by=me.id)
+        return {"nudged": names, "table": tid, "next_after": now + gap}
+
     def respond(self, pid: int, tid: int, answer: str) -> dict:
         """Answer an invite: "come" sits you down; "decline" tells only the inviter, kindly."""
         inv = self.db.one("SELECT * FROM table_invites WHERE table_id = ? AND invitee_id = ? AND status = 'open'"

@@ -317,6 +317,8 @@
     const offer = view.draw_offer
     const theirs = offer !== null && offer !== view.my_seat
     const row = el('div', { class: 'row' })
+    // The table bell (the keeper, 11-06): nudge the others back to this game, once per 15 minutes.
+    row.append(el('button', { class: 'quiet', type: 'button', text: 'Ring the table bell', title: 'Nudge the other players back to this table', onclick: nudge }))
     if (!view.draws) {
       const left = view.position.out && view.position.out.includes(view.my_seat)
       if (!left) {
@@ -342,6 +344,10 @@
   async function leaveTable () {
     try { await api('POST', '/tables/' + view.id + '/leave') } catch (e) { toast(e.message); return }
     location.href = '/boardwalk?zone=' + encodeURIComponent(zid)
+  }
+
+  async function nudge () {
+    try { const r = await api('POST', '/tables/' + view.id + '/nudge'); toast('Rang for ' + r.nudged.join(', ') + '.') } catch (e) { toast(e.message) }
   }
 
   async function act (what, body) {

@@ -22,6 +22,7 @@
     ['bell_wait_s', 'Gather Bell wait', 'min', 'How long a ring stays open.'],
     ['bell_ringer_cooldown_s', 'Bell: per ringer', 'min', 'Between one person\'s rings.'],
     ['bell_min_gap_s', 'Bell: beach-wide', 'min', 'Between any two rings.'],
+    ['table_nudge_s', 'Table bell', 'min', 'How often each player may nudge their table.'],
     ['bell_agent_seats', 'Bell: agents per ring', 'n', '0 = invite every agent. Otherwise this many agents per ring, taking turns, plus your regulars (set in an agent\'s details). People are always invited.'],
     ['idle_timeout_s', 'Idle time', 'min', 'Inactive this long in a zone and you leave it (you\'re told).'],
     ['table_invite_hold_s', 'Table: invited seat kept', 'min', 'An invited player\'s seat waits this long for their answer.'],
