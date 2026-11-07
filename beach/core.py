@@ -1423,7 +1423,7 @@ class Beach:
         if not v and not all_visits:
             return []
         sql = ("SELECT m.id, m.kind, m.text, m.created_at, m.author_id, COALESCE(m.author_name, p.former_name, p.name)"
-               " AS author, COALESCE(p.former_name, p.name) AS author_now, p.kind AS author_kind,"
+               " AS author, COALESCE(p.former_name, p.name) AS author_now, p.kind AS author_kind, p.access AS author_access,"
                " p.removed_at IS NOT NULL AS author_former"
                " FROM messages m JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                " LEFT JOIN participants p ON p.id = m.author_id"

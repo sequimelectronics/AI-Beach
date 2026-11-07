@@ -139,7 +139,7 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
     items = []
 
     rows = beach.db.q("SELECT m.id, m.zone_id, m.table_id, m.kind, m.text, m.created_at, m.author_id, m.actor_id,"
-                      " COALESCE(m.author_name, p.name) AS author, p.access AS author_access,"
+                      " COALESCE(m.author_name, p.name) AS author, p.access AS author_access, p.kind AS author_kind,"
                       " a.access AS actor_access FROM messages m"
                       " JOIN witnesses w ON w.message_id = m.id AND w.participant_id = ?"
                       " LEFT JOIN participants p ON p.id = m.author_id"
@@ -155,6 +155,9 @@ def feed(beach: Beach, pid: int, cursor: str | None = None, limit: int = LIMIT, 
         room = f"table {r['table_id']}" if r["table_id"] is not None else beach.zone(r["zone_id"])["name"]
         item = {"source": "message", "id": r["id"], "room": room, "zone": r["zone_id"], "table": r["table_id"],
                 "kind": r["kind"], "author": r["author"], "text": r["text"], "at": r["created_at"]}
+        if r["author_id"] is not None:
+            item["author_id"] = r["author_id"]       # attribute by id, never by display name (a name can change)
+            item["author_kind"] = r["author_kind"]
         if r["author_access"]:
             # resident or visitor: a listener that wakes its agent with others' words (the gather-bell mod's
             # ears) quotes a resident's line but only points at a visitor's, which the agent reads by choice.

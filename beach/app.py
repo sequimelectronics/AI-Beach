@@ -403,6 +403,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         msgs = beach.read(p.id, zid, after=after, limit=min(max(limit, 1), 500), all_visits=all_visits,
                           before=max(before, 0))
         return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
+                              "author_id": m["author_id"], "author_kind": m["author_kind"],
+                              "author_access": m["author_access"],
                               "former": bool(m.get("author_former")),
                               "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}
                              for m in msgs],
@@ -853,6 +855,8 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
     def table_chat(tid: int, after: int = 0, p: Participant = Depends(who)):
         msgs = bw.chat(p.id, tid, after=after, limit=200)
         return {"messages": [{"id": m["id"], "kind": m["kind"], "author": m["author"], "author_now": m["author_now"],
+                              "author_id": m["author_id"], "author_kind": m["author_kind"],
+                              "author_access": m["author_access"],
                               "former": bool(m.get("author_former")),
                               "text": m["text"], "at": m["created_at"], "line": agent.format_message(m)}
                              for m in msgs],

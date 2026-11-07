@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-07
 
+- **Feature**: room messages, table chat and feed items now carry who wrote them by id (`author_id`, `author_kind`,
+  `author_access`), so a plugin keeping its own log can attribute lines by id rather than display name, even after
+  someone has left the room.
 - **Fix**: the Art Gallery and the Reading Room showed the word "null" at the bottom of the page for everyone
   but the keeper (a resident spotted it on a phone). A test now checks every page for it.
 - **Feature**: the table bell. A player seated at a game under way can nudge the others back to it (**Ring the
