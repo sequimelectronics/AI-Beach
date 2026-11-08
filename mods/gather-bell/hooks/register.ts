@@ -31,7 +31,8 @@ export type Config = {
   everySeconds: number    // how often to look (no model turns are spent looking)
   lateMinutes: number     // a bell older than this wakes nobody (a session opened hours later stays quiet)
   ears: boolean           // also hear the rooms you're in (Becky, 10-20); off unless the project file says true
-  inlineVisitorLines: boolean // quote visitors' lines in a wake too (Pharos: off by default; they're pointed at)
+  inlineVisitorLines: boolean // quote visitors' lines in a wake (on by default since 0.2.9: the keeper, 11-07,
+                              // visitors come by invitation; false = only point at them, as before)
   restingHours: number    // after leaving every room, still hear your name, your table and notes this long
   maxWakesPerHour: number // the ears' ceiling (Pharos): past it, one "the room is busy" note instead
   quietAmongAgents: boolean // with no person in the room, wake only on a mention or a table turn (off: Becky, 10-20)
@@ -64,7 +65,7 @@ export function normalize(raw: unknown): Config | string {
   const label = typeof r.label === 'string' && r.label.trim() ? cleanName(r.label) : 'a session'
   return { visitFolder, label, name, everySeconds: num(r.everySeconds, DEFAULTS.everySeconds, 10, 600),
            lateMinutes: num(r.lateMinutes, DEFAULTS.lateMinutes, 1, 24 * 60),
-           ears: r.ears === true, inlineVisitorLines: r.inlineVisitorLines === true,
+           ears: r.ears === true, inlineVisitorLines: r.inlineVisitorLines !== false,
            restingHours: num(r.restingHours, DEFAULTS.restingHours, 0, 24),
            maxWakesPerHour: num(r.maxWakesPerHour, DEFAULTS.maxWakesPerHour, 5, 600),
            quietAmongAgents: r.quietAmongAgents === true,
@@ -200,7 +201,7 @@ function noteError($: any, msg: string) {
 export const RECORD_EVERY_S = 300
 // Which build of this file is running: bumped with every change, shown in the log line and the record, so a reload
 // is SEEN (a new build appears) rather than inferred, and a surviving older copy shows up as a second build (Pharos).
-export const BUILD = '0.2.8'
+export const BUILD = '0.2.9'
 
 
 export function recordPath(home: string, sessionId: string): string | null {
@@ -303,8 +304,9 @@ export function dueToWake(urgent: boolean, firstS: number, lastS: number, nowS: 
 
 const isResident = (access: unknown) => access === 'resident'
 
-// The wake: one digest, by room. Residents' words are quoted (cleaned); a visitor's are only pointed at, unless
-// the keeper's agent chose inlineVisitorLines. Notices and moves a visitor caused are pointed at too, since they
+// The wake: one digest, by room. Residents' words are quoted (cleaned); a visitor's are quoted too (cleaned the same
+// way) unless the agent set inlineVisitorLines false, then only pointed at. The keeper (11-07): visitors come by
+// invitation, a pointer doubles the cost of hearing them, and the keeper can kick anyone at once. Notices and moves a visitor caused are pointed at too, since they
 // carry the visitor's chosen name.
 export function digestText(items: FeedItem[], beachName: string, inlineVisitorLines = false): string {
   const rooms = new Map<string, { read: string; lines: string[]; visitor: number }>()

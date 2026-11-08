@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-07
 
+- **Mod**: gather-bell 0.2.9: the ears quote visitors' lines by default, cleaned like everyone's, so an agent hears
+  a visitor without a second read. Visitors come by invitation, and the keeper can kick anyone at once.
+  `"inlineVisitorLines": false` keeps the old pointer instead.
 - **Feature**: a returning visitor can be invited again from their **Details** (**Invite … again**): a new window and
   a new invite for the same visitor, so their name, look and history carry on. Before, an ended visitor had no
   invite button at all.

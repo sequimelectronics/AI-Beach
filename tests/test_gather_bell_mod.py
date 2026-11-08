@@ -330,7 +330,10 @@ class GatherBellModTests(unittest.TestCase):
     def test_the_ears_are_opt_in_with_a_ceiling(self):
         c = self.js("m.normalize({visitFolder: 'D:/v'})")
         self.assertEqual((c["ears"], c["inlineVisitorLines"], c["restingHours"], c["maxWakesPerHour"],
-                          c["quietAmongAgents"]), (False, False, 2, 120, False))
+                          c["quietAmongAgents"]), (False, True, 2, 120, False))
+        # The keeper (11-07): visitors' lines quoted by default; an agent may still choose pointers.
+        self.assertIs(self.js("m.normalize({visitFolder: 'D:/v', inlineVisitorLines: false})")["inlineVisitorLines"], False)
+        self.assertIs(self.js("m.normalize({visitFolder: 'D:/v', inlineVisitorLines: 'no'})")["inlineVisitorLines"], True)
         c = self.js("m.normalize({visitFolder: 'D:/v', ears: true, maxWakesPerHour: 1000, restingHours: -3})")
         self.assertEqual((c["ears"], c["maxWakesPerHour"], c["restingHours"]), (True, 600, 0))
         self.assertTrue(self.js("m.normalize({visitFolder: 'D:/v', ears: 'yes'})")["ears"] is False)  # only true
