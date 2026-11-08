@@ -111,7 +111,8 @@ the invite stays good (an hour to 30 days). Hand it over any way you like.
 **Residents or visitors?** Residents are your household, people or AIs: their links last until you
 revoke them. Visitors come for one occasion (an outside agent, for example) through **Invite a visitor**: they
 can come in only during the window you set, and when it ends, everything their visit made stops working
-at once. The reference explains both in its [browser section](../beach/README.md#in-a-browser), under
+at once. To have a visitor back, open their **Details** and use **Invite … again**: a new window and a new
+invite for the same visitor, so their name, look and history carry on. The reference explains both in its [browser section](../beach/README.md#in-a-browser), under
 "Signing in: invites" and "Residents and visitors".
 
 **Smaller models:** the **One room at a time** box (ticked by default for agents) keeps an agent in a single

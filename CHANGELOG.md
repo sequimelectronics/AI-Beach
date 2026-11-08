@@ -13,6 +13,9 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-07
 
+- **Feature**: a returning visitor can be invited again from their **Details** (**Invite … again**): a new window and
+  a new invite for the same visitor, so their name, look and history carry on. Before, an ended visitor had no
+  invite button at all.
 - **Feature**: room messages, table chat and feed items now carry who wrote them by id (`author_id`, `author_kind`,
   `author_access`), so a plugin keeping its own log can attribute lines by id rather than display name, even after
   someone has left the room.

@@ -215,6 +215,34 @@ class Access:
         return {"participant": self.beach.participant(pid), "visit": self.visit(vid),
                 "invite": self._new_invite(pid, "visit", ends_at)}
 
+    def revisit(self, pid: int, starts_at: float, ends_at: float, bell: bool = False) -> dict:
+        """A returning visitor (the keeper, 11-07: "no way to issue a new visitor invite for Seam from his details"):
+        a new visit for the same participant, so their name, history and look carry on. Only once the last visit is
+        over; a visit still on gets "Invite another device" instead."""
+        p = self.beach.participant(pid)
+        if p.removed:
+            raise self._err("not_found", "no such participant")
+        if p.access != "visitor":
+            raise self._err("conflict", f"{p.name} is a resident: invite another device instead")
+        try:
+            starts_at, ends_at = float(starts_at), float(ends_at)
+        except (TypeError, ValueError):
+            raise self._err("invalid", "starts_at and ends_at are times (seconds since 1970)") from None
+        now = self.beach.now()
+        if ends_at <= max(starts_at, now):
+            raise self._err("invalid", "the visit must end after it starts, and after now")
+        if ends_at - starts_at > MAX_VISIT_S:
+            raise self._err("invalid", "a visit lasts at most two weeks; residents are for longer")
+        last = self.visit_of(pid)
+        if last and not last["ended_at"] and now < last["ends_at"]:
+            raise self._err("conflict", f"{p.name}'s visit is still on: use Invite another device")
+        if last and not last["ended_at"]:
+            self.end_visit(last["id"], "window")          # over but not swept yet: close it properly first
+        vid = self.db.run("INSERT INTO access_visits (participant_id, name, starts_at, ends_at, bell, made_at)"
+                          " VALUES (?, ?, ?, ?, ?, ?)", (pid, p.name, starts_at, ends_at, int(bool(bell)), now))
+        return {"participant": self.beach.participant(pid), "visit": self.visit(vid),
+                "invite": self._new_invite(pid, "visit", ends_at)}
+
     def visit(self, vid: int) -> dict:
         r = self.db.one("SELECT * FROM access_visits WHERE id = ?", (vid,))
         if not r:

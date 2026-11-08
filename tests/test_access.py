@@ -142,6 +142,33 @@ class VisitorTests(AccessCase):
         self.clock.advance(-HOUR)
         self.assertEqual(self.http.get("/me", headers=self.h(tok)).status_code, 401)
 
+    def test_a_returning_visitor_is_invited_again_as_the_same_participant(self):
+        # The keeper, 11-07: no way to invite a returning visitor again from their details.
+        v = self.visitor("Kelp", end=2 * HOUR)
+        old = self.claim(v["invite"]["code"]).json()["token"]
+        now = self.clock()
+        early = self.http.post(f"/admin/participants/{v['id']}/visit", json={"starts_at": now, "ends_at": now + HOUR},
+                               headers=self.admin)
+        self.assertEqual(early.status_code, 409)                                  # still on: invite a device instead
+        self.clock.advance(2 * HOUR)
+        self.assertEqual(self.http.get("/me", headers=self.h(old)).status_code, 401)   # the old visit is over
+        now = self.clock()
+        r = self.http.post(f"/admin/participants/{v['id']}/visit", json={"starts_at": now, "ends_at": now + HOUR,
+                                                                          "bell": True}, headers=self.admin)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["id"], v["id"])                               # the same participant, same name
+        new = self.claim(r.json()["invite"]["code"])
+        self.assertEqual(new.status_code, 200)
+        me = self.http.get("/me", headers=self.h(new.json()["token"]))
+        self.assertEqual((me.status_code, me.json()["name"]), (200, "Kelp"))
+        self.assertEqual(self.http.get("/me", headers=self.h(old)).status_code, 401)   # the old link stays dead
+        self.assertTrue(self.beach.access.may_ring(v["id"]))                     # this visit's own bell choice
+        log = [x for x in self.http.get("/admin/visits", headers=self.admin).json()["visits"] if x["name"] == "Kelp"]
+        self.assertEqual(len(log), 2)                                              # both visits in the log
+        res = self.http.post("/admin/participants", json={"name": "Coral2", "kind": "person"}, headers=self.admin).json()
+        self.assertEqual(self.http.post(f"/admin/participants/{res['id']}/visit", json={"starts_at": now,
+                         "ends_at": now + HOUR}, headers=self.admin).status_code, 409)   # residents don't visit
+
     def test_end_visit_kills_every_credential_and_removes_the_character(self):
         v = self.visitor("Kelp")
         tok = self.claim(v["invite"]["code"]).json()["token"]

@@ -754,6 +754,8 @@ curl -X POST localhost:8765/admin/visits -H "$A" -H "$J" \
      -d '{"name":"Kelp","kind":"agent","starts_at":1792000000,"ends_at":1792010800}'
 curl localhost:8765/admin/visits -H "$A"                                 # the visit log
 curl -X POST localhost:8765/admin/visits/1/end -H "$A"                   # End visit, now
+curl -X POST localhost:8765/admin/participants/5/visit -H "$A" -H "$J" \
+     -d '{"starts_at":1792100000,"ends_at":1792110800}'                   # a returning visitor: a new visit
 curl -X POST localhost:8765/admin/participants/5/resident -H "$A"        # a visitor stays: Make resident
 # One participant in full; Kick now; Remove.
 curl localhost:8765/admin/participants/2 -H "$A"

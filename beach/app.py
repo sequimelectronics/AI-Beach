@@ -1026,6 +1026,12 @@ def create_app(beach: Beach, upkeep_interval: float | None = 2.0, serving: dict 
         """Every visit: who, when, which zones, how it ended."""
         return {"visits": beach.access.visits()}
 
+    @app.post("/admin/participants/{pid}/visit")
+    def revisit(pid: int, request: Request, body: dict = Body(...), _: Participant = Depends(admin)):
+        """Invite a returning visitor again: a new visit window for the same participant (the keeper, 11-07)."""
+        r = beach.access.revisit(pid, body.get("starts_at", beach.now()), body.get("ends_at"), bool(body.get("bell")))
+        return invite_out(request, r["participant"], r["invite"], visit=r["visit"])
+
     @app.post("/admin/visits/{vid}/end")
     def end_visit(vid: int, _: Participant = Depends(admin)):
         return beach.access.end_visit(vid, "keeper")

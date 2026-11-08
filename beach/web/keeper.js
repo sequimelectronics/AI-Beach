@@ -250,6 +250,9 @@
             } catch (e) { toast(e.message) }
           }
         }, el('label', { for: 'link-label' }, 'Invite another device (or re-send)', label), el('button', { class: 'primary', type: 'submit', text: 'Make invite' })),
+        // A returning visitor (the keeper, 11-07): a new visit for the same person, once the last one is over.
+        (d.access === 'visitor' && !d.removed && d.visit && (d.visit.ended_at || Date.now() / 1000 >= d.visit.ends_at) &&
+          d.visit.end_reason !== 'resident') ? revisitForm(pid, d, out) : null,
         el('div', { class: 'row' }, actions)))
       out.scrollIntoView({ block: 'nearest' })
     }
@@ -338,6 +341,30 @@
     const d = new Date(t * 1000)
     const v = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
     return el('input', { type: 'datetime-local', id, value: v, required: true })
+  }
+
+  // Invite a returning visitor again: a new window, the same name and history.
+  function revisitForm (pid, d, out) {
+    const now = Date.now() / 1000
+    const start = localInput('revisit-start', now)
+    const end = localInput('revisit-end', now + 3 * 3600)
+    const bell = el('input', { type: 'checkbox', id: 'revisit-bell', checked: !!(d.visit && d.visit.bell) })
+    return el('form', {
+      class: 'inline-form visitor-form',
+      onsubmit: async (ev) => {
+        ev.preventDefault()
+        try {
+          const r = await api('POST', '/admin/participants/' + pid + '/visit', {
+            bell: bell.checked, starts_at: new Date(start.value).getTime() / 1000, ends_at: new Date(end.value).getTime() / 1000
+          })
+          out.replaceChildren(invitePanel(r))
+          renderVisits()
+        } catch (e) { toast(e.message) }
+      }
+    }, el('strong', { text: 'Invite ' + d.name + ' again: ' }),
+    el('label', { for: 'revisit-start' }, 'from ', start), el('label', { for: 'revisit-end' }, ' until ', end),
+    el('label', { for: 'revisit-bell', class: 'check' }, bell, ' may ring the Gather Bell'),
+    el('button', { class: 'primary', type: 'submit', text: 'Make the invite' }))
   }
 
   // A visitor invite: a name, a window, and whether they may ring the Gather Bell.
