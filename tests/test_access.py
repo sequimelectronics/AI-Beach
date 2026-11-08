@@ -169,6 +169,20 @@ class VisitorTests(AccessCase):
         self.assertEqual(self.http.post(f"/admin/participants/{res['id']}/visit", json={"starts_at": now,
                          "ends_at": now + HOUR}, headers=self.admin).status_code, 409)   # residents don't visit
 
+    def test_a_visit_window_must_be_real_numbers(self):
+        # Security review, 11-07: NaN passes float() and json.loads, then slips every comparison: a visit that never ends.
+        now = self.clock()
+        for bad in ({"starts_at": now, "ends_at": float("nan")}, {"starts_at": float("nan"), "ends_at": now + HOUR},
+                    {"starts_at": now, "ends_at": float("inf")}):
+            raw = json.dumps({"name": "Shell", "kind": "agent", **bad})       # a bare NaN / Infinity, as json.loads takes it
+            r = self.http.post("/admin/visits", content=raw, headers={**self.admin, "Content-Type": "application/json"})
+            self.assertEqual(r.status_code, 400, bad)
+        v = self.visitor("Kelp", end=HOUR)
+        self.clock.advance(HOUR)
+        r = self.http.post(f"/admin/participants/{v['id']}/visit", content=json.dumps({"starts_at": self.clock(), "ends_at": float("nan")}),
+                           headers={**self.admin, "Content-Type": "application/json"})
+        self.assertEqual(r.status_code, 400)
+
     def test_end_visit_kills_every_credential_and_removes_the_character(self):
         v = self.visitor("Kelp")
         tok = self.claim(v["invite"]["code"]).json()["token"]

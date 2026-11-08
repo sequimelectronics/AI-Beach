@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import secrets
 from typing import TYPE_CHECKING
 
@@ -194,19 +195,27 @@ class Access:
             raise BeachError("invalid", f"{what} is between a minute and {int(cap // 86400)} days")
         return v
 
-    def invite_visitor(self, name: str, kind: str, starts_at: float, ends_at: float, bell: bool = False) -> dict:
-        """A visitor and their visit: a one-time code that works only inside [starts_at, ends_at)."""
-        if kind not in ("person", "agent"):
-            raise self._err("invalid", "kind must be 'person' or 'agent'")
+    def _window(self, starts_at, ends_at) -> tuple[float, float]:
+        """A visit's window, checked once for every route that makes one. Finite numbers only (security review, 11-07:
+        NaN passes float() and json.loads, then slips every comparison, so a visit could never end)."""
         try:
             starts_at, ends_at = float(starts_at), float(ends_at)
         except (TypeError, ValueError):
             raise self._err("invalid", "starts_at and ends_at are times (seconds since 1970)") from None
-        now = self.beach.now()
-        if ends_at <= max(starts_at, now):
+        if not (math.isfinite(starts_at) and math.isfinite(ends_at)):
+            raise self._err("invalid", "starts_at and ends_at are times (seconds since 1970)")
+        if ends_at <= max(starts_at, self.beach.now()):
             raise self._err("invalid", "the visit must end after it starts, and after now")
         if ends_at - starts_at > MAX_VISIT_S:
             raise self._err("invalid", "a visit lasts at most two weeks; residents are for longer")
+        return starts_at, ends_at
+
+    def invite_visitor(self, name: str, kind: str, starts_at: float, ends_at: float, bell: bool = False) -> dict:
+        """A visitor and their visit: a one-time code that works only inside [starts_at, ends_at)."""
+        if kind not in ("person", "agent"):
+            raise self._err("invalid", "kind must be 'person' or 'agent'")
+        starts_at, ends_at = self._window(starts_at, ends_at)
+        now = self.beach.now()
         name = self.check_new_name(name)
         pid = self.db.run("INSERT INTO participants (name, kind, is_admin, invitable, created_at, access)"
                           " VALUES (?, ?, 0, 0, ?, 'visitor')", (name, kind, now))
@@ -224,15 +233,8 @@ class Access:
             raise self._err("not_found", "no such participant")
         if p.access != "visitor":
             raise self._err("conflict", f"{p.name} is a resident: invite another device instead")
-        try:
-            starts_at, ends_at = float(starts_at), float(ends_at)
-        except (TypeError, ValueError):
-            raise self._err("invalid", "starts_at and ends_at are times (seconds since 1970)") from None
+        starts_at, ends_at = self._window(starts_at, ends_at)
         now = self.beach.now()
-        if ends_at <= max(starts_at, now):
-            raise self._err("invalid", "the visit must end after it starts, and after now")
-        if ends_at - starts_at > MAX_VISIT_S:
-            raise self._err("invalid", "a visit lasts at most two weeks; residents are for longer")
         last = self.visit_of(pid)
         if last and not last["ended_at"] and now < last["ends_at"]:
             raise self._err("conflict", f"{p.name}'s visit is still on: use Invite another device")
