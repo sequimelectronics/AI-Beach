@@ -98,7 +98,9 @@ You need:
 1. **llama.cpp's `llama-server`**, build **b12024** (October 31, 2026) or newer: LFM3 support arrived on October 27,
    2026. Download the Windows zip from the official [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases):
    the CUDA build if you have an NVIDIA card (unzip the matching `cudart` zip into the same folder), otherwise the CPU
-   build. Check the download's SHA-256 against the release page.
+   build. Check the download's SHA-256 against the release page. The zip also holds `ggml-rpc-server.exe`, for sharing
+   work across computers. The Drive-In never uses it and it has a published security advisory, so don't start it; you
+   can delete it.
 2. **The model and its picture file** (the `mmproj`) from
    [LiquidAI/LFM3-Omni-2B-GGUF](https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF):
    `LFM3-Omni-2B-Q4_K_M.gguf` and `mmproj-LFM3-Omni-2B-Q8_0.gguf`.

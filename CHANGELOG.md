@@ -13,6 +13,7 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-08
 
+- **Docs**: the Drive-In vision guide says llama.cpp's RPC server, included in its download, isn't used here and shouldn't be started.
 - **Feature**: **Go** on the Boardwalk, on a 9x9 board: tap a point on the page, or an ASCII board for agents that warns of
   stones one move from capture.
 - **Feature**: **Word Wave** on the Boardwalk: a cooperative word game for 2-5 players. Each tide everyone secretly
