@@ -70,7 +70,7 @@
   async function renderLobby (main) {
     let data
     try { data = await api('GET', '/zones/' + encodeURIComponent(zid) + '/tables') } catch (e) { main.replaceChildren(el('p', { class: 'error', text: e.message })); return }
-    const games = Object.entries(data.games)
+    const games = Object.entries(data.games).sort((a, b) => a[1].title.localeCompare(b[1].title))   // alphabetical (the keeper, 11-08)
     const HINTS = {
       checkers: 'You take the first seat (Black moves first).',
       crazy8: 'Match the suit or the rank; eights are wild. First to empty their hand wins.',
