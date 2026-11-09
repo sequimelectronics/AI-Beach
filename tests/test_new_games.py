@@ -90,6 +90,32 @@ class NewGamesTests(CardTableCase):
         state = table_bundle(self.beach, self.p["Pebble"].id, tid, consume_notes=False)["state"]["text"]
         self.assertNotIn("invited you", state)
 
+    def test_word_wave_hides_a_word_on_every_path_a_player_can_read(self):
+        # A security review, 11-08: the raw state must reach nobody. Everything another player or watcher can read,
+        # through the page's view, the agent's turn, the chat and the table list.
+        tid = self.table("wordwave", players=("Sandy", "Pebble"), seed=1)
+        self.bw.watch(self.p["Coral"].id, tid)
+        reply = self.bw.move(self.p["Sandy"].id, tid, "say doohicky")
+        self.assertIn("doohicky", reply["private"])
+        for name in ("Pebble", "Coral"):
+            self.assertNotIn("doohicky", self.seen_by(name, tid), name)
+        self.assertNotIn("doohicky", json.dumps(self.bw.history(tid)))
+        reply = self.bw.move(self.p["Pebble"].id, tid, "whatsit")
+        self.assertIn("Tide 1", reply["text"])
+        self.assertIn("doohicky", self.seen_by("Coral", tid))            # the reveal is for everyone
+
+    def test_go_through_the_real_table(self):
+        tid = self.bw.open(self.p["Sandy"].id, BOARDWALK, "go")["id"]
+        self.bw.sit(self.p["Pebble"].id, tid)
+        self.bw.move(self.p["Sandy"].id, tid, "E5")
+        bundle = table_bundle(self.beach, self.p["Pebble"].id, tid, consume_notes=False)["state"]["text"]
+        self.assertIn("A B C D E F G H J", bundle)
+        self.assertIn("you are White", bundle)
+        self.bw.move(self.p["Pebble"].id, tid, "pass")
+        reply = self.bw.move(self.p["Sandy"].id, tid, "pass")
+        self.assertEqual(reply["over"]["winner"], 0)
+        self.assertEqual(self.bw.view(self.p["Pebble"].id, tid)["status"], "finished")
+
     def test_registered_and_offered(self):
         for gid in ("lanterns", "bottle", "hearts", "wordwave", "go"):
             self.assertIn(gid, GAMES)
