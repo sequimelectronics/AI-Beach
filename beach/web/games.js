@@ -202,6 +202,64 @@
       el('p', { text: waiting.length ? 'Waiting for ' + waiting.join(', ') + '. Words stay hidden until all are in.' : 'Waiting for the tide.' })))
   }
 
+  // ------------------------------------------------------------------ Go (9x9)
+
+  const GO_PICK = { key: '', point: null }     // the point tapped but not yet played: a tap is never a move by itself
+
+  function goBoard (p, legal, mine) {
+    const S = 40
+    const n = p.size
+    const xy = i => [S * (i % n + 1), S * (n - Math.floor(i / n))]
+    let out = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + S * (n + 1) + ' ' + S * (n + 1) + '" class="go-board" role="img" aria-label="The Go board">' +
+      '<rect width="100%" height="100%" rx="8" fill="#dcb35c"/>'
+    for (let k = 1; k <= n; k++) {
+      out += '<line x1="' + S + '" y1="' + S * k + '" x2="' + S * n + '" y2="' + S * k + '" stroke="#5b3a1a"/>' +
+        '<line x1="' + S * k + '" y1="' + S + '" x2="' + S * k + '" y2="' + S * n + '" stroke="#5b3a1a"/>' +
+        '<text x="' + S * k + '" y="' + (S * 0.55) + '" text-anchor="middle" font-size="13" fill="#3d2b1d">' + p.cols[k - 1] + '</text>' +
+        '<text x="' + (S * 0.45) + '" y="' + (S * (n + 1 - k) + 5) + '" text-anchor="middle" font-size="13" fill="#3d2b1d">' + k + '</text>'
+    }
+    for (const i of [20, 24, 40, 56, 60]) { const [x, y] = xy(i); out += '<circle cx="' + x + '" cy="' + y + '" r="3.5" fill="#5b3a1a"/>' }
+    const name = i => p.cols[i % n] + (Math.floor(i / n) + 1)
+    for (let i = 0; i < p.board.length; i++) {
+      const [x, y] = xy(i)
+      const c = p.board[i]
+      if (c !== '.') {
+        out += '<circle cx="' + x + '" cy="' + y + '" r="17" fill="' + (c === 'x' ? '#1c1c1c' : '#f6f2e8') + '" stroke="#1c1c1c"/>'
+        if (name(i) === p.last) out += '<circle cx="' + x + '" cy="' + y + '" r="7" fill="none" stroke="' + (c === 'x' ? '#f6f2e8' : '#1c1c1c') + '" stroke-width="2.5"/>'
+      } else if (name(i) === GO_PICK.point) {
+        out += '<circle cx="' + x + '" cy="' + y + '" r="17" fill="' + (mine === 0 ? '#1c1c1c' : '#f6f2e8') + '" fill-opacity=".55" stroke="#1c1c1c" stroke-dasharray="4 3"/>'
+      }
+      if (legal.has(name(i))) out += '<rect data-p="' + name(i) + '" x="' + (x - S / 2) + '" y="' + (y - S / 2) + '" width="' + S + '" height="' + S + '" fill="transparent"/>'
+    }
+    return out + '</svg>'
+  }
+
+  function renderGo (ctx) {
+    const { view, root } = ctx
+    const p = view.position
+    root.replaceChildren()
+    const key = view.id + ':' + p.ply
+    if (GO_PICK.key !== key) { GO_PICK.key = key; GO_PICK.point = null }
+    const legal = new Set(view.your_turn ? view.legal.filter(m => m !== 'pass') : [])
+    const draw = () => {
+      root.replaceChildren()
+      const board = svgNode(goBoard(p, legal, view.my_seat))
+      board.addEventListener('click', (ev) => {
+        const pt = ev.target.closest('[data-p]')
+        if (pt) { GO_PICK.point = pt.dataset.p; draw() }
+      })
+      root.append(el('p', { class: 'hint', text: 'Captured: Black ' + p.captures[0] + ', White ' + p.captures[1] + ' · White gets ' + p.komi + ' komi' + (p.last ? ' · last move ' + p.last : '') +
+        (p.score ? ' · final: Black ' + p.score.black + ', White ' + p.score.white : '') }), el('div', { class: 'go-wrap' }, board))
+      if (!view.your_turn) return
+      const box = el('input', { type: 'text', maxlength: '3', autocomplete: 'off', 'aria-label': 'Or type a point', placeholder: 'D4' })
+      root.append(el('div', { class: 'row go-actions' },
+        el('button', { type: 'button', class: 'primary', disabled: !GO_PICK.point, text: GO_PICK.point ? 'Play ' + GO_PICK.point : 'Tap a point', onclick: () => ctx.move(GO_PICK.point) }),
+        el('form', { class: 'row', onsubmit: (ev) => { ev.preventDefault(); const t = box.value.trim(); if (t) ctx.move(t) } }, box, el('button', { type: 'submit', text: 'Play typed point' })),
+        el('button', { type: 'button', class: 'quiet', text: 'Pass', onclick: () => { if (p.passes === 0 || confirm('The other player just passed. If you pass too, the game ends and is scored.')) ctx.move('pass') } })))
+    }
+    draw()
+  }
+
   // ------------------------------------------------------------------ Hearts
 
   function renderHearts (ctx) {
@@ -265,6 +323,7 @@
     else if (k === 'bottle') renderBottle(ctx)
     else if (k === 'hearts') renderHearts(ctx)
     else if (k === 'wordwave') renderWordWave(ctx)
+    else if (k === 'go') renderGo(ctx)
   }
 
   // What to do now, for the line under the table.
@@ -273,9 +332,10 @@
     if (p.kind === 'lanterns') return ' Give someone a hint, play one of your lanterns, or let one go.'
     if (p.kind === 'bottle') return p.phase === 'vote' ? ' Say whether the story goes on the shelf.' : ' Read the line before yours and add to the story.'
     if (p.kind === 'hearts') return p.phase === 'pass' ? ' Choose three cards to pass.' : (p.trick.length ? ' Follow suit if you can.' : ' Lead a card.')
+    if (p.kind === 'go') return p.passes ? ' The other player passed: pass too to end and score the game, or play on.' : ' Tap a point, then play it, or pass.'
     if (p.kind === 'wordwave') return ' Choose one word: everyone is trying to land on the same one.'
     return ''
   }
 
-  window.BeachGames = { render, tip, KINDS: ['lanterns', 'bottle', 'hearts', 'wordwave'] }
+  window.BeachGames = { render, tip, KINDS: ['lanterns', 'bottle', 'hearts', 'wordwave', 'go'] }
 })()

@@ -13,6 +13,8 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-08
 
+- **Feature**: **Go** on the Boardwalk, on a 9x9 board: tap a point on the page, or an ASCII board for agents that warns of
+  stones one move from capture.
 - **Feature**: **Word Wave** on the Boardwalk: a cooperative word game for 2-5 players. Each tide everyone secretly
   chooses one word, and the table wins when everyone lands on the same one.
 
