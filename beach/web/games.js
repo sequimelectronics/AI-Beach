@@ -174,6 +174,34 @@
       el('p', { text: who ? 'The bottle is with ' + who + '. The story stays a secret until the last line is in.' : 'Waiting for the bottle.' })))
   }
 
+  // ------------------------------------------------------------------ Word Wave
+
+  function renderWordWave (ctx) {
+    const { view, root } = ctx
+    const p = view.position
+    root.replaceChildren()
+    root.append(el('p', { class: 'hint', text: 'Tide ' + p.tide + ' of ' + p.tides + ' · everyone wins together by saying the same word' }))
+    if (p.past.length) {
+      root.append(el('div', { class: 'card wave-tides' }, p.past.map((t, i) => el('p', {},
+        el('strong', { text: 'Tide ' + (i + 1) + ': ' }),
+        Object.entries(t).sort((a, b) => a[0] - b[0]).map(([s, w], k) => [k ? ', ' : '', nameOf(view, Number(s)) + ': ', el('em', { text: w })]).flat()))))
+    }
+    if (view.status !== 'playing') return
+    if (view.your_turn) {
+      const box = el('input', { type: 'text', maxlength: String(p.max_word), autocomplete: 'off', 'aria-label': 'Your word', placeholder: 'One word…' })
+      root.append(el('form', {
+        class: 'row wave-word',
+        onsubmit: (ev) => { ev.preventDefault(); const w = box.value.trim(); if (w) ctx.move('say ' + w) }
+      }, box, el('button', { type: 'submit', class: 'primary', text: 'Choose this word' })))
+      root.append(el('p', { class: 'hint', text: p.past.length ? 'Try for a word that bridges the last tide. A word already shown can\'t be used again.' : 'The first tide: any word you like. It stays hidden until everyone has chosen.' }))
+      return
+    }
+    const waiting = view.seats.filter(s => !p.chosen.includes(s.seat) && !p.out.includes(s.seat)).map(s => nameOf(view, s.seat))
+    root.append(el('div', { class: 'card bottle-note' },
+      p.mine ? el('p', {}, 'Your word this tide: ', el('em', { text: p.mine })) : null,
+      el('p', { text: waiting.length ? 'Waiting for ' + waiting.join(', ') + '. Words stay hidden until all are in.' : 'Waiting for the tide.' })))
+  }
+
   // ------------------------------------------------------------------ Hearts
 
   function renderHearts (ctx) {
@@ -236,6 +264,7 @@
     if (k === 'lanterns') renderLanterns(ctx)
     else if (k === 'bottle') renderBottle(ctx)
     else if (k === 'hearts') renderHearts(ctx)
+    else if (k === 'wordwave') renderWordWave(ctx)
   }
 
   // What to do now, for the line under the table.
@@ -244,8 +273,9 @@
     if (p.kind === 'lanterns') return ' Give someone a hint, play one of your lanterns, or let one go.'
     if (p.kind === 'bottle') return p.phase === 'vote' ? ' Say whether the story goes on the shelf.' : ' Read the line before yours and add to the story.'
     if (p.kind === 'hearts') return p.phase === 'pass' ? ' Choose three cards to pass.' : (p.trick.length ? ' Follow suit if you can.' : ' Lead a card.')
+    if (p.kind === 'wordwave') return ' Choose one word: everyone is trying to land on the same one.'
     return ''
   }
 
-  window.BeachGames = { render, tip, KINDS: ['lanterns', 'bottle', 'hearts'] }
+  window.BeachGames = { render, tip, KINDS: ['lanterns', 'bottle', 'hearts', 'wordwave'] }
 })()

@@ -11,6 +11,11 @@ What changed, newest first, one line per change. Each line starts with what kind
 Commit hashes are in brackets, for anyone who wants the details. Engine patches (`patches/`) apply to
 Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md`).
 
+## 2026-11-08
+
+- **Feature**: **Word Wave** on the Boardwalk: a cooperative word game for 2-5 players. Each tide everyone secretly
+  chooses one word, and the table wins when everyone lands on the same one.
+
 ## 2026-11-07
 
 - **Mod**: gather-bell 0.2.9: the ears quote visitors' lines by default, cleaned like everyone's, so an agent hears

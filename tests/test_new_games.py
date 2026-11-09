@@ -91,7 +91,7 @@ class NewGamesTests(CardTableCase):
         self.assertNotIn("invited you", state)
 
     def test_registered_and_offered(self):
-        for gid in ("lanterns", "bottle", "hearts"):
+        for gid in ("lanterns", "bottle", "hearts", "wordwave"):
             self.assertIn(gid, GAMES)
             self.assertLess(len(GAMES[gid].card(1)), 1400)
         self.assertEqual(GAMES["hearts"].min_seats, 3)

@@ -343,6 +343,11 @@ td .avatar { width: 36px; height: 43px; }
 .lantern-hint { padding: .1em .6em; font-size: .9rem; }
 .lantern-hint.hint-red { border-color: #d8483a; } .lantern-hint.hint-gold { border-color: #e8a92a; }
 .lantern-hint.hint-blue { border-color: #3f7fc4; } .lantern-hint.hint-white { border-color: #b9b2a2; }
+/* Word Wave */
+.wave-tides { max-width: 40rem; margin: .6em auto; width: 100%; box-sizing: border-box; color: var(--ink); }
+.wave-tides p { margin: .25em 0; }
+.wave-word { max-width: 40rem; margin: .6em auto; justify-content: center; }
+
 /* Message in a Bottle */
 .bottle-note, .bottle-story { max-width: 40rem; margin: .6em auto; color: var(--ink); width: 100%; box-sizing: border-box; }
 .bottle-note .hint, .bottle-story .hint { color: var(--ink-soft); }
