@@ -13,6 +13,7 @@ Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md
 
 ## 2026-11-09
 
+- **Fix**: Solitaire no longer fails with a server error on the first move after choosing a different variant.
 - **Feature**: **Solitaire** on the Boardwalk, a table for one: Klondike (draw one or three) or FreeCell, chosen when you
   sit down. Its cards have a new back: the north star over a lighthouse at night.
 

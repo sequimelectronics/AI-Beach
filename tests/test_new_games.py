@@ -120,7 +120,14 @@ class NewGamesTests(CardTableCase):
         tid = self.bw.open(self.p["Sandy"].id, BOARDWALK, "solitaire")["id"]
         v = self.bw.view(self.p["Sandy"].id, tid)
         self.assertEqual((v["status"], v["your_turn"]), ("playing", True))   # it starts the moment you sit
-        self.bw.move(self.p["Sandy"].id, tid, "variant freecell")
+        self.bw.move(self.p["Sandy"].id, tid, "variant klondike3")
+        self.bw.move(self.p["Sandy"].id, tid, "draw")               # the keeper, 11-09: this was a server error
+        self.assertFalse(self.bw.view(self.p["Sandy"].id, tid)["position"]["can_change"])
+        self.assertEqual(len(self.bw.view(self.p["Sandy"].id, tid)["position"]["waste"]), 3)
+        tid = self.bw.open(self.p["Sandy"].id, BOARDWALK, "solitaire")["id"]
+        self.bw.move(self.p["Sandy"].id, tid, "variant klondike3")
+        self.bw.move(self.p["Sandy"].id, tid, "variant freecell")   # switching twice is fine too
+        self.bw.move(self.p["Sandy"].id, tid, self.bw.view(self.p["Sandy"].id, tid)["legal"][-1])
         self.bw.resign(self.p["Sandy"].id, tid)
         self.assertEqual(self.bw.view(self.p["Sandy"].id, tid)["status"], "finished")
         again = self.bw.rematch(self.p["Sandy"].id, tid)

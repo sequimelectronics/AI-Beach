@@ -62,7 +62,7 @@ class Solitaire(TableGame):
             stock = cards[k:]
         return {"variant": variant, "seed": seed, "tab": tab, "stock": stock, "waste": [],
                 "found": {s: 0 for s in SUITS}, "cells": [None] * 4 if variant == "freecell" else [],
-                "ply": 0, "over": None}
+                "ply": 0, "played": 0, "over": None}
 
     def to_move(self, state: dict) -> int | None:
         return None if state.get("over") else 0
@@ -74,6 +74,10 @@ class Solitaire(TableGame):
         return {"variant": state["variant"]}
 
     # ------------------------------------------------------------- rules
+
+    def _fresh(self, s: dict) -> bool:
+        """No move played in this deal yet (the variant can still change)."""
+        return s.get("played", s["ply"]) == 0
 
     def _home(self, s: dict) -> int:
         return sum(s["found"].values())
@@ -121,7 +125,7 @@ class Solitaire(TableGame):
         if s.get("over"):
             return []
         out = []
-        if s["ply"] == 0:
+        if self._fresh(s):
             out += [f"variant {v}" for v in VARIANTS if v != s["variant"]]
         if s["variant"] != "freecell":
             if s["stock"] or s["waste"]:
@@ -171,16 +175,20 @@ class Solitaire(TableGame):
         if m.startswith("variant"):
             v = m.split(" ", 1)[1].strip() if " " in m else ""
             v = {"draw one": "klondike", "draw three": "klondike3", "klondike1": "klondike"}.get(v, v)
-            if state["ply"]:
+            if not self._fresh(state):
                 raise IllegalMove("the variant is chosen before the first move; start a new game to change it")
             if v not in VARIANTS:
                 raise IllegalMove("the variants are: " + ", ".join(VARIANTS))
             s = self._deal(v, state["seed"] + 1)
+            # The table's move count keeps climbing (each move is numbered, and a fresh deal must not reuse those
+            # numbers: the keeper hit a server error on the first move after a switch, 11-09); "played" counts this deal.
+            s["ply"] = state["ply"] + 1
             return s, {"move": f"variant {v}", "seat": 0, "text": f"A fresh deal of {VARIANTS[v]}"}
         if m not in legal:
             raise IllegalMove(f'"{move}" isn\'t a legal move right now')
         s = json.loads(json.dumps(state))
         s["ply"] += 1
+        s["played"] = s.get("played", 0) + 1
         text = ""
         src, dst = (m.split(">") + [""])[:2] if ">" in m else (m, "")
         if m == "draw":
@@ -247,7 +255,7 @@ class Solitaire(TableGame):
         lines.append("Columns, left to right (## is face down; the LAST card of each column is the one on top):")
         for i, col in enumerate(s["tab"]):
             lines.append(f"{i + 1}: " + (" ".join(x["c"] if x["up"] else "##" for x in col) or "(empty)"))
-        if s["ply"] == 0:
+        if self._fresh(s):
             lines.append("Before your first move you may switch variant: " + ", ".join(f"variant {v}" for v in VARIANTS))
         return "\n".join(lines)
 
@@ -257,7 +265,7 @@ class Solitaire(TableGame):
                 "tab": [[x["c"] if x["up"] else None for x in col] for col in s["tab"]],
                 "stock": len(s["stock"]), "waste": s["waste"][-3:] if s["variant"] == "klondike3" else s["waste"][-1:],
                 "waste_n": len(s["waste"]), "found": {x: (RANKS[n - 1] + x if n else None) for x, n in s["found"].items()},
-                "cells": s["cells"], "home": self._home(s), "can_change": s["ply"] == 0 and not s.get("over"), "out": []}
+                "cells": s["cells"], "home": self._home(s), "can_change": self._fresh(s) and not s.get("over"), "out": []}
 
     def card(self, table_id: int) -> str:
         t = f"/tables/{table_id}"
