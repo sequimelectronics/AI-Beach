@@ -127,6 +127,19 @@ class NewGamesTests(CardTableCase):
         new = again.get("id") or again["table"]["id"]
         self.assertEqual(self.bw.view(self.p["Sandy"].id, new)["position"]["variant"], "freecell")
 
+    def test_solitaire_hides_face_down_cards_and_the_seed_on_every_read_path(self):
+        # A security review, 11-09: the seed fixes the whole deal (a variant switch redeals from it), so it must stay
+        # in the state, with the face-down cards and the stock's order.
+        seed = 987_654_321_123
+        tid = self.bw.open(self.p["Sandy"].id, BOARDWALK, "solitaire", options={"seed": seed})["id"]
+        self.bw.watch(self.p["Coral"].id, tid)
+        raw = self.raw(tid)
+        hidden = [raw["tab"][6][0]["c"], raw["stock"][0]]
+        for name in ("Sandy", "Coral"):
+            seen = self.seen_by(name, tid) + json.dumps(self.bw.history(tid))
+            for secret in hidden + [str(seed)]:
+                self.assertNotIn(secret, seen, (name, secret))
+
     def test_registered_and_offered(self):
         for gid in ("lanterns", "bottle", "hearts", "wordwave", "go", "solitaire"):
             self.assertIn(gid, GAMES)
