@@ -202,6 +202,64 @@
       el('p', { text: waiting.length ? 'Waiting for ' + waiting.join(', ') + '. Words stay hidden until all are in.' : 'Waiting for the tide.' })))
   }
 
+  // ------------------------------------------------------------------ Solitaire
+
+  const SOL = { key: '', from: null }      // the pile tapped first; the second tap says where it goes
+
+  function renderSolitaire (ctx) {
+    const { view, root } = ctx
+    const p = view.position
+    const C = window.BeachCards
+    const key = view.id + ':' + p.ply
+    if (SOL.key !== key) { SOL.key = key; SOL.from = null }
+    const mine = view.your_turn
+    const legal = new Set(mine ? view.legal : [])
+    const fc = p.variant === 'freecell'
+    const draw = () => {
+      root.replaceChildren()
+      const go = (m) => { if (legal.has(m)) { SOL.from = null; ctx.move(m); return true } return false }
+      const tapSource = (src) => { if (!mine) return; SOL.from = SOL.from === src ? null : src; draw() }
+      const tapTarget = (dst, src) => {
+        if (!mine) return
+        if (SOL.from && SOL.from !== src && go(SOL.from + '>' + dst)) return
+        if (src) tapSource(src); else { SOL.from = null; draw() }
+      }
+      const sel = (src) => SOL.from === src ? ' sel' : ''
+      const head = el('p', { class: 'hint', text: p.variants[p.variant] + ' · ' + p.home + ' of 52 cards home' })
+      if (p.can_change && mine) {
+        const pick = el('select', { 'aria-label': 'Variant', onchange: () => ctx.move('variant ' + pick.value) },
+          Object.entries(p.variants).map(([k, name]) => el('option', { value: k, text: name })))
+        pick.value = p.variant
+        head.append(' · ', el('label', {}, 'Variant ', pick))
+      }
+      root.append(head)
+      const top = el('div', { class: 'sol-top' })
+      if (fc) {
+        top.append(el('div', { class: 'sol-group' }, p.cells.map((c, i) => c
+          ? C.cardNode(c, { class: 'pcard' + sel('c' + (i + 1)), title: 'Free cell ' + (i + 1), onclick: () => tapSource('c' + (i + 1)), ondblclick: () => go('c' + (i + 1) + '>f') })
+          : el('span', { class: 'sol-slot', title: 'Free cell ' + (i + 1), text: 'cell', onclick: () => tapTarget('c') }))))
+      } else {
+        const stock = p.stock ? C.backNode({ class: 'pcard back sol-stock', title: 'Draw from the stock', onclick: () => go('draw') }, 'night')
+          : el('span', { class: 'sol-slot', title: 'Turn the waste back over', text: p.waste_n ? '\u21bb' : '', onclick: () => go('draw') })
+        const waste = el('div', { class: 'sol-waste' }, p.waste.map((c, i) => i === p.waste.length - 1
+          ? C.cardNode(c, { class: 'pcard' + sel('w'), onclick: () => tapSource('w'), ondblclick: () => go('w>f') })
+          : C.cardNode(c)))
+        top.append(el('div', { class: 'sol-group' }, stock, waste))
+      }
+      top.append(el('div', { class: 'sol-group', title: 'Foundations: ace to king by suit' }, ['S', 'H', 'D', 'C'].map(s => p.found[s]
+        ? C.cardNode(p.found[s], { onclick: () => tapTarget('f') })
+        : el('span', { class: 'sol-slot', text: ({ S: '♠', H: '♥', D: '♦', C: '♣' })[s], onclick: () => tapTarget('f') }))))
+      root.append(top)
+      root.append(el('div', { class: 'sol-tab ' + (fc ? 'cols8' : 'cols7') }, p.tab.map((col, i) => {
+        const n = String(i + 1)
+        return el('div', { class: 'sol-col' + sel(n), onclick: () => tapTarget(n, col.some(c => c) ? n : null), ondblclick: () => go(n + '>f') },
+          col.length ? col.map(c => c ? C.cardNode(c) : C.backNode({ class: 'pcard back down' }, 'night')) : [el('span', { class: 'sol-slot' })])
+      })))
+      if (mine) root.append(el('p', { class: 'hint', text: SOL.from ? 'Now tap where it goes (a column, a foundation' + (fc ? ' or a free cell' : '') + ').' : 'Tap a card, then tap where it goes. Double-tap sends a card home.' }))
+    }
+    draw()
+  }
+
   // ------------------------------------------------------------------ Go (9x9)
 
   const GO_PICK = { key: '', point: null }     // the point tapped but not yet played: a tap is never a move by itself
@@ -324,6 +382,7 @@
     else if (k === 'hearts') renderHearts(ctx)
     else if (k === 'wordwave') renderWordWave(ctx)
     else if (k === 'go') renderGo(ctx)
+    else if (k === 'solitaire') renderSolitaire(ctx)
   }
 
   // What to do now, for the line under the table.
@@ -332,10 +391,11 @@
     if (p.kind === 'lanterns') return ' Give someone a hint, play one of your lanterns, or let one go.'
     if (p.kind === 'bottle') return p.phase === 'vote' ? ' Say whether the story goes on the shelf.' : ' Read the line before yours and add to the story.'
     if (p.kind === 'hearts') return p.phase === 'pass' ? ' Choose three cards to pass.' : (p.trick.length ? ' Follow suit if you can.' : ' Lead a card.')
+    if (p.kind === 'solitaire') return ' Your game: take as long as you like.'
     if (p.kind === 'go') return p.passes ? ' The other player passed: pass too to end and score the game, or play on.' : ' Tap a point, then play it, or pass.'
     if (p.kind === 'wordwave') return ' Choose one word: everyone is trying to land on the same one.'
     return ''
   }
 
-  window.BeachGames = { render, tip, KINDS: ['lanterns', 'bottle', 'hearts', 'wordwave', 'go'] }
+  window.BeachGames = { render, tip, KINDS: ['lanterns', 'bottle', 'hearts', 'wordwave', 'go', 'solitaire'] }
 })()

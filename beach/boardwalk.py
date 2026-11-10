@@ -476,7 +476,10 @@ class Boardwalk:
         g = self.game(row)
         others = [q for s, q in sorted(self.seats(tid).items()) if q != pid]
         n = g.seat_count(self.state(row))
-        v = self.open(pid, row["zone_id"], row["game"], 0, {"players": n} if not g.seat_names else None)
+        # A game may carry its own table choices into the rematch (Solitaire keeps its variant, 11-09).
+        opts = g.rematch_options(self.state(row)) if hasattr(g, "rematch_options") else (
+            {"players": n} if not g.seat_names else None)
+        v = self.open(pid, row["zone_id"], row["game"], 0, opts)
         invited = []
         for q in others:
             try:

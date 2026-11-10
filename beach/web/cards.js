@@ -89,6 +89,29 @@
     '<circle cx="30" cy="42" r="10.5" fill="#1f6f8b" stroke="#fffdf8" stroke-width="2"/>' +
     '<circle cx="30" cy="42" r="6" fill="#f7c23c"/></svg>'
 
+  // Solitaire's own back (the keeper, 11-09): the north star over a lighthouse, shining out over the sea at night.
+  const BACK_NIGHT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 84">' +
+    '<rect x="0.75" y="0.75" width="58.5" height="82.5" rx="5" fill="#fffdf8" stroke="#3a3330" stroke-width="1.5"/>' +
+    '<rect x="4" y="4" width="52" height="76" rx="3" fill="#0e1a36"/>' +
+    '<path d="M4 56 H56 V77 Q56 80 53 80 H7 Q4 80 4 77 Z" fill="#12305a"/>' +
+    [[12, 30, 0.8], [47, 24, 0.7], [20, 44, 0.6], [9, 12, 0.6], [51, 40, 0.6], [16, 22, 0.5]].map(([x, y, r]) =>
+      `<circle cx="${x}" cy="${y}" r="${r}" fill="#dfe8ff"/>`).join('') +
+    '<path d="M30 6 L31.6 12.4 L38 14 L31.6 15.6 L30 22 L28.4 15.6 L22 14 L28.4 12.4 Z" fill="#fff4c8"/>' +
+    '<path d="M25.5 9.5 L34.5 18.5 M34.5 9.5 L25.5 18.5" stroke="#fff4c8" stroke-width="0.6"/>' +
+    '<polygon points="39,41 4,33 4,45" fill="#ffd76a" fill-opacity="0.42"/>' +
+    '<polygon points="39,41 4,36.5 4,41.5" fill="#fff1b8" fill-opacity="0.5"/>' +
+    '<polygon points="41,41 56,38 56,44" fill="#ffd76a" fill-opacity="0.3"/>' +
+    '<circle cx="40" cy="41" r="6" fill="#ffd76a" fill-opacity="0.35"/>' +
+    '<path d="M28 60 Q34 52 42 54 Q50 52 56 58 L56 62 L28 62 Z" fill="#1d2433"/>' +
+    '<polygon points="37,57 43,57 42,43 38,43" fill="#f4efe6"/>' +
+    '<polygon points="37.6,53 42.4,53 42.2,50 37.8,50" fill="#b8423a"/>' +
+    '<polygon points="38.2,47 41.8,47 41.6,44.5 38.4,44.5" fill="#b8423a"/>' +
+    '<rect x="37.4" y="39" width="5.2" height="4" fill="#ffd76a"/>' +
+    '<polygon points="36.8,39 43.2,39 40,35.5" fill="#3a3330"/>' +
+    '<path d="M38.5 62h3 M37.5 66h5 M38 70h4 M37 74h6" stroke="#ffd76a" stroke-opacity="0.55" stroke-width="1.1"/>' +
+    [64, 70, 76].map((y, i) => `<path d="M4 ${y}q6.5 -${i % 2 ? 3 : 2} 13 0t13 0t13 0t13 0" fill="none" stroke="${i % 2 ? '#6f97c9' : '#3f6aa0'}" stroke-width="1.6"/>`).join('') +
+    '</svg>'
+
   function cardLabel (code) {
     const r = code.slice(0, -1); const s = code.slice(-1)
     return (RANK_WORD[r] || r) + ' of ' + SUIT[s].name
@@ -98,9 +121,9 @@
     n.append(svgNode(faceSvg(code)))
     return n
   }
-  function backNode (attrs) {
+  function backNode (attrs, art) {
     const n = el('span', Object.assign({ class: 'pcard back', 'aria-hidden': 'true' }, attrs || {}))
-    n.append(svgNode(BACK))
+    n.append(svgNode(art === 'night' ? BACK_NIGHT : BACK))
     return n
   }
   function suitIcon (s, size) {
@@ -259,5 +282,5 @@
     dlg.querySelector('.suit-btn').focus()
   }
 
-  window.BeachCards = { render, faceSvg, BACK, cardNode, backNode, cardLabel, SUIT }
+  window.BeachCards = { render, faceSvg, BACK, BACK_NIGHT, cardNode, backNode, cardLabel, SUIT }
 })()

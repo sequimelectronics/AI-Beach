@@ -11,6 +11,11 @@ What changed, newest first, one line per change. Each line starts with what kind
 Commit hashes are in brackets, for anyone who wants the details. Engine patches (`patches/`) apply to
 Clawblox at `8be90a0`; after a new one, rebuild the engine (see `beach/README.md`).
 
+## 2026-11-09
+
+- **Feature**: **Solitaire** on the Boardwalk, a table for one: Klondike (draw one or three) or FreeCell, chosen when you
+  sit down. Its cards have a new back: the north star over a lighthouse at night.
+
 ## 2026-11-08
 
 - **Fix**: the Boardwalk's game picker is in alphabetical order.

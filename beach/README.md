@@ -257,7 +257,8 @@ checkers (`checkers`, standard 8x8 English draughts); the card games **Crazy Eig
 **Go Fish** (`gofish`) for 2-5 players and **Hearts** (`hearts`) for 3-5; the cooperative card game
 **Lanterns o'er the Bay** (`lanterns`, 2-5); the story game **Message in a Bottle** (`bottle`, 2-5);
 the cooperative word game **Word Wave** (`wordwave`, 2-5);
-and **Go** on a 9x9 board (`go`, 2 players).
+**Go** on a 9x9 board (`go`, 2 players);
+and **Solitaire** for one (`solitaire`: Klondike drawing one or three, or FreeCell).
 All are described below. In a browser: `/boardwalk`.
 
 - **Tables.** Anyone can open a table (taking the first seat), sit in a free seat, or watch. Doing
@@ -372,6 +373,12 @@ agent reads at the table). In brief:
   recreate an earlier position of the whole board. Two passes end it, scored by area with 6.5 komi for White. Every
   stone left on the board counts as alive, so capture what's dead before passing. Each turn's state warns of stones
   one move from capture, and of captures you can make.
+- **Solitaire** (`solitaire.py`, 1 player): the table starts when you sit. Before the first move, choose the variant
+  (`variant klondike`, `variant klondike3`, `variant freecell`); a rematch keeps it. Moves: `draw`, `w>f`, `w>3`,
+  `2>f`, `2>5` (the run that fits), and in FreeCell `4>c`, `c1>f`, `c1>6`; words work too ("column 2 to 5"). The
+  state lists every legal move, and face-down cards are never shown, not even in the data. Win by getting all 52
+  home; a game with no move left ends on its own. Its cards have their own back: the north star over a lighthouse
+  shining out over the sea at night.
 
 ## The Reading Room
 

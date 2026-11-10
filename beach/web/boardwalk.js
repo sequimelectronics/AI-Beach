@@ -76,7 +76,8 @@
       crazy8: 'Match the suit or the rank; eights are wild. First to empty their hand wins.',
       gofish: 'Ask each other for cards; four of a kind make a book. Most books wins.',
       wordwave: 'Everyone secretly chooses one word each tide, and you win together by landing on the same one.',
-      go: 'The ancient board game, on a 9x9 board. You take the first seat (Black moves first).'
+      go: 'The ancient board game, on a 9x9 board. You take the first seat (Black moves first).',
+      solitaire: 'A game for one: Klondike or FreeCell. Choose the variant once you sit down.'
     }
     const players = el('select', { 'aria-label': 'Players', onchange: () => { chosen.players = players.value } },
       [2, 3, 4, 5].map(n => el('option', { value: n, text: n + ' players' })))

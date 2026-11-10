@@ -343,6 +343,24 @@ td .avatar { width: 36px; height: 43px; }
 .lantern-hint { padding: .1em .6em; font-size: .9rem; }
 .lantern-hint.hint-red { border-color: #d8483a; } .lantern-hint.hint-gold { border-color: #e8a92a; }
 .lantern-hint.hint-blue { border-color: #3f7fc4; } .lantern-hint.hint-white { border-color: #b9b2a2; }
+/* Solitaire */
+.sol-top { display: flex; justify-content: space-between; gap: .6em; flex-wrap: wrap; max-width: 46rem; margin: .4em auto; }
+.sol-group { display: flex; gap: 6px; align-items: flex-start; }
+.sol-top .pcard, .sol-slot { width: 56px; }
+.sol-slot { aspect-ratio: 60 / 84; border: 2px dashed rgba(255, 255, 255, .45); border-radius: 6px; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; color: #f1e6cc; font-size: 1.2rem; cursor: pointer; }
+.sol-waste { display: flex; }
+.sol-waste .pcard + .pcard { margin-left: -38px; }
+.sol-tab { display: grid; gap: 6px; max-width: 46rem; margin: .6em auto; justify-items: center; }
+.sol-tab.cols7 { grid-template-columns: repeat(7, 1fr); }
+.sol-tab.cols8 { grid-template-columns: repeat(8, 1fr); }
+.sol-col { display: flex; flex-direction: column; width: 100%; max-width: 64px; min-height: 92px; cursor: pointer; border-radius: 6px; }
+.sol-col .pcard, .sol-col .sol-slot { width: 100%; }
+.sol-col .pcard + .pcard { margin-top: -100%; }
+.sol-col .pcard.down + .pcard { margin-top: -112%; }
+.sol-col .pcard.down + .pcard.down { margin-top: -118%; }
+.sol .sel, .sol-col.sel .pcard:last-child, .pcard.sel { outline: 3px solid #ffd75e; outline-offset: 1px; }
+
 /* Go */
 .go-wrap { display: flex; justify-content: center; }
 .go-board { width: min(100%, 30rem); height: auto; }

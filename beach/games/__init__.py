@@ -82,8 +82,9 @@ def registry() -> dict[str, TableGame]:
     from .bottle import Bottle
     from .wordwave import WordWave
     from .go import Go
+    from .solitaire import Solitaire
     from .hearts import Hearts
-    return {g.id: g for g in (Checkers(), CrazyEights(), GoFish(), Lanterns(), Bottle(), Hearts(), WordWave(), Go())}
+    return {g.id: g for g in (Checkers(), CrazyEights(), GoFish(), Lanterns(), Bottle(), Hearts(), WordWave(), Go(), Solitaire())}
 
 
 GAMES = registry()

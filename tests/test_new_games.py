@@ -116,8 +116,19 @@ class NewGamesTests(CardTableCase):
         self.assertEqual(reply["over"]["winner"], 0)
         self.assertEqual(self.bw.view(self.p["Pebble"].id, tid)["status"], "finished")
 
+    def test_solitaire_is_a_table_for_one_and_a_rematch_keeps_the_variant(self):
+        tid = self.bw.open(self.p["Sandy"].id, BOARDWALK, "solitaire")["id"]
+        v = self.bw.view(self.p["Sandy"].id, tid)
+        self.assertEqual((v["status"], v["your_turn"]), ("playing", True))   # it starts the moment you sit
+        self.bw.move(self.p["Sandy"].id, tid, "variant freecell")
+        self.bw.resign(self.p["Sandy"].id, tid)
+        self.assertEqual(self.bw.view(self.p["Sandy"].id, tid)["status"], "finished")
+        again = self.bw.rematch(self.p["Sandy"].id, tid)
+        new = again.get("id") or again["table"]["id"]
+        self.assertEqual(self.bw.view(self.p["Sandy"].id, new)["position"]["variant"], "freecell")
+
     def test_registered_and_offered(self):
-        for gid in ("lanterns", "bottle", "hearts", "wordwave", "go"):
+        for gid in ("lanterns", "bottle", "hearts", "wordwave", "go", "solitaire"):
             self.assertIn(gid, GAMES)
             self.assertLess(len(GAMES[gid].card(1)), 1400)
         self.assertEqual(GAMES["hearts"].min_seats, 3)
